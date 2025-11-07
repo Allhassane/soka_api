@@ -1,23 +1,41 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CivilityEntity } from './entities/civility.entity';
+import { CountryEntity } from './entities/country.entity';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
 
 @Injectable()
-export class CivilityService {
+export class CountryService {
   constructor(
-    @InjectRepository(CivilityEntity)
-    private readonly civilitiesRepo: Repository<CivilityEntity>,
+    @InjectRepository(CountryEntity)
+    private readonly countryRepo: Repository<CountryEntity>,
     private readonly logService: LogActivitiesService,
     
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
   ) {}
 
+    async onModuleInit() {
+    const count = await this.countryRepo.count();
+    if (count > 0) {
+      console.log(` ${count} pays déjà présents — aucune insertion.`);
+      return;
+    }
+
+    const paysList = [
+      { name: 'AFGHANISTAN', capital: 'KABOUL', continent: 'ASIE', status: 'enable' },
+      { name: 'AFGHANISTAN', capital: 'KABOUL', continent: 'ASIE', status: 'enable' },
+      
+    ];
+
+    await this.countryRepo.save(paysList);
+    console.log(`🌍 ${paysList.length} pays ont été insérés avec succès.`);
+  }
+
+
   async findAll(admin_uuid: string) {
-    const civility = await this.civilitiesRepo.find({
+    const counrty = await this.countryRepo.find({
       order: { name: 'DESC' },
     });
 
@@ -28,12 +46,12 @@ export class CivilityService {
     }
 
     await this.logService.logAction(
-      'civilities-findAll',
+      'countries-findAll',
       admin.id,
-      'recupération de la liste de tous les divisions'
+      'recupération de la liste de tous les formations'
     );
 
-    return civility;
+    return counrty;
   }
 
   async store(payload: any,admin_uuid) {
@@ -41,10 +59,10 @@ export class CivilityService {
         throw new NotFoundException('Veuillez renseigner tous les champs');
     }
 
-    const newCivility = this.civilitiesRepo.create({
+    const newCountry = this.countryRepo.create({
       name: payload.name,
-      sigle: payload.sigle,
-      description:payload.description,
+      captial:payload.captial ?? null,
+      continent: payload.continent ?? null,
       admin_uuid: admin_uuid ?? null,
     });
     
@@ -55,21 +73,21 @@ export class CivilityService {
     }
 
     await this.logService.logAction(
-      'civilities-store',
+      'countries-store',
       admin.id,
-      'Enregistrer une civilité'
+      'Enregistrer une division'
     );
 
-    const saved = await this.civilitiesRepo.save(newCivility);
+    const saved = await this.countryRepo.save(newCountry);
 
     return saved;
   }
 
   async findOne(uuid: string,admin_uuid) {
-    const civility = await this.civilitiesRepo.findOne({ where: { uuid } });
+    const country = await this.countryRepo.findOne({ where: { uuid } });
 
-    if (!civility) {
-        throw new NotFoundException('Aucune division trouvé');
+    if (!country) {
+        throw new NotFoundException('Aucune pays trouvé');
     }
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
     
@@ -78,16 +96,16 @@ export class CivilityService {
     }
 
     await this.logService.logAction(
-      'civilities-findOne',
+      'countries-findOne',
       admin.id,
-      'Recupérer un division'
+      'Recupérer un pays'
     );
 
-    return civility;
+    return country;
   }
 
   async update(uuid: string,payload: any,admin_uuid: string) {
-    const { name } = payload;
+    const { name, capital, continent } = payload;
 
     if (!uuid || !name || !admin_uuid) {
         throw new NotFoundException('Veuillez renseigner tous les champs');
@@ -101,17 +119,19 @@ export class CivilityService {
 
  
 
-    const existing = await this.civilitiesRepo.findOne({ where: { uuid } });
+    const existing = await this.countryRepo.findOne({ where: { uuid } });
     if (!existing) {
         throw new NotFoundException('Aucune correspondance retrouvée !');
     }
 
     existing.name = name;
+    existing.captial= capital;
+    existing.continent= continent;
 
-    const updated = await this.civilitiesRepo.save(existing);
+    const updated = await this.countryRepo.save(existing);
 
     await this.logService.logAction(
-      'civilities-update',
+      'countries-update',
       admin.id,
       updated
     );
@@ -120,9 +140,9 @@ export class CivilityService {
   }
 
   async delete(uuid: string,admin_uuid:string) {
-    const civility = await this.civilitiesRepo.findOne({ where: { uuid } });
+    const country = await this.countryRepo.findOne({ where: { uuid } });
 
-    if (!civility) {
+    if (!country) {
         throw new NotFoundException('Aucun élément trouvé');
     }
 
@@ -133,12 +153,12 @@ export class CivilityService {
     }
 
     await this.logService.logAction(
-      'civilities-delete',
+      'countries-delete',
       admin.id,
-      "Suppression de la civilité "+civility.name+" pour uuid"+civility.uuid,
+      "Suppression du pays "+country.name+" pour uuid"+country.uuid,
     );
 
-   return await this.civilitiesRepo.softRemove(civility);
+   return await this.countryRepo.softRemove(country);
 
   }
 }

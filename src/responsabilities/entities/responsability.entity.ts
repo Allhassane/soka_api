@@ -1,5 +1,5 @@
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
-import { Entity, PrimaryGeneratedColumn, Column, BeforeInsert, BeforeUpdate } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, BeforeInsert, BeforeUpdate} from 'typeorm';
 
 function slugify(s: string) {
   return s
@@ -10,12 +10,11 @@ function slugify(s: string) {
     .replace(/(^-|-$)+/g, '');
 }
 
-@Entity({ name: 'committees' })
-export class CommitteesEntity extends DateTimeEntity {
+@Entity({ name: 'responsabilities' })
+export class ResponsabilityEntity extends DateTimeEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  //@Column({ type: 'uuid', unique: true, default: () => 'gen_random_uuid()' }) // Postgres extension pgcrypto or use uuid-ossp
   @Column({ type: 'char', length: 36, unique: true, default: () => '(UUID())' })
   uuid: string;
 
@@ -24,9 +23,6 @@ export class CommitteesEntity extends DateTimeEntity {
 
   @Column({ unique: true })
   slug: string;
-
-  @Column({ type: 'text', nullable: true })
-  description: string;
 
   @Column({ type: 'varchar', length: 36 })
   admin_uuid: string;

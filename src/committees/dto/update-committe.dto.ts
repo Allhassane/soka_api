@@ -26,5 +26,5 @@ export class UpdateCommitteeDto {
   })
   @IsString()
   @IsOptional()
-  statut?: 'enable';
+  status?: 'enable';
 }

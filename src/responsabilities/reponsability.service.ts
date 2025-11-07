@@ -1,15 +1,15 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CivilityEntity } from './entities/civility.entity';
+import { ResponsabilityEntity } from './entities/responsability.entity';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
 
 @Injectable()
-export class CivilityService {
+export class ResponsabilityService {
   constructor(
-    @InjectRepository(CivilityEntity)
-    private readonly civilitiesRepo: Repository<CivilityEntity>,
+    @InjectRepository(ResponsabilityEntity)
+    private readonly responsabilityRepo: Repository<ResponsabilityEntity>,
     private readonly logService: LogActivitiesService,
     
     @InjectRepository(User)
@@ -17,7 +17,7 @@ export class CivilityService {
   ) {}
 
   async findAll(admin_uuid: string) {
-    const civility = await this.civilitiesRepo.find({
+    const responsability = await this.responsabilityRepo.find({
       order: { name: 'DESC' },
     });
 
@@ -28,12 +28,12 @@ export class CivilityService {
     }
 
     await this.logService.logAction(
-      'civilities-findAll',
+      'responsabilities-findAll',
       admin.id,
-      'recupération de la liste de tous les divisions'
+      'recupération de la liste de toutes les responsabilités !'
     );
 
-    return civility;
+    return responsability;
   }
 
   async store(payload: any,admin_uuid) {
@@ -41,10 +41,8 @@ export class CivilityService {
         throw new NotFoundException('Veuillez renseigner tous les champs');
     }
 
-    const newCivility = this.civilitiesRepo.create({
+    const newJob = this.responsabilityRepo.create({
       name: payload.name,
-      sigle: payload.sigle,
-      description:payload.description,
       admin_uuid: admin_uuid ?? null,
     });
     
@@ -55,21 +53,21 @@ export class CivilityService {
     }
 
     await this.logService.logAction(
-      'civilities-store',
+      'cities-store',
       admin.id,
-      'Enregistrer une civilité'
+      'Enregistrer une responsabilité'
     );
 
-    const saved = await this.civilitiesRepo.save(newCivility);
+    const saved = await this.responsabilityRepo.save(newJob);
 
     return saved;
   }
 
   async findOne(uuid: string,admin_uuid) {
-    const civility = await this.civilitiesRepo.findOne({ where: { uuid } });
+    const responsability = await this.responsabilityRepo.findOne({ where: { uuid } });
 
-    if (!civility) {
-        throw new NotFoundException('Aucune division trouvé');
+    if (!responsability) {
+        throw new NotFoundException('Aucune responsabilité trouvé');
     }
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
     
@@ -78,12 +76,12 @@ export class CivilityService {
     }
 
     await this.logService.logAction(
-      'civilities-findOne',
+      'responsabilities-findOne',
       admin.id,
-      'Recupérer un division'
+      'Recupérer une responsabilité'
     );
 
-    return civility;
+    return responsability;
   }
 
   async update(uuid: string,payload: any,admin_uuid: string) {
@@ -101,17 +99,17 @@ export class CivilityService {
 
  
 
-    const existing = await this.civilitiesRepo.findOne({ where: { uuid } });
+    const existing = await this.responsabilityRepo.findOne({ where: { uuid } });
     if (!existing) {
         throw new NotFoundException('Aucune correspondance retrouvée !');
     }
 
     existing.name = name;
 
-    const updated = await this.civilitiesRepo.save(existing);
+    const updated = await this.responsabilityRepo.save(existing);
 
     await this.logService.logAction(
-      'civilities-update',
+      'responsabilities-update',
       admin.id,
       updated
     );
@@ -120,9 +118,9 @@ export class CivilityService {
   }
 
   async delete(uuid: string,admin_uuid:string) {
-    const civility = await this.civilitiesRepo.findOne({ where: { uuid } });
+    const city = await this.responsabilityRepo.findOne({ where: { uuid } });
 
-    if (!civility) {
+    if (!city) {
         throw new NotFoundException('Aucun élément trouvé');
     }
 
@@ -133,12 +131,12 @@ export class CivilityService {
     }
 
     await this.logService.logAction(
-      'civilities-delete',
+      'responsabilities-delete',
       admin.id,
-      "Suppression de la civilité "+civility.name+" pour uuid"+civility.uuid,
+      "Suppression de la responsabilité "+city.name+" pour uuid"+city.uuid,
     );
 
-   return await this.civilitiesRepo.softRemove(civility);
+   return await this.responsabilityRepo.softRemove(city);
 
   }
 }

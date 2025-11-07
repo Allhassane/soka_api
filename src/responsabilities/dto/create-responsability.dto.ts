@@ -1,24 +1,15 @@
 import { IsNotEmpty, IsOptional, IsString, MaxLength, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-export class CreateMaritalStatusDto {
+export class CreateResponsabilityDto {
   @ApiProperty({
     description: 'libellé',
-    example: 'Monsieur',
+    example: '',
   })
   @IsString()
   @IsNotEmpty({ message: 'le libellé est requis' })
   @MaxLength(150)
   name: string;
-
-  @ApiPropertyOptional({
-    description: 'Sigle',
-    example: 'M',
-  })
-  @IsString()
-  @IsOptional()
-  @MaxLength(91)
-  sigle?: string;
 
   @ApiPropertyOptional({
     description: 'Statut',

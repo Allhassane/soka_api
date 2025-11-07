@@ -1,31 +1,31 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
-import { JobService } from './job.service';
+import { accessoryService } from './accessory.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
-import { CreateJobDto } from './dto/create-job.dto';
-import { UpdateJobDto } from './dto/update-job.dto';
+import { CreateAccessoryDto } from './dto/create-accessory.dto';
+import { UpdateAccessoryDto } from './dto/update-accessory.dto';
 
 @ApiBearerAuth()
-@ApiTags('Métiers')
-@Controller('jobs')
+@ApiTags('Accessoires')
+@Controller('accessoires')
 @UseGuards(JwtAuthGuard)
-export class JobController {
-  constructor(private readonly jobService: JobService) {}
+export class AccessoryController {
+  constructor(private readonly accessoryService: accessoryService) {}
 
   @Get()
   @ApiOperation({ summary: 'Liste toutes les métiers ' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
     const admin_uuid = req.user.uuid as string;
-    return this.jobService.findAll(admin_uuid);
+    return this.accessoryService.findAll(admin_uuid);
   }
 
   @Post()
   @ApiOperation({ summary: 'Créer un métier ' })
   @ApiResponse({ status: 200, description: 'Métier créé avec succès.' })
   @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
-  store(@Body() payload: CreateJobDto, @Request() req) {
-    return this.jobService.store(payload, req.user.uuid as string);
+  store(@Body() payload: CreateAccessoryDto, @Request() req) {
+    return this.accessoryService.store(payload, req.user.uuid as string);
   }
 
   @Get(':uuid')
@@ -34,7 +34,7 @@ export class JobController {
   @ApiResponse({ status: 400, description: 'Metier non trouvé.' })
   findOne(@Param('uuid') uuid: string, @Request() req) {
     const admin_uuid = req.user.uuid as string;
-    return this.jobService.findOne(uuid, admin_uuid);
+    return this.accessoryService.findOne(uuid, admin_uuid);
   }
 
  @Put(':uuid')
@@ -44,9 +44,9 @@ export class JobController {
  update(
  @Param('uuid') uuid: string,
  @Request() req,
- @Body() payload: UpdateJobDto,
+ @Body() payload: UpdateAccessoryDto,
     ) {
-    return this.jobService.update(uuid, payload,req.user.uuid);
+    return this.accessoryService.update(uuid, payload,req.user.uuid);
  }
 
 
@@ -56,6 +56,6 @@ export class JobController {
   @ApiResponse({ status: 400, description: 'Métier introuvable.' })
   delete(@Param('uuid') uuid: string, @Request() req) {
     const admin_uuid = req.user.uuid as string;
-    return this.jobService.delete(uuid,admin_uuid);
+    return this.accessoryService.delete(uuid,admin_uuid);
   }
 }

@@ -44,7 +44,7 @@ export class UserService {
         uuid: uuidv4(),
         firstname: 'Admin',
         lastname: 'Root',
-        email: 'superadmin@ska.com',
+        email: 'superadmin@soka.com',
         phone_number: '0700000000',
         password: 'password',
         is_active: true,
