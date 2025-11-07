@@ -10,13 +10,13 @@ export class LogActivitiesService {
     private readonly logRepo: Repository<LogActivity>,
   ) {}
 
-async logAction(action: string, userId?: number, details?: any) {
-  const log = this.logRepo.create({
-    action,
-    user_id: userId ?? null,
-    details: details ? JSON.stringify(details) : null,
-  });
+  async logAction(action: string, userId?: number, details?: any) {
+    const log = this.logRepo.create({
+      action,
+      user_id: userId ?? null,
+      details: details ? JSON.stringify(details) : null,
+    });
 
-  return this.logRepo.save(log);
-}
+    return this.logRepo.save(log);
+  }
 }

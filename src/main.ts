@@ -43,9 +43,9 @@ async function bootstrap() {
   });
 
   const config = new DocumentBuilder()
-    .setTitle('API DESPES')
+    .setTitle('API SOKA')
     .setDescription(
-      'Documentation de l’API de gestion des statistiques scolaires',
+      'Documentation de l’API de gestion',
     )
     .setVersion('1.0')
     .addBearerAuth()

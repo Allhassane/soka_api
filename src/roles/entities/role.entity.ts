@@ -12,6 +12,7 @@ import { DateTimeEntity } from '../../shared/entities/date-time.entity';
 import { RoleType } from 'src/shared/enums/types.enums';
 import { slugify } from 'transliteration';
 import { RolePermissionEntity } from 'src/role-permission/entities/role-permission.entity';
+import { UserRole } from 'src/user-roles/entities/user-roles.entity';
 
 @Entity('roles')
 export class Role extends DateTimeEntity {
@@ -41,6 +42,9 @@ export class Role extends DateTimeEntity {
   })
   @Column({ type: 'varchar', nullable: true })
   zone_uuid: string;
+
+  @OneToMany(() => UserRole, (userRole) => userRole.role, { cascade: true })
+  user_roles: UserRole[];
 
   @BeforeInsert()
   generateUUIDAndSlug() {

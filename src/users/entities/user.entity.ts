@@ -10,6 +10,7 @@ import { ApiProperty, ApiHideProperty } from '@nestjs/swagger';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
+import { UserRole } from 'src/user-roles/entities/user-roles.entity';
 
 @Entity('users')
 export class User extends DateTimeEntity {
@@ -53,6 +54,8 @@ export class User extends DateTimeEntity {
   @Column({ type: 'varchar', unique: true })
   phone_number: string;
 
+  @OneToMany(() => UserRole, (userRole) => userRole.user, { cascade: true })
+  user_roles: UserRole[];
   @BeforeInsert()
   ensureUuid(): void {
     if (!this.uuid) {

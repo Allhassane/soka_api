@@ -1,7 +1,7 @@
 # API DESPES
 
-API DESPES est une interface backend développée avec **NestJS**, destinée à la gestion des **statistiques scolaires** sur le territoire national.  
-Elle permet de centraliser, structurer et exploiter les données liées aux établissements, aux effectifs par niveau, et aux indicateurs éducatifs clés.
+API SOKA est une interface backend développée avec **NestJS**, destinée à la gestion de **SOKA** sur le territoire national.  
+
 
 Le projet est actuellement en phase de mise en place. La documentation détaillée et les spécifications métier seront ajoutées au fil de l’évolution.
 
@@ -13,7 +13,7 @@ Le projet est actuellement en phase de mise en place. La documentation détaill�
 
 ```bash
 git clone <url-du-repo>
-cd despes-api
+cd soka-api
 ```
 
 ### 2. Installer les dépendances
@@ -35,19 +35,19 @@ APP_ENV=development
 
 DB_HOST=localhost
 DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=postgres
-DB_NAME=despes_db
+DB_USER=root
+DB_PASSWORD=
+DB_NAME=soka_db
 
 JWT_SECRET=changeme
-JWT_EXPIRES_IN=3600s
+JWT_EXPIRES_IN=3600
 ```
 
 ---
 
 ## 🧱 Structure de module obligatoire
 
-> Chaque fonctionnalité (ex: `users`, `schools`, `stats`, `auth`) **doit avoir sa propre structure de module** comme suit :
+> Chaque fonctionnalité (ex: `users`, `auth`) **doit avoir sa propre structure de module** comme suit :
 
 ```bash
 src/
@@ -73,12 +73,12 @@ Tous les retours d'API passent par un **intercepteur global** (`ResponseIntercep
 ```json
 {
   "success": true,
-  "message": "École créée avec succès",
+  "message": "Niveau créée avec succès",
   "data": {
     "id": 1,
-    "name": "EPP Gagnoa 2",
-    "region": "Gôh",
-    "type": "public"
+    "name": "District",
+    "slug": "district",
+    "type": "mixte"
   }
 }
 ```
@@ -106,9 +106,9 @@ Utilisez le décorateur `@SuccessMessage()` pour définir un message personnalis
 ```ts
 @Post()
 @HttpCode(201)
-@SuccessMessage('École créée avec succès')
-create(@Body() dto: CreateSchoolDto) {
-  return this.schoolsService.create(dto);
+@SuccessMessage('Niveau créée avec succès')
+create(@Body() dto: CreateLevelDto) {
+  return this.levvelService.create(dto);
 }
 ```
 
@@ -130,7 +130,7 @@ L'API DESPES utilise Swagger pour documenter toutes les routes disponibles.
 
 Dès que tu lances le projet, tu peux accéder à l'interface Swagger à l'adresse suivante :
 
-http://localhost:3000/docs
+http://localhost:3000/api/docs
 
 Exemple d'annotations Swagger :
 
@@ -144,7 +144,7 @@ Dans un contrôleur :
 
 Dans un DTO :
 ```ts
-@ApiProperty({ example: 'Nom de l’établissement', description: 'Le nom complet' })
+@ApiProperty({ example: 'Nom du niveau', description: 'Le nom complet' })
 name: string;
 ```
 
@@ -157,5 +157,4 @@ Tous les endpoints doivent être documentés avec @ApiTags, @ApiResponse et les 
 - Authentification JWT
 - Sécurisation des endpoints
 - Système de rôles (admin, responsable d’établissement, etc.)
-- Agrégation des statistiques par année, région, type d’école
 - Génération de rapports PDF / Excel

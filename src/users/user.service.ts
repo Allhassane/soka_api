@@ -27,7 +27,7 @@ export class UserService {
 
   async onModuleInit() {
     const existing = await this.userRepo.findOne({
-      where: [{ email: 'superadmin@despes.com' }],
+      where: [{ email: 'superadmin@soka.com' }],
     });
 
     if (!existing) {
@@ -44,7 +44,7 @@ export class UserService {
         uuid: uuidv4(),
         firstname: 'Admin',
         lastname: 'Root',
-        email: 'superadmin@despes.com',
+        email: 'superadmin@ska.com',
         phone_number: '0700000000',
         password: 'password',
         is_active: true,
@@ -132,7 +132,7 @@ export class UserService {
     const l = dto.lastname?.trim();
     const withNameDefaults =
       !f && !l
-        ? { firstname: 'DESPES', lastname: 'User' }
+        ? { firstname: 'SOKA', lastname: 'User' }
         : { firstname: f ?? dto.firstname, lastname: l ?? dto.lastname };
 
     const user = this.userRepo.create({
@@ -148,7 +148,7 @@ export class UserService {
       const saved = await this.userRepo.save(user);
 
       await this.sendAccountCreatedEmail({
-        to: admin.email ?? 'no-reply@despes.local',
+        to: admin.email ?? 'no-reply@soka.local',
         account: saved.phone_number,
         firstname: admin.firstname,
         lastname: admin.lastname,

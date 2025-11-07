@@ -15,6 +15,9 @@ import { RolePermissionService } from './role-permission/role-permission.service
 import { RolePermissionModule } from './role-permission/role-permission.module';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
+import { CommitteeModule } from './committees/committee.module';
+import { DepartmentModule } from './departments/department.module';
+import { DivisionModule } from './divisions/division.module';
 
 
 //import { PermissionsModule } from './permissions/permission.module';
@@ -60,7 +63,10 @@ import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handleba
     PermissionModule,
     RolePermissionModule,    
     //PermissionsModule,
-    RolePermissionModule    
+    RolePermissionModule,  
+    CommitteeModule,
+    DepartmentModule,
+    DivisionModule
   ],
   controllers: [AppController, RolePermissionController],
   providers: [AppService, RolePermissionService],
