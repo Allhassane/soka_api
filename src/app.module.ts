@@ -26,6 +26,11 @@ import { UserRole } from './user-roles/entities/user-roles.entity';
 import { UserRoleModule } from './user-roles/user-roles.module';
 import { AccessoryModule } from './accessories/accessory.module';
 import { MemberAccessoryModule } from './member-accessories/member-accessories.module';
+import { MemberModule } from './members/member.module';
+import { JobModule } from './jobs/job.module';
+import { CountryModule } from './countries/country.module';
+import { MaritalStatusModule } from './marital-status/marital-status.module';
+import { ResponsabilityModule } from './responsabilities/reponsability.module';
 
 //import { PermissionsModule } from './permissions/permission.module';
 @Module({
@@ -83,6 +88,10 @@ import { MemberAccessoryModule } from './member-accessories/member-accessories.m
     AccessoryModule,
     MemberAccessoryModule,
     MemberModule,
+    JobModule,
+    CountryModule,
+    MaritalStatusModule,
+    ResponsabilityModule,
   ],
   controllers: [AppController, RolePermissionController],
   providers: [AppService, RolePermissionService],

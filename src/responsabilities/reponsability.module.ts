@@ -13,4 +13,4 @@ import { UserModule } from 'src/users/user.module';
   providers: [ResponsabilityService],
   exports: [ResponsabilityService],
 })
-export class DivisionModule {}
+export class ResponsabilityModule {}

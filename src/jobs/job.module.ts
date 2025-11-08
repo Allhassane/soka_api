@@ -13,4 +13,4 @@ import { UserModule } from 'src/users/user.module';
   providers: [JobService],
   exports: [JobService],
 })
-export class DivisionModule {}
+export class JobModule {}
