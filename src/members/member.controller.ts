@@ -25,7 +25,8 @@ export class MemberController {
   @ApiResponse({ status: 200, description: 'Membre créé avec succès.' })
   @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
   store(@Body() payload: CreateMemberDto, @Request() req) {
-    return this.membreService.store(payload, req.user.uuid as string);
+    const admin_uuid = req.user.uuid as string;
+    return this.membreService.store(payload, admin_uuid);
   }
 
   @Get(':uuid')
