@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
 import { ResponsibilityEntity } from './entities/responsibility.entity';
+import { LevelService } from 'src/level/level.service';
 
 @Injectable()
 export class ResponsibilityService {
@@ -11,6 +12,7 @@ export class ResponsibilityService {
     @InjectRepository(ResponsibilityEntity)
     private readonly responsibilityRepo: Repository<ResponsibilityEntity>,
     private readonly logService: LogActivitiesService,
+    private readonly levelRepo: LevelService,
 
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
@@ -41,9 +43,18 @@ export class ResponsibilityService {
       throw new NotFoundException('Veuillez renseigner tous les champs');
     }
 
+    const level = await this.levelRepo.findOne(payload.level_uuid as string);
+
+    if (!level) {
+      throw new NotFoundException('Niveau introuvable');
+    }
+
     const newJob = this.responsibilityRepo.create({
       name: payload.name,
       admin_uuid: admin_uuid ?? null,
+      level_uuid: level.uuid,
+      level,
+      gender: payload.gender,
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
@@ -104,7 +115,16 @@ export class ResponsibilityService {
       throw new NotFoundException('Aucune correspondance retrouvée !');
     }
 
+    const level = await this.levelRepo.findOne(payload.level_uuid as string);
+
+    if (!level) {
+      throw new NotFoundException('Niveau introuvable');
+    }
+
     existing.name = name;
+    existing.level_uuid = level.uuid;
+    existing.level = level;
+    existing.gender = payload.gender;
 
     const updated = await this.responsibilityRepo.save(existing);
 

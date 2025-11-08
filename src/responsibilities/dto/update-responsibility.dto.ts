@@ -1,21 +1,6 @@
-import { IsOptional, IsString, MaxLength } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { PartialType } from '@nestjs/mapped-types';
+import { CreateResponsibilityDto } from './create-responsibility.dto';
 
-export class UpdateResponsibilityDto {
-  @ApiPropertyOptional({
-    description: 'Libellé ',
-    example: '',
-  })
-  @IsString()
-  @IsOptional()
-  @MaxLength(150)
-  name?: string;
-
-  @ApiPropertyOptional({
-    description: 'Statut',
-    example: 'enable',
-  })
-  @IsString()
-  @IsOptional()
-  status?: 'enable';
-}
+export class UpdateResponsibilityDto extends PartialType(
+  CreateResponsibilityDto,
+) {}

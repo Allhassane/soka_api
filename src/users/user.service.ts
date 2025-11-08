@@ -31,14 +31,14 @@ export class UserService {
     });
 
     if (!existing) {
-      const superadminRole = await this.roleRepo.findOne({
+      /*const superadminRole = await this.roleRepo.findOne({
         where: { name: 'superadmin' },
       });
 
       if (!superadminRole) {
         console.warn('Le rôle superadmin est introuvable, création annulée.');
         return;
-      }
+      }*/
 
       const user = this.userRepo.create({
         uuid: uuidv4(),
@@ -203,7 +203,7 @@ export class UserService {
       relations: ['user_roles', 'user_roles.role'],
     });
     if (!user) throw new NotFoundException('Utilisateur non trouvé');
-    
+
     return user;
   }
 

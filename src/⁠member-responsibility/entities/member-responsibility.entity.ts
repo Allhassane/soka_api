@@ -1,4 +1,4 @@
-import { IsOptional } from 'class-validator';
+import { IsNotEmpty, IsOptional } from 'class-validator';
 import { MemberEntity } from 'src/members/entities/member.entity';
 import { ResponsibilityEntity } from 'src/responsibilities/entities/responsibility.entity';
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
@@ -47,6 +47,10 @@ export class MemberResponsibilityEntity extends DateTimeEntity {
   )
   @JoinColumn({ name: 'responsibility_id', referencedColumnName: 'id' })
   responsibility?: ResponsibilityEntity | null;
+
+  @Column({ type: 'varchar', length: 36, nullable: false })
+  @IsNotEmpty()
+  priority: string;
 
   @Column({ type: 'varchar', length: 36, nullable: true })
   @IsOptional()
