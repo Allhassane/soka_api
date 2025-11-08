@@ -30,7 +30,7 @@ import { MemberModule } from './members/member.module';
 import { JobModule } from './jobs/job.module';
 import { CountryModule } from './countries/country.module';
 import { MaritalStatusModule } from './marital-status/marital-status.module';
-import { ResponsabilityModule } from './responsabilities/reponsability.module';
+import { ResponsibilityModule } from './responsibilities/reponsibility.module';
 
 //import { PermissionsModule } from './permissions/permission.module';
 @Module({
@@ -91,7 +91,7 @@ import { ResponsabilityModule } from './responsabilities/reponsability.module';
     JobModule,
     CountryModule,
     MaritalStatusModule,
-    ResponsabilityModule,
+    ResponsibilityModule,
   ],
   controllers: [AppController, RolePermissionController],
   providers: [AppService, RolePermissionService],

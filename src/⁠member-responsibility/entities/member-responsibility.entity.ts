@@ -1,5 +1,6 @@
 import { IsOptional } from 'class-validator';
-import { LevelEntity } from 'src/level/entities/level.entity';
+import { MemberEntity } from 'src/members/entities/member.entity';
+import { ResponsibilityEntity } from 'src/responsibilities/entities/responsibility.entity';
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
 import {
   Entity,
@@ -23,25 +24,29 @@ export class MemberResponsibilityEntity extends DateTimeEntity {
 
   @Column({ type: 'varchar', length: 36, nullable: true })
   @IsOptional()
-  parent_uuid?: string;
+  member_uuid?: string;
 
-  @ManyToOne(() => StructureEntity, (structure) => structure.parent, {
+  @ManyToOne(() => MemberEntity, (member) => member.id, {
     nullable: true,
     onDelete: 'SET NULL',
   })
-  @JoinColumn({ name: 'parent_id', referencedColumnName: 'id' })
-  parent?: StructureEntity | null;
+  @JoinColumn({ name: 'member_id', referencedColumnName: 'id' })
+  member?: MemberEntity;
 
   @Column({ type: 'varchar', length: 36, nullable: true })
   @IsOptional()
-  level_uuid?: string;
+  responsibility_uuid?: string;
 
-  @ManyToOne(() => LevelEntity, (level) => level.id, {
-    nullable: true,
-    onDelete: 'SET NULL',
-  })
-  @JoinColumn({ name: 'level_id', referencedColumnName: 'id' })
-  level?: LevelEntity | null;
+  @ManyToOne(
+    () => ResponsibilityEntity,
+    (responsibility) => responsibility.id,
+    {
+      nullable: true,
+      onDelete: 'SET NULL',
+    },
+  )
+  @JoinColumn({ name: 'responsibility_id', referencedColumnName: 'id' })
+  responsibility?: ResponsibilityEntity | null;
 
   @Column({ type: 'varchar', length: 36, nullable: true })
   @IsOptional()

@@ -1,7 +1,7 @@
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
-export class UpdateResponsabilityDto {
+export class UpdateResponsibilityDto {
   @ApiPropertyOptional({
     description: 'Libellé ',
     example: '',
@@ -13,7 +13,7 @@ export class UpdateResponsabilityDto {
 
   @ApiPropertyOptional({
     description: 'Statut',
-     example: 'enable',
+    example: 'enable',
   })
   @IsString()
   @IsOptional()
