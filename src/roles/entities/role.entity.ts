@@ -32,17 +32,6 @@ export class Role extends DateTimeEntity {
   @Column({ unique: true })
   slug: string;
 
-  @ApiProperty({ enum: RoleType, description: 'Type du rôle' })
-  @Column({ type: 'enum', enum: RoleType })
-  type: RoleType;
-
-  @ApiProperty({
-    description:
-      'UUID de la zone associée (En fonction du type, lister ici les zones associées. Si le type est school, alors laisser vide)',
-  })
-  @Column({ type: 'varchar', nullable: true })
-  zone_uuid: string;
-
   @OneToMany(() => UserRole, (userRole) => userRole.role, { cascade: true })
   user_roles: UserRole[];
 
