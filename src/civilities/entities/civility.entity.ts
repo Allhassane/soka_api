@@ -28,6 +28,9 @@ export class CivilityEntity extends DateTimeEntity {
   @Column({ type: 'text', nullable: true })
   sigle: string;
 
+  @Column({ type: 'varchar', length: 50, default: 'mixte' })
+  gender: 'homme' | 'femme' | 'mixte';
+
   @Column({ type: 'text', nullable: true })
   description: string;
 

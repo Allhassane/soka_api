@@ -3,6 +3,15 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateDivisionDto {
   @ApiProperty({
+    description: 'Département uuid',
+    example: 'Département Homme',
+  })
+  @IsString()
+  @IsNotEmpty({ message: 'uuid du département est requise' })
+  @MaxLength(150)
+  department_uuid: string;
+
+  @ApiProperty({
     description: 'Nom de la division',
     example: 'Division Afrix',
   })
@@ -26,5 +35,5 @@ export class CreateDivisionDto {
   })
   @IsString()
   @IsOptional()
-  statut?: 'enable';
+  status?: 'enable';
 }

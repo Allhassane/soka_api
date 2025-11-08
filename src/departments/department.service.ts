@@ -14,10 +14,12 @@ export class DepartmentService {
     
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    
   ) {}
 
   async findAll(admin_uuid: string) {
     const departement = await this.departmentRepo.find({
+       relations: ['divisions'],
       order: { name: 'DESC' },
     });
 

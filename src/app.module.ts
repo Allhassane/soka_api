@@ -23,6 +23,9 @@ import { CivilityModule } from './civilities/civility.module';
 import { FormationModule } from './formations/formation.module';
 import { UserRole } from './user-roles/entities/user-roles.entity';
 import { UserRoleModule } from './user-roles/user-roles.module';
+import { AccessoryModule } from './accessories/accessory.module';
+import { MemberAccessoryModule } from './member-accessories/member-accessories.module';
+import { MemberModule } from './members/member.module';
 
 
 //import { PermissionsModule } from './permissions/permission.module';
@@ -78,6 +81,9 @@ import { UserRoleModule } from './user-roles/user-roles.module';
     CityModule,
     CivilityModule,
     FormationModule,
+    AccessoryModule,
+    MemberAccessoryModule,
+    MemberModule,
   ],
   controllers: [AppController, RolePermissionController],
   providers: [AppService, RolePermissionService],

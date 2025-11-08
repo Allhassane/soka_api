@@ -1,15 +1,15 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { acccessoryEntity } from './entities/accessory.entity';
+import { AccessoryEntity } from './entities/accessory.entity';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
 
 @Injectable()
 export class accessoryService {
   constructor(
-    @InjectRepository(acccessoryEntity)
-    private readonly accessoryRepo: Repository<acccessoryEntity>,
+    @InjectRepository(AccessoryEntity)
+    private readonly accessoryRepo: Repository<AccessoryEntity>,
     private readonly logService: LogActivitiesService,
     
     @InjectRepository(User)

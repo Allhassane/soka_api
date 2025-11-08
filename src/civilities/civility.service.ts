@@ -44,6 +44,7 @@ export class CivilityService {
     const newCivility = this.civilitiesRepo.create({
       name: payload.name,
       sigle: payload.sigle,
+      gender: payload.gender,
       description:payload.description,
       admin_uuid: admin_uuid ?? null,
     });
@@ -87,7 +88,7 @@ export class CivilityService {
   }
 
   async update(uuid: string,payload: any,admin_uuid: string) {
-    const { name } = payload;
+    const { name, gender } = payload;
 
     if (!uuid || !name || !admin_uuid) {
         throw new NotFoundException('Veuillez renseigner tous les champs');
@@ -107,6 +108,7 @@ export class CivilityService {
     }
 
     existing.name = name;
+    existing.gender = gender;
 
     const updated = await this.civilitiesRepo.save(existing);
 
