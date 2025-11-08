@@ -13,4 +13,4 @@ import { UserModule } from 'src/users/user.module';
   providers: [MaritalStatusService],
   exports: [MaritalStatusService],
 })
-export class DivisionModule {}
+export class MaritalStatusModule {}
