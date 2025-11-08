@@ -1,3 +1,4 @@
+import { DivisionEntity } from 'src/divisions/entities/division.entity';
 import { PermissionEntity } from 'src/permission/entities/permission.entity';
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, BeforeInsert, BeforeUpdate, OneToMany, PrimaryColumn } from 'typeorm';
@@ -41,5 +42,8 @@ export class DepartmentEntity extends DateTimeEntity {
   generateSlug() {
     if (this.name) this.slug = slugify(this.name);
   }
+
+  @OneToMany(() => DivisionEntity, (division) => division.department)
+  divisions: DivisionEntity[];
 
 }

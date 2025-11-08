@@ -18,7 +18,16 @@ export class CreateMaritalStatusDto {
   @IsString()
   @IsOptional()
   @MaxLength(91)
-  sigle?: string;
+  sigle?: string;  
+  
+  @ApiProperty({
+    example: 'genre',
+    description: 'Genre',
+    default: 'homme',
+  })
+  @IsNotEmpty()
+  @IsString()
+  gender: 'homme' | 'femme' | 'mixte';
 
   @ApiPropertyOptional({
     description: 'Statut',
