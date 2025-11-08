@@ -97,6 +97,16 @@ export class ResponsibilityService {
     return responsibility;
   }
 
+  async findByLevel(uuid: string, admin_uuid) {
+    //await this.levelRepo.findOne(uuid);
+
+    const responsibility = await this.responsibilityRepo.find({
+      where: { level_uuid: uuid },
+    });
+
+    return responsibility;
+  }
+
   async update(uuid: string, payload: any, admin_uuid: string) {
     const { name } = payload;
 
