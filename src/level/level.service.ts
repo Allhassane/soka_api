@@ -70,6 +70,24 @@ export class LevelService {
     return level;
   }
 
+  async findNextLevelByParent(uuid: string) {
+    const level = await this.levelRepo.findOne({
+      where: { uuid },
+    });
+
+    if (!level) {
+      throw new NotFoundException('Niveau introuvable');
+    }
+
+    const order = level.order + 1;
+
+    const nextLevel = await this.levelRepo.findOne({
+      where: { order, category: level.category },
+    });
+
+    return nextLevel;
+  }
+
   async update(uuid: string, dto: UpdateLevelDto) {
     const level = await this.findOne(uuid);
     Object.assign(level, dto);

@@ -20,12 +20,12 @@ export class CreateStructureDto {
   @MaxLength(150)
   parent_uuid?: string | null;
 
-  @ApiProperty({
-    description: 'identifiant du niveau',
-    example: '',
-  })
-  @IsString()
-  @IsNotEmpty({ message: 'Veuillez selectionner un niveau' })
-  @MaxLength(150)
-  level_uuid: string;
+  // @ApiProperty({
+  //   description: 'identifiant du niveau',
+  //   example: '',
+  // })
+  // @IsString()
+  // @IsNotEmpty({ message: 'Veuillez selectionner un niveau' })
+  // @MaxLength(150)
+  // level_uuid: string;
 }
