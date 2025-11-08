@@ -1,21 +1,4 @@
-import { IsOptional, IsString, MaxLength, IsEnum } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { PartialType } from '@nestjs/swagger';
+import { CreateMemberDto } from './create-member.dto';
 
-export class UpdateMemberDto {
-  @ApiPropertyOptional({
-    description: 'Libellé ',
-    example: 'Madame',
-  })
-  @IsString()
-  @IsOptional()
-  @MaxLength(150)
-  name?: string;
-
-  @ApiPropertyOptional({
-    description: 'Statut',
-     example: 'enable',
-  })
-  @IsString()
-  @IsOptional()
-  statut?: 'enable';
-}
+export class UpdateMemberDto extends PartialType(CreateMemberDto) {}

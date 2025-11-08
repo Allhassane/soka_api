@@ -17,7 +17,7 @@ export class MemberResponsibilityService {
 
   async create(
     createMemberResponsibilityDto: CreateMemberResponsibilityDto,
-    admin_uuid?: string,
+    admin_uuid: string ,
   ) {
     const member = await this.memberService.findOne(
       createMemberResponsibilityDto.member_uuid as string,
