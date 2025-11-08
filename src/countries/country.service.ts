@@ -261,7 +261,6 @@ export class CountryService {
       name: payload.name,
       captial:payload.captial ?? null,
       continent: payload.continent ?? null,
-      admin_uuid: admin_uuid ?? null,
     });
     
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });

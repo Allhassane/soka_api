@@ -28,6 +28,8 @@ import { MemberAccessoryModule } from './member-accessories/member-accessories.m
 import { MemberModule } from './members/member.module';
 import { JobModule } from './jobs/job.module';
 import { CountryModule } from './countries/country.module';
+import { MaritalStatusModule } from './marital-status/marital-status.module';
+import { ResponsabilityModule } from './responsabilities/reponsability.module';
 
 
 //import { PermissionsModule } from './permissions/permission.module';
@@ -88,6 +90,8 @@ import { CountryModule } from './countries/country.module';
     MemberModule,
     JobModule,
     CountryModule,
+    MaritalStatusModule,
+    ResponsabilityModule,
   ],
   controllers: [AppController, RolePermissionController],
   providers: [AppService, RolePermissionService],
