@@ -32,7 +32,7 @@ export class ModuleEntity extends DateTimeEntity {
   @Column({ type: 'varchar', length: 36 })
   admin_uuid: string;
 
-  @Column({ type: 'string',  default: 'enable' })
+  @Column({ type: 'varchar',  default: 'enable' })
   status: 'enable';
 
 
