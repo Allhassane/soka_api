@@ -3,7 +3,7 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateMemberResponsibilityDto {
   @ApiProperty({
-    description: 'identifiant de la structure parente',
+    description: 'identifiant du membre',
     example: '',
   })
   @IsString()
@@ -12,11 +12,11 @@ export class CreateMemberResponsibilityDto {
   member_uuid?: string;
 
   @ApiProperty({
-    description: 'identifiant du niveau',
+    description: 'identifiant de la responsabilité',
     example: '',
   })
   @IsString()
-  @IsNotEmpty({ message: 'Veuillez selectionner un niveau' })
+  @IsNotEmpty({ message: 'Veuillez selectionner une responsabilité' })
   @MaxLength(150)
   responsibility_uuid: string;
 }

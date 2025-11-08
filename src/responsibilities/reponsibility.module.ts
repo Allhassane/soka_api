@@ -1,24 +1,22 @@
 import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { MemberService } from './member.service';
-import { MemberController } from './member.controller';
-import { MemberEntity } from './entities/member.entity';
 import { LogActivitiesModule } from 'src/log-activities/log-activities.module';
 import { User } from 'src/users/entities/user.entity';
 import { UserModule } from 'src/users/user.module';
-import { ResponsibilityModule } from 'src/responsibilities/reponsibility.module';
+import { ResponsibilityEntity } from './entities/responsibility.entity';
+import { ResponsibilityController } from './reponsibility.controller';
+import { ResponsibilityService } from './reponsibility.service';
 import { MemberResponsibilityModule } from 'src/⁠member-responsibility/⁠member-responsibility.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([MemberEntity, User]),
+    TypeOrmModule.forFeature([ResponsibilityEntity, User]),
     LogActivitiesModule,
     UserModule,
-    ResponsibilityModule,
     forwardRef(() => MemberResponsibilityModule),
   ],
-  controllers: [MemberController],
-  providers: [MemberService],
-  exports: [MemberService],
+  controllers: [ResponsibilityController],
+  providers: [ResponsibilityService],
+  exports: [ResponsibilityService],
 })
-export class MemberModule {}
+export class ResponsibilityModule {}

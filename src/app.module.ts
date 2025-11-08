@@ -30,7 +30,7 @@ import { MemberModule } from './members/member.module';
 import { JobModule } from './jobs/job.module';
 import { CountryModule } from './countries/country.module';
 import { MaritalStatusModule } from './marital-status/marital-status.module';
-import { ResponsabilityModule } from './responsabilities/reponsability.module';
+import { ResponsibilityModule } from './responsibilities/reponsibility.module';
 import { OrganisationCityModule } from './organisation_cities/organisation_city.module';
 
 //import { PermissionsModule } from './permissions/permission.module';
@@ -92,7 +92,7 @@ import { OrganisationCityModule } from './organisation_cities/organisation_city.
     JobModule,
     CountryModule,
     MaritalStatusModule,
-    ResponsabilityModule,
+    ResponsibilityModule,
     OrganisationCityModule,
   ],
   controllers: [AppController, RolePermissionController],
