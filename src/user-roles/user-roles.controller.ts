@@ -23,7 +23,7 @@ import {
 import { UserRole } from './entities/user-roles.entity';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 
-@ApiTags('User Roles')
+@ApiTags('Role Utilisateurs')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('user-roles')
