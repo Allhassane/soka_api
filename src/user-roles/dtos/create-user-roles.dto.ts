@@ -15,14 +15,6 @@ export class CreateUserRoleDto {
   role_uuid: string;
 
   @ApiProperty({
-    description: 'UUID de la zone associée (optionnel)',
-    required: false,
-  })
-  @IsOptional()
-  @IsUUID()
-  zone_uuid?: string;
-
-  @ApiProperty({
     description: 'Statut actif du rôle pour cet utilisateur',
     default: true,
     example: true,

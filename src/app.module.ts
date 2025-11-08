@@ -21,6 +21,8 @@ import { DivisionModule } from './divisions/division.module';
 import { CityModule } from './cities/city.module';
 import { CivilityModule } from './civilities/civility.module';
 import { FormationModule } from './formations/formation.module';
+import { UserRole } from './user-roles/entities/user-roles.entity';
+import { UserRoleModule } from './user-roles/user-roles.module';
 
 
 //import { PermissionsModule } from './permissions/permission.module';
@@ -61,6 +63,8 @@ import { FormationModule } from './formations/formation.module';
     RoleModule,
     UserModule,
     AuthModule,
+    UserRole,
+    UserRoleModule,
     LogActivitiesModule,
     ModuleModule,
     PermissionModule,
