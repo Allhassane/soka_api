@@ -224,7 +224,6 @@ export class UserService {
       .select([
         'role.uuid AS role_uuid',
         'role.name AS role_name',
-        'role.type AS role_type',
         'role.slug AS role_slug',
       ])
       .where('ur.user_uuid = :uuid', { uuid })

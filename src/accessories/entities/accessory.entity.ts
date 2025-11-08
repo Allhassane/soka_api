@@ -1,5 +1,6 @@
+import { MemberAccessoryEntity } from 'src/member-accessories/entities/member-accessories.entity';
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
-import { Entity, PrimaryGeneratedColumn, Column, BeforeInsert, BeforeUpdate} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, BeforeInsert, BeforeUpdate, OneToMany} from 'typeorm';
 
 function slugify(s: string) {
   return s
@@ -11,7 +12,7 @@ function slugify(s: string) {
 }
 
 @Entity({ name: 'accessories' })
-export class acccessoryEntity extends DateTimeEntity {
+export class AccessoryEntity extends DateTimeEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
@@ -35,5 +36,13 @@ export class acccessoryEntity extends DateTimeEntity {
   generateSlug() {
     if (this.name) this.slug = slugify(this.name);
   }
+
+   @OneToMany(
+    () => MemberAccessoryEntity,
+    (memberAccessory) => memberAccessory.accessory,
+    { cascade: ['remove'], eager: false },
+  )
+  member_accessories: MemberAccessoryEntity[];
+
 
 }

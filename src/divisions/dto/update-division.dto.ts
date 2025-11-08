@@ -1,7 +1,16 @@
-import { IsOptional, IsString, MaxLength } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, MaxLength, IsNotEmpty } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateDivisionDto {
+  @ApiProperty({
+    description: 'Département uuid',
+    example: 'Département Homme',
+  })
+  @IsString()
+  @IsNotEmpty({ message: 'uuid du département est requise' })
+  @MaxLength(150)
+  department_uuid: string;
+
   @ApiPropertyOptional({
     description: 'Nom de la division',
     example: 'Administration',

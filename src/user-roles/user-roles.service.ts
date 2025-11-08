@@ -12,7 +12,6 @@ import { User } from 'src/users/entities/user.entity';
 import { Role } from 'src/roles/entities/role.entity';
 import { buildPaginationMeta } from 'src/shared/helpers/pagination-meta.helper';
 import { PaginateMeta } from 'src/shared/interfaces/paginate-meta.interface';
-import { RoleType } from 'src/shared/enums/types.enums';
 
 @Injectable()
 export class UserRoleService {
@@ -113,7 +112,6 @@ export class UserRoleService {
       .innerJoin(Role, 'r', 'r.uuid = ur.role_uuid')
       .where('ur.user_uuid = :user_uuid', { user_uuid })
       .andWhere('ur.role_uuid = :role_uuid', { role_uuid })
-      .andWhere('r.type <> :school', { school: RoleType.SCHOOL })
       .getOne();
 
     if (existing) {

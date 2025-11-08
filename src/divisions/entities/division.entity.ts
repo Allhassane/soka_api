@@ -1,3 +1,4 @@
+import { DepartmentEntity } from 'src/departments/entities/department.entity';
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
 import {
   Entity,
@@ -5,6 +6,8 @@ import {
   Column,
   BeforeInsert,
   BeforeUpdate,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
 
 function slugify(s: string) {
@@ -25,6 +28,9 @@ export class DivisionEntity extends DateTimeEntity {
   @Column({ type: 'char', length: 36, unique: true, default: () => '(UUID())' })
   uuid: string;
 
+  @Column({ type: 'char', length: 36, nullable: true })
+  department_uuid: string;
+
   @Column()
   name: string;
 
@@ -39,6 +45,12 @@ export class DivisionEntity extends DateTimeEntity {
 
   @Column({ type: 'varchar', length: 36, default: 'enable' })
   status: string;
+
+  @ManyToOne(() => DepartmentEntity, (dep) => dep.divisions, {
+    onDelete: 'RESTRICT',
+  }) // ou 'CASCADE' selon ton besoin
+  @JoinColumn({ name: 'department_uuid', referencedColumnName: 'uuid' })
+  department: DepartmentEntity;
 
   @BeforeInsert()
   @BeforeUpdate()

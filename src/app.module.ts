@@ -22,6 +22,12 @@ import { CivilityModule } from './civilities/civility.module';
 import { FormationModule } from './formations/formation.module';
 import { StructureModule } from './structure/structure.module';
 import { MemberResponsibilityModule } from './⁠member-responsibility/⁠member-responsibility.module';
+import { UserRole } from './user-roles/entities/user-roles.entity';
+import { UserRoleModule } from './user-roles/user-roles.module';
+import { AccessoryModule } from './accessories/accessory.module';
+import { MemberAccessoryModule } from './member-accessories/member-accessories.module';
+
+//import { PermissionsModule } from './permissions/permission.module';
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
@@ -59,6 +65,8 @@ import { MemberResponsibilityModule } from './⁠member-responsibility/⁠member
     RoleModule,
     UserModule,
     AuthModule,
+    UserRole,
+    UserRoleModule,
     LogActivitiesModule,
     ModuleModule,
     PermissionModule,
@@ -72,6 +80,9 @@ import { MemberResponsibilityModule } from './⁠member-responsibility/⁠member
     FormationModule,
     StructureModule,
     MemberResponsibilityModule,
+    AccessoryModule,
+    MemberAccessoryModule,
+    MemberModule,
   ],
   controllers: [AppController, RolePermissionController],
   providers: [AppService, RolePermissionService],
