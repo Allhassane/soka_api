@@ -113,7 +113,6 @@ export class UserRoleService {
       .innerJoin(Role, 'r', 'r.uuid = ur.role_uuid')
       .where('ur.user_uuid = :user_uuid', { user_uuid })
       .andWhere('ur.role_uuid = :role_uuid', { role_uuid })
-      .andWhere('r.type <> :school', { school: RoleType.SCHOOL })
       .getOne();
 
     if (existing) {
