@@ -26,6 +26,8 @@ import { UserRoleModule } from './user-roles/user-roles.module';
 import { AccessoryModule } from './accessories/accessory.module';
 import { MemberAccessoryModule } from './member-accessories/member-accessories.module';
 import { MemberModule } from './members/member.module';
+import { JobModule } from './jobs/job.module';
+import { CountryModule } from './countries/country.module';
 
 
 //import { PermissionsModule } from './permissions/permission.module';
@@ -84,6 +86,8 @@ import { MemberModule } from './members/member.module';
     AccessoryModule,
     MemberAccessoryModule,
     MemberModule,
+    JobModule,
+    CountryModule,
   ],
   controllers: [AppController, RolePermissionController],
   providers: [AppService, RolePermissionService],

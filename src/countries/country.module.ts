@@ -13,4 +13,4 @@ import { UserModule } from 'src/users/user.module';
   providers: [CountryService],
   exports: [CountryService],
 })
-export class DivisionModule {}
+export class CountryModule {}
