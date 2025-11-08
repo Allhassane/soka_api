@@ -2,7 +2,7 @@ import { UpdateOrganisationCityDto } from './dto/update-organisation-cities.dto'
 import { CreateOrganisationCityDto } from './dto/create-organisation-cities.dto';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
 import { OrganisationCities } from './entities/organisation_citie.entity';
 
 @Injectable()
@@ -13,13 +13,19 @@ export class OrganisationCitiesService {
     private readonly organisationCitiesRepo: Repository<OrganisationCities>,
   ) { }
 
-  findAll() {
-    return this.organisationCitiesRepo.find();
+  async findAll() {
+    return this.organisationCitiesRepo.find(
+      { where: { deletedAt: IsNull() } }
+    );
   }
 
-  create(createOrganisationCityDto: CreateOrganisationCityDto) {
+  async create(createOrganisationCityDto: CreateOrganisationCityDto) {
     const organisationCity = this.organisationCitiesRepo.create(createOrganisationCityDto);
-    return this.organisationCitiesRepo.save(organisationCity);
+    const result = this.organisationCitiesRepo.save(organisationCity);
+    if(!result) {
+      return 'Une erreur est survenue lors de la création de la ville d\'organisation';
+    }
+    return 'Ville d\'organisation créée avec succès';
   }
 
   async findOne(uuid: string) {
@@ -31,15 +37,23 @@ export class OrganisationCitiesService {
   async update(uuid: string, UpdateOrganisationCityDto: UpdateOrganisationCityDto) {
     const organisation = await this.findOne(uuid);
     Object.assign(organisation, UpdateOrganisationCityDto);
-    return this.organisationCitiesRepo.save(organisation);
+    const result = this.organisationCitiesRepo.save(organisation);
+    if(!result) {
+      return 'Une erreur est survenue lors de la mise à jour de la ville d\'organisation';
+    }
+    return 'Ville d\'organisation mise à jour avec succès';
   }
 
   async remove(uuid: string) {
     const organisation = await this.findOne(uuid);
     if (!organisation) {
-      throw new NotFoundException('Organisation city introuvable.');
+      throw new NotFoundException('Ville d’organisation introuvable.');
     }
-    return this.organisationCitiesRepo.remove(organisation);
+
+    //Soft delete
+    await this.organisationCitiesRepo.softRemove(organisation);
+
+    return { message: "Ville d'organisation supprimée avec succès (soft delete)" };
   }
 
 }
