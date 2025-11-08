@@ -1,6 +1,11 @@
-import { PermissionEntity } from 'src/permission/entities/permission.entity';
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, BeforeInsert, BeforeUpdate, OneToMany, PrimaryColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  BeforeInsert,
+  BeforeUpdate,
+} from 'typeorm';
 
 function slugify(s: string) {
   return s
@@ -33,12 +38,11 @@ export class DivisionEntity extends DateTimeEntity {
   admin_uuid: string;
 
   @Column({ type: 'varchar', length: 36, default: 'enable' })
-  statut: string;
+  status: string;
 
   @BeforeInsert()
   @BeforeUpdate()
   generateSlug() {
     if (this.name) this.slug = slugify(this.name);
   }
-
 }

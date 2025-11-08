@@ -22,8 +22,8 @@ import { CityModule } from './cities/city.module';
 import { CivilityModule } from './civilities/civility.module';
 import { FormationModule } from './formations/formation.module';
 
-
 //import { PermissionsModule } from './permissions/permission.module';
+import { StructureModule } from './structure/structure.module';
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
@@ -64,9 +64,9 @@ import { FormationModule } from './formations/formation.module';
     LogActivitiesModule,
     ModuleModule,
     PermissionModule,
-    RolePermissionModule,    
+    RolePermissionModule,
     //PermissionsModule,
-    RolePermissionModule,  
+    RolePermissionModule,
     CommitteeModule,
     DepartmentModule,
     DivisionModule,
@@ -74,6 +74,8 @@ import { FormationModule } from './formations/formation.module';
     CityModule,
     CivilityModule,
     FormationModule,
+    StructureModule,
+    StructureModule,
   ],
   controllers: [AppController, RolePermissionController],
   providers: [AppService, RolePermissionService],

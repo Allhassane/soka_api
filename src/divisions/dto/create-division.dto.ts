@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsOptional, IsString, MaxLength, IsEnum } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateDivisionDto {
@@ -22,9 +22,9 @@ export class CreateDivisionDto {
 
   @ApiPropertyOptional({
     description: 'Statut de la division',
-     example: 'enable',
+    example: 'enable',
   })
   @IsString()
   @IsOptional()
-  statut?: 'enable';
+  status?: 'enable';
 }
