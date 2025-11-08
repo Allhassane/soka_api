@@ -1,10 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { StructureEntity } from './entities/structure.entity';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { CreateStructureDto } from './dto/create-structure.dto';
 import { UpdateStructureDto } from './dto/update-structure.dto';
+import { LevelService } from 'src/level/level.service';
 
 @Injectable()
 export class StructureService {
@@ -12,6 +17,7 @@ export class StructureService {
     @InjectRepository(StructureEntity)
     private readonly structureRepo: Repository<StructureEntity>,
     private readonly logService: LogActivitiesService,
+    private readonly levelService: LevelService,
   ) {}
 
   async findAll() {
@@ -26,13 +32,22 @@ export class StructureService {
       parent = await this.findOne(createStructureDto.parent_uuid);
     }
 
+    let level;
+    if (createStructureDto.level_uuid) {
+      level = await this.levelService.findOne(createStructureDto.level_uuid);
+    }
+
     const newStructure = this.structureRepo.create({
       name: createStructureDto.name,
       ...(admin_uuid ? { admin_uuid } : {}),
       ...(createStructureDto.parent_uuid
         ? { parent_uuid: createStructureDto.parent_uuid }
         : {}),
+      ...(createStructureDto.level_uuid
+        ? { level_uuid: createStructureDto.level_uuid }
+        : {}),
       ...(createStructureDto.parent_uuid ? { parent: parent ?? null } : {}),
+      ...(createStructureDto.level_uuid ? { level: level ?? null } : {}),
     });
 
     const saved = await this.structureRepo.save(newStructure);
@@ -65,6 +80,10 @@ export class StructureService {
   async update(uuid: string, updateStructureDto: UpdateStructureDto) {
     const existing = await this.findOne(uuid);
 
+    if (!updateStructureDto.name) {
+      throw new BadRequestException('Le nom de la structure est requis');
+    }
+
     let parent: StructureEntity | null = null;
     if (updateStructureDto.parent_uuid) {
       parent = await this.findOne(updateStructureDto.parent_uuid);
@@ -73,6 +92,14 @@ export class StructureService {
     existing.name = updateStructureDto.name;
     existing.parent_uuid = updateStructureDto.parent_uuid;
     existing.parent = parent ?? null;
+
+    let level;
+    if (updateStructureDto.level_uuid) {
+      level = await this.levelService.findOne(updateStructureDto.level_uuid);
+    }
+
+    existing.level_uuid = updateStructureDto.level_uuid;
+    existing.level = level ?? null;
 
     const updated = await this.structureRepo.save(existing);
 
@@ -83,5 +110,18 @@ export class StructureService {
     const structure = await this.findOne(uuid);
 
     return await this.structureRepo.remove(structure);
+  }
+
+  async findByLevel(level_uuid: string) {
+    const level = await this.levelService.findOne(level_uuid);
+
+    const data = await this.structureRepo.find({
+      where: { level_uuid },
+    });
+
+    return {
+      level,
+      data,
+    };
   }
 }

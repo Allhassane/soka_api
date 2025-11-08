@@ -88,6 +88,22 @@ export class StructureController {
     return this.structureService.findChildrens(uuid);
   }
 
+  @Get('find-by-level/:level_uuid')
+  @ApiOperation({
+    summary: "Recupérer les structures d'un niveau",
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Structures récupérées avec succès',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Non autorisé - Authentification requise',
+  })
+  public findByLevel(@Param('level_uuid') level_uuid: string) {
+    return this.structureService.findByLevel(level_uuid);
+  }
+
   @Put(':uuid')
   @ApiOperation({
     summary: 'Modifier une structure',

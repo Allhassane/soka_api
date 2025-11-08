@@ -1,4 +1,5 @@
 import { IsOptional } from 'class-validator';
+import { LevelEntity } from 'src/level/entities/level.entity';
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
 import {
   Entity,
@@ -30,6 +31,17 @@ export class StructureEntity extends DateTimeEntity {
   })
   @JoinColumn({ name: 'parent_id', referencedColumnName: 'id' })
   parent?: StructureEntity | null;
+
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  @IsOptional()
+  level_uuid?: string;
+
+  @ManyToOne(() => LevelEntity, (level) => level.id, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'level_id', referencedColumnName: 'id' })
+  level?: LevelEntity | null;
 
   @Column({ type: 'varchar', length: 36, nullable: true })
   @IsOptional()

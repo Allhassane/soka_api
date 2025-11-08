@@ -1,22 +1,4 @@
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { PartialType } from '@nestjs/mapped-types';
+import { CreateStructureDto } from './create-structure.dto';
 
-export class UpdateStructureDto {
-  @ApiProperty({
-    description: 'Nom de la structure',
-    example: 'Structure Lorem',
-  })
-  @IsString()
-  @IsNotEmpty({ message: 'Le nom de la structure est requise' })
-  @MaxLength(150)
-  name: string;
-
-  @ApiProperty({
-    description: 'Nom de la structure parente',
-    example: 'Structure Ipsum',
-  })
-  @IsString()
-  @IsOptional()
-  @MaxLength(150)
-  parent_uuid?: string;
-}
+export class UpdateStructureDto extends PartialType(CreateStructureDto) {}

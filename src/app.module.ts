@@ -14,15 +14,12 @@ import { RolePermissionController } from './role-permission/role-permission.cont
 import { RolePermissionService } from './role-permission/role-permission.service';
 import { RolePermissionModule } from './role-permission/role-permission.module';
 import { MailerModule } from '@nestjs-modules/mailer';
-import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
 import { CommitteeModule } from './committees/committee.module';
 import { DepartmentModule } from './departments/department.module';
 import { DivisionModule } from './divisions/division.module';
 import { CityModule } from './cities/city.module';
 import { CivilityModule } from './civilities/civility.module';
 import { FormationModule } from './formations/formation.module';
-
-//import { PermissionsModule } from './permissions/permission.module';
 import { StructureModule } from './structure/structure.module';
 @Module({
   imports: [
@@ -65,16 +62,14 @@ import { StructureModule } from './structure/structure.module';
     ModuleModule,
     PermissionModule,
     RolePermissionModule,
-    //PermissionsModule,
+    LevelModule,
     RolePermissionModule,
     CommitteeModule,
     DepartmentModule,
     DivisionModule,
-    DivisionModule,
     CityModule,
     CivilityModule,
     FormationModule,
-    StructureModule,
     StructureModule,
   ],
   controllers: [AppController, RolePermissionController],
