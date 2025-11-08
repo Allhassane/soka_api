@@ -52,6 +52,15 @@ export class ResponsibilityController {
     return this.responsibilityService.findOne(uuid, admin_uuid);
   }
 
+  @Get('find-by-level/:uuid')
+  @ApiOperation({ summary: 'Récupérer une reponsabilité par uuid du niveau' })
+  @ApiResponse({ status: 200, description: 'reponsabilité trouvé.' })
+  @ApiResponse({ status: 400, description: 'reponsabilité non trouvé.' })
+  findByLevel(@Param('uuid') uuid: string, @Request() req) {
+    const admin_uuid = req.user.uuid as string;
+    return this.responsibilityService.findByLevel(uuid, admin_uuid);
+  }
+
   @Put(':uuid')
   @ApiOperation({ summary: 'Modifier une responsabilité' })
   @ApiResponse({ status: 200, description: 'Localité modifié avec succès.' })
