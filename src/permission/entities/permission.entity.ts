@@ -17,7 +17,7 @@ export class PermissionEntity {
   id: number;
 
  //@Column({ type: 'uuid',nullable: false, default: () => 'gen_random_uuid()' })
- @Column({ type: 'char', length: 36, unique: true, default: () => '(UUID())' })
+ @Column({ type: 'char', length: 191, unique: true, default: () => '(UUID())' })
  uuid: string ;
 
   @Column()
@@ -29,7 +29,7 @@ export class PermissionEntity {
 @Column({ type: 'text', nullable: true })
   description?: string;
 
- @Column({ nullable: true })
+ @Column({ nullable: true, length: 191, })
  module_uuid: string;
 
   /* @ManyToOne(() => ModuleEntity, (module) => module.permissions, { onDelete: 'CASCADE' })
