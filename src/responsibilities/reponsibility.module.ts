@@ -7,6 +7,7 @@ import { ResponsibilityEntity } from './entities/responsibility.entity';
 import { ResponsibilityController } from './reponsibility.controller';
 import { ResponsibilityService } from './reponsibility.service';
 import { MemberResponsibilityModule } from 'src/⁠member-responsibility/⁠member-responsibility.module';
+import { LevelModule } from 'src/level/level.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { MemberResponsibilityModule } from 'src/⁠member-responsibility/⁠memb
     LogActivitiesModule,
     UserModule,
     forwardRef(() => MemberResponsibilityModule),
+    LevelModule,
   ],
   controllers: [ResponsibilityController],
   providers: [ResponsibilityService],

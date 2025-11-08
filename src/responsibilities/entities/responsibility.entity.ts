@@ -1,3 +1,5 @@
+import { IsNotEmpty, IsOptional } from 'class-validator';
+import { LevelEntity } from 'src/level/entities/level.entity';
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
 import {
   Entity,
@@ -5,6 +7,8 @@ import {
   Column,
   BeforeInsert,
   BeforeUpdate,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
 
 function slugify(s: string) {
@@ -35,6 +39,20 @@ export class ResponsibilityEntity extends DateTimeEntity {
 
   @Column({ type: 'varchar', length: 36, default: 'enable' })
   status: string;
+
+  @Column({ type: 'varchar', length: 10, default: 'mixte' })
+  gender: string;
+
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  @IsNotEmpty()
+  level_uuid?: string;
+
+  @ManyToOne(() => LevelEntity, (level) => level.id, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'level_id', referencedColumnName: 'id' })
+  level?: LevelEntity;
 
   @BeforeInsert()
   @BeforeUpdate()
