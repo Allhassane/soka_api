@@ -14,19 +14,18 @@ import { RolePermissionController } from './role-permission/role-permission.cont
 import { RolePermissionService } from './role-permission/role-permission.service';
 import { RolePermissionModule } from './role-permission/role-permission.module';
 import { MailerModule } from '@nestjs-modules/mailer';
-import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
 import { CommitteeModule } from './committees/committee.module';
 import { DepartmentModule } from './departments/department.module';
 import { DivisionModule } from './divisions/division.module';
 import { CityModule } from './cities/city.module';
 import { CivilityModule } from './civilities/civility.module';
 import { FormationModule } from './formations/formation.module';
+import { StructureModule } from './structure/structure.module';
+import { MemberResponsibilityModule } from './⁠member-responsibility/⁠member-responsibility.module';
 import { UserRole } from './user-roles/entities/user-roles.entity';
 import { UserRoleModule } from './user-roles/user-roles.module';
 import { AccessoryModule } from './accessories/accessory.module';
 import { MemberAccessoryModule } from './member-accessories/member-accessories.module';
-import { MemberModule } from './members/member.module';
-
 
 //import { PermissionsModule } from './permissions/permission.module';
 @Module({
@@ -71,16 +70,16 @@ import { MemberModule } from './members/member.module';
     LogActivitiesModule,
     ModuleModule,
     PermissionModule,
-    RolePermissionModule,    
-    //PermissionsModule,
-    RolePermissionModule,  
+    RolePermissionModule,
+    LevelModule,
     CommitteeModule,
     DepartmentModule,
-    DivisionModule,
     DivisionModule,
     CityModule,
     CivilityModule,
     FormationModule,
+    StructureModule,
+    MemberResponsibilityModule,
     AccessoryModule,
     MemberAccessoryModule,
     MemberModule,
