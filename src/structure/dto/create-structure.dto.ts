@@ -18,7 +18,7 @@ export class CreateStructureDto {
   @IsString()
   @IsOptional()
   @MaxLength(150)
-  parent_uuid?: string;
+  parent_uuid?: string | null;
 
   @ApiProperty({
     description: 'identifiant du niveau',

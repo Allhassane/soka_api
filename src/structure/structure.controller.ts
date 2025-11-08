@@ -7,12 +7,16 @@ import {
   Delete,
   Param,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { CreateStructureDto } from './dto/create-structure.dto';
 import { StructureService } from './structure.service';
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiOperation,
+  ApiParam,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -90,7 +94,12 @@ export class StructureController {
     status: 401,
     description: 'Non autorisé - Authentification requise',
   })
-  public findChildrens(@Param('uuid') uuid: string) {
+  @ApiQuery({
+    name: 'uuid',
+    description: 'UUID de la structure',
+    required: false,
+  })
+  public findChildrens(@Query('uuid') uuid: string | undefined) {
     return this.structureService.findChildrens(uuid);
   }
 
@@ -121,6 +130,12 @@ export class StructureController {
   @ApiResponse({
     status: 401,
     description: 'Non autorisé - Authentification requise',
+  })
+  @ApiBody({ type: UpdateStructureDto })
+  @ApiParam({
+    name: 'uuid',
+    description: 'UUID de la structure',
+    required: true,
   })
   public update(
     @Param('uuid') uuid: string,
