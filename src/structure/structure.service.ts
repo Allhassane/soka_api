@@ -33,8 +33,10 @@ export class StructureService {
     }
 
     let level;
-    if (createStructureDto.level_uuid) {
-      level = await this.levelService.findOne(createStructureDto.level_uuid);
+    if (parent) {
+      level = await this.levelService.findNextLevelByParent(
+        parent.level_uuid as string,
+      );
     }
 
     const newStructure = this.structureRepo.create({
@@ -43,11 +45,9 @@ export class StructureService {
       ...(createStructureDto.parent_uuid
         ? { parent_uuid: createStructureDto.parent_uuid }
         : {}),
-      ...(createStructureDto.level_uuid
-        ? { level_uuid: createStructureDto.level_uuid }
-        : {}),
+      ...(level ? { level_uuid: level.uuid } : {}),
       ...(createStructureDto.parent_uuid ? { parent: parent ?? null } : {}),
-      ...(createStructureDto.level_uuid ? { level: level ?? null } : {}),
+      ...(level ? { level: level ?? null } : {}),
     });
 
     const saved = await this.structureRepo.save(newStructure);
@@ -102,6 +102,22 @@ export class StructureService {
     }
   }
 
+  async findByChildrens(uuid: string | undefined) {
+    if (uuid === undefined || uuid === null) {
+      const structure = await this.findOneWithoutParent();
+
+      return structure;
+    } else {
+      const structure = await this.findOne(uuid);
+
+      const childrens = await this.structureRepo.find({
+        where: { parent_uuid: structure.uuid },
+      });
+
+      return childrens;
+    }
+  }
+
   async update(uuid: string, updateStructureDto: UpdateStructureDto) {
     const existing = await this.findOne(uuid);
 
@@ -119,11 +135,11 @@ export class StructureService {
     existing.parent = parent ?? null;
 
     let level;
-    if (updateStructureDto.level_uuid) {
-      level = await this.levelService.findOne(updateStructureDto.level_uuid);
+    if (parent) {
+      level = await this.levelService.findNextLevelByParent(parent.uuid);
     }
 
-    existing.level_uuid = updateStructureDto.level_uuid;
+    existing.level_uuid = level?.uuid;
     existing.level = level ?? null;
 
     const updated = await this.structureRepo.save(existing);
