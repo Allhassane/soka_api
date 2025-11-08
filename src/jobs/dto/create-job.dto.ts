@@ -17,5 +17,5 @@ export class CreateJobDto {
   })
   @IsString()
   @IsOptional()
-  statut?: 'enable';
+  status?: 'enable';
 }

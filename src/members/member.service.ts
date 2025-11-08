@@ -50,7 +50,7 @@ export class MemberService {
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
     if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
 
-    // 🔹 Étape 1 : Vérification de la civilité
+    // Étape 1 : Vérification de la civilité
     if (!dto.civility_uuid) {
       throw new BadRequestException('Veuillez renseigner la civilité du membre.');
     }
@@ -73,7 +73,7 @@ export class MemberService {
     const yearSuffix = new Date().getFullYear().toString().slice(-2);
     const matricule = `${yearSuffix}-${String(nextId).padStart(4, '0')}`; // ex: 25-0007
 
-    // 🔹 Étape 4 : Création du membre
+    // Création du membre
     const member = this.memberRepo.create({
       ...dto,
       matricule,
@@ -84,7 +84,7 @@ export class MemberService {
 
     const saved = await this.memberRepo.save(member);
 
-    // 🔹 Étape 5 : Journalisation
+    // Journalisation
     await this.logService.logAction(
       'members-store',
       admin.id,
@@ -95,7 +95,7 @@ export class MemberService {
   }
 
 
-  /** 🔹 Trouver un membre par UUID */
+  /** Trouver un membre par UUID */
   async findOne(uuid: string, admin_uuid: string): Promise<MemberEntity> {
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
     if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
