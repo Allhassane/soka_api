@@ -38,7 +38,6 @@ export class RoleService {
     if (!existing) {
       const role = new Role();
       role.name = 'superadmin';
-      role.type = RoleType.PEDAGOGIC;
       await this.roleRepository.save(role);
     }
   }
@@ -86,24 +85,7 @@ export class RoleService {
 
   async findLevelsByRoleUuid(uuid: string) {
     const role = await this.findOneByUuid(uuid);
-    if (!role.zone_uuid) return [];
-
-    switch (role.type) {
-      case RoleType.PEDAGOGIC:
-      /*   return this.levelPedagoRepo.find({
-          where: { level_uuid: role.zone_uuid },
-          order: { created_at: 'DESC' },
-        });
-      case RoleType.GEOGRAPHIC:
-        return this.levelGeoRepo.find({
-          where: { level_uuid: role.zone_uuid },
-          order: { created_at: 'DESC' },
-        }); */
-      case RoleType.SCHOOL:
-        return [];
-      default:
-        throw new BadRequestException('Type de rôle non supporté');
-    }
+    return role;
   }
 
   async softDelete(uuid: string): Promise<void> {
