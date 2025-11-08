@@ -8,13 +8,16 @@ import { User } from 'src/users/entities/user.entity';
 import { UserModule } from 'src/users/user.module';
 import { ResponsibilityModule } from 'src/responsibilities/reponsibility.module';
 import { MemberResponsibilityModule } from 'src/⁠member-responsibility/⁠member-responsibility.module';
+import { CivilityEntity } from 'src/civilities/entities/civility.entity';
+import { CivilityModule } from 'src/civilities/civility.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([MemberEntity, User]),
+    TypeOrmModule.forFeature([MemberEntity, User,CivilityEntity]),
     LogActivitiesModule,
     UserModule,
     ResponsibilityModule,
+    CivilityModule,
     forwardRef(() => MemberResponsibilityModule),
   ],
   controllers: [MemberController],
