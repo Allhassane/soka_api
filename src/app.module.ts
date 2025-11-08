@@ -29,6 +29,7 @@ import { MemberModule } from './members/member.module';
 
 
 //import { PermissionsModule } from './permissions/permission.module';
+import { OrganisationCitiesModule } from './organisation_cities/organisation_cities.module';
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
@@ -84,6 +85,7 @@ import { MemberModule } from './members/member.module';
     AccessoryModule,
     MemberAccessoryModule,
     MemberModule,
+    OrganisationCitiesModule,
   ],
   controllers: [AppController, RolePermissionController],
   providers: [AppService, RolePermissionService],
