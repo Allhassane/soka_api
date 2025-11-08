@@ -30,10 +30,9 @@ export class CreateModuleDto {
 
   @ApiPropertyOptional({
     description: 'Statut du module',
-    enum: ['ACTIF', 'INACTIF', 'SUPPRIMER'],
-    default: 'ACTIF',
+    default: 'enable',
   })
-  @IsEnum(['ACTIF', 'INACTIF', 'SUPPRIMER'])
+  @IsString()
   @IsOptional()
-  statut?: 'ACTIF' | 'INACTIF' | 'SUPPRIMER';
+  status?: 'enable';
 }

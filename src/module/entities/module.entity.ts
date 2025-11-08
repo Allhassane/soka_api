@@ -32,8 +32,8 @@ export class ModuleEntity extends DateTimeEntity {
   @Column({ type: 'varchar', length: 36 })
   admin_uuid: string;
 
-  @Column({ type: 'enum', enum: ['ACTIF', 'INACTIF', 'SUPPRIMER'], default: 'ACTIF' })
-  statut: 'ACTIF' | 'INACTIF' | 'SUPPRIMER';
+  @Column({ type: 'string',  default: 'enable' })
+  status: 'enable';
 
 
   @BeforeInsert()
