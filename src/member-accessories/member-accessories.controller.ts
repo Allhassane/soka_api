@@ -33,21 +33,26 @@ export class MemberAccessoriesController {
   @Post()
   @ApiOperation({ summary: 'Assigner un accessoire à un utilisateur' })
   @ApiResponse({ status: 201, type: MemberAccessoryEntity })
-  async create(@Body() dto: CreateMemberAccessoryDto): Promise<MemberAccessoryEntity> {
+  async create(
+    @Body() dto: CreateMemberAccessoryDto,
+  ): Promise<MemberAccessoryEntity> {
     return this.service.create(dto);
   }
 
-   @Get()
-    @ApiOperation({
-      summary: 'Lister toutes les affectations membre/accessoire',
-    })
-    async findAll() {
-      return this.service.findAll(); 
-    }
+  @Get()
+  @ApiOperation({
+    summary: 'Lister toutes les affectations membre/accessoire',
+  })
+  async findAll() {
+    return this.service.findAll();
+  }
 
   @Get(':uuid')
   @ApiOperation({ summary: 'Voir une affectation utilisateur/accessoire' })
-  @ApiParam({ name: 'uuid', description: 'UUID de la liaison membre/accessoire' })
+  @ApiParam({
+    name: 'uuid',
+    description: 'UUID de la liaison membre/accessoire',
+  })
   @ApiResponse({ status: 200, type: MemberAccessoryEntity })
   async findOne(@Param('uuid') uuid: string): Promise<MemberAccessoryEntity> {
     return this.service.findOneByUuid(uuid);
@@ -55,7 +60,10 @@ export class MemberAccessoriesController {
 
   @Put(':uuid')
   @ApiOperation({ summary: 'Modifier une affectation membre/accessoire' })
-  @ApiParam({ name: 'uuid', description: 'UUID de la liaison membre/accessoire' })
+  @ApiParam({
+    name: 'uuid',
+    description: 'UUID de la liaison membre/accessoire',
+  })
   async update(
     @Param('uuid') uuid: string,
     @Body() dto: UpdateMemberAccessoryDto,
@@ -67,7 +75,10 @@ export class MemberAccessoriesController {
   @ApiOperation({
     summary: 'Supprimer un accessoire utilisateur/rôle (soft delete)',
   })
-  @ApiParam({ name: 'uuid', description: 'UUID de la liaison membre/accessoire' })
+  @ApiParam({
+    name: 'uuid',
+    description: 'UUID de la liaison membre/accessoire',
+  })
   async remove(@Param('uuid') uuid: string): Promise<void> {
     return this.service.softDelete(uuid);
   }
