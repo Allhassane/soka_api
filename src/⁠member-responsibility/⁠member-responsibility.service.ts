@@ -15,17 +15,20 @@ export class MemberResponsibilityService {
     private readonly responsibilityService: ResponsibilityService,
   ) {}
 
-  async create(createMemberResponsibilityDto: CreateMemberResponsibilityDto) {
+  async create(
+    createMemberResponsibilityDto: CreateMemberResponsibilityDto,
+    admin_uuid?: string,
+  ) {
     const member = await this.memberService.findOne(
       createMemberResponsibilityDto.member_uuid as string,
-      null,
+      admin_uuid,
     );
     if (!member) {
       throw new NotFoundException('Membre non trouvé');
     }
     const responsibility = await this.responsibilityService.findOne(
       createMemberResponsibilityDto.responsibility_uuid as string,
-      null,
+      admin_uuid,
     );
     if (!responsibility) {
       throw new NotFoundException('Responsabilité non trouvée');
