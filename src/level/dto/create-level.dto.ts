@@ -19,5 +19,5 @@ export class CreateLevelDto {
   })
   @IsNotEmpty()
   @IsString()
-  category: 'responsibility' | 'mixte';
+  category: 'level' | 'responsibility';
 }

@@ -43,7 +43,7 @@ export class LevelController {
     name: 'category',
     description: 'Categorie',
     required: true,
-    enum: ['all', 'responsibility', 'mixte'],
+    enum: ['all', 'responsibility', 'level'],
   })
   findAll(@Param('category') category: string) {
     return this.levelService.findAll(category);

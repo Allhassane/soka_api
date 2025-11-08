@@ -26,11 +26,11 @@ export class LevelEntity extends DateTimeEntity {
   name: string;
 
   @ApiProperty({ description: 'Ordre du niveau', example: 1 })
-  @Column({ type: 'varchar' })
+  @Column({ type: 'int' })
   order: number;
 
   @Column({ type: 'varchar', length: 50, default: 'mixte' })
-  category: 'responsibility' | 'mixte';
+  category: 'responsibility' | 'level';
 
   @ApiProperty({
     description: 'UUID de l’administrateur propriétaire',
