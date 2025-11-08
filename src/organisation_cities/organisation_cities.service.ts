@@ -16,6 +16,7 @@ export class OrganisationCitiesService {
   async findAll() {
     return this.organisationCitiesRepo.find(
       { where: { deletedAt: IsNull() } }
+      //jk
     );
   }
 
