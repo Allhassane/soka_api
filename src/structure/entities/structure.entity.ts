@@ -23,7 +23,7 @@ export class StructureEntity extends DateTimeEntity {
 
   @Column({ type: 'varchar', length: 36, nullable: true })
   @IsOptional()
-  parent_uuid?: string;
+  parent_uuid?: string | null;
 
   @ManyToOne(() => StructureEntity, (structure) => structure.parent, {
     nullable: true,

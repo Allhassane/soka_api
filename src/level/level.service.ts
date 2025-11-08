@@ -36,7 +36,7 @@ export class LevelService {
   async findAll(category: string) {
     if (
       category !== 'responsibility' &&
-      category !== 'mixte' &&
+      category !== 'level' &&
       category !== 'all'
     ) {
       throw new NotFoundException('Categorie invalide');

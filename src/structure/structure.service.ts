@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { StructureEntity } from './entities/structure.entity';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { CreateStructureDto } from './dto/create-structure.dto';
@@ -64,17 +64,42 @@ export class StructureService {
     return structure;
   }
 
-  async findChildrens(uuid: string | undefined) {
-    const structure = await this.findOne(uuid);
-
-    const childrens = await this.structureRepo.find({
-      where: { parent_uuid: structure.uuid },
+  async findOneWithoutParent() {
+    const structure = await this.structureRepo.findOne({
+      where: { parent_uuid: IsNull() },
     });
 
-    return {
-      parent: structure,
-      childrens,
-    };
+    if (!structure) {
+      throw new NotFoundException('Aucune structure trouvée');
+    }
+
+    return structure;
+  }
+
+  async findChildrens(uuid: string | undefined) {
+    if (uuid === undefined || uuid === null) {
+      const structure = await this.findOneWithoutParent();
+
+      const childrens = await this.structureRepo.find({
+        where: { parent_uuid: structure.uuid },
+      });
+
+      return {
+        structure,
+        childrens,
+      };
+    } else {
+      const structure = await this.findOne(uuid);
+
+      const childrens = await this.structureRepo.find({
+        where: { parent_uuid: structure.uuid },
+      });
+
+      return {
+        parent: structure,
+        childrens,
+      };
+    }
   }
 
   async update(uuid: string, updateStructureDto: UpdateStructureDto) {
