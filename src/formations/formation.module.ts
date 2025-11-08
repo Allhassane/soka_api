@@ -13,4 +13,4 @@ import { UserModule } from 'src/users/user.module';
   providers: [FormationService],
   exports: [FormationService],
 })
-export class DivisionModule {}
+export class FormationModule {}

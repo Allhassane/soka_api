@@ -18,6 +18,9 @@ import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handleba
 import { CommitteeModule } from './committees/committee.module';
 import { DepartmentModule } from './departments/department.module';
 import { DivisionModule } from './divisions/division.module';
+import { CityModule } from './cities/city.module';
+import { CivilityModule } from './civilities/civility.module';
+import { FormationModule } from './formations/formation.module';
 
 
 //import { PermissionsModule } from './permissions/permission.module';
@@ -66,7 +69,11 @@ import { DivisionModule } from './divisions/division.module';
     RolePermissionModule,  
     CommitteeModule,
     DepartmentModule,
-    DivisionModule
+    DivisionModule,
+    DivisionModule,
+    CityModule,
+    CivilityModule,
+    FormationModule,
   ],
   controllers: [AppController, RolePermissionController],
   providers: [AppService, RolePermissionService],

@@ -13,4 +13,4 @@ import { UserModule } from 'src/users/user.module';
   providers: [CivilityService],
   exports: [CivilityService],
 })
-export class DivisionModule {}
+export class CivilityModule {}

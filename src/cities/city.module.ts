@@ -13,4 +13,4 @@ import { UserModule } from 'src/users/user.module';
   providers: [CityService],
   exports: [CityService],
 })
-export class DivisionModule {}
+export class CityModule {}
