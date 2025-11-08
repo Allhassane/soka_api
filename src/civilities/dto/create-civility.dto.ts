@@ -1,7 +1,7 @@
 import { IsNotEmpty, IsOptional, IsString, MaxLength, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-export class CreateMaritalStatusDto {
+export class CreateCivilityDto {
   @ApiProperty({
     description: 'libellé',
     example: 'Monsieur',
@@ -21,7 +21,7 @@ export class CreateMaritalStatusDto {
   sigle?: string;  
   
   @ApiProperty({
-    example: 'genre',
+    example: 'homme',
     description: 'Genre',
     default: 'homme',
   })
