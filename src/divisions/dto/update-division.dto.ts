@@ -1,8 +1,7 @@
-import { IsOptional, IsString, MaxLength, IsEnum, IsNotEmpty } from 'class-validator';
+import { IsOptional, IsString, MaxLength, IsNotEmpty } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateDivisionDto {
-    
   @ApiProperty({
     description: 'Département uuid',
     example: 'Département Homme',
@@ -32,9 +31,9 @@ export class UpdateDivisionDto {
 
   @ApiPropertyOptional({
     description: 'Statut de la division',
-     example: 'enable',
+    example: 'enable',
   })
   @IsString()
   @IsOptional()
-  statut?: 'enable';
+  status?: 'enable';
 }
