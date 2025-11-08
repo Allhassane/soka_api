@@ -31,6 +31,7 @@ import { JobModule } from './jobs/job.module';
 import { CountryModule } from './countries/country.module';
 import { MaritalStatusModule } from './marital-status/marital-status.module';
 import { ResponsabilityModule } from './responsabilities/reponsability.module';
+import { OrganisationCityModule } from './organisation_cities/organisation_city.module';
 
 //import { PermissionsModule } from './permissions/permission.module';
 @Module({
@@ -92,6 +93,7 @@ import { ResponsabilityModule } from './responsabilities/reponsability.module';
     CountryModule,
     MaritalStatusModule,
     ResponsabilityModule,
+    OrganisationCityModule,
   ],
   controllers: [AppController, RolePermissionController],
   providers: [AppService, RolePermissionService],
