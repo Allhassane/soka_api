@@ -19,4 +19,13 @@ export class CreateMemberResponsibilityDto {
   @IsNotEmpty({ message: 'Veuillez selectionner une responsabilité' })
   @MaxLength(150)
   responsibility_uuid: string;
+
+  @ApiProperty({
+    description: 'priorité',
+    example: '',
+  })
+  @IsString()
+  @IsNotEmpty({ message: 'Veuillez selectionner une priorité' })
+  @MaxLength(150)
+  priority: 'hight' | 'low';
 }

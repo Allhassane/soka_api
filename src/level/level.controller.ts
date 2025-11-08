@@ -6,9 +6,7 @@ import {
   Param,
   Delete,
   UseGuards,
-  Request,
   Put,
-  Query,
 } from '@nestjs/common';
 import { LevelService } from './level.service';
 import { CreateLevelDto } from './dto/create-level.dto';
@@ -20,11 +18,12 @@ import {
   ApiResponse,
   ApiBody,
   ApiParam,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 
-// @ApiBearerAuth()
+@ApiBearerAuth()
 @ApiTags('Niveaux')
-// @UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('levels')
 export class LevelController {
   constructor(private readonly levelService: LevelService) {}

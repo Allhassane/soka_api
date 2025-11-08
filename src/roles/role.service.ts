@@ -1,17 +1,20 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import { ModuleEntity } from "src/module/entities/module.entity";
-import { Role } from "./entities/role.entity";
-import { RoleType } from "src/shared/enums/types.enums";
-import { UpdateRoleDto } from "./dtos/update-role.dto";
-import { buildPaginationMeta } from "src/shared/helpers/pagination-meta.helper";
-import { POSTGRES_ERROR_CODES } from "src/shared/constants/postgres-error-codes.constant";
-import { PostgresError } from "src/shared/enums/post-gres.enum";
-import { CreateRoleDto } from "./dtos/create-role.dto";
-import { Repository } from "typeorm";
-import { PermissionEntity } from "src/permission/entities/permission.entity";
-import { InjectRepository } from "@nestjs/typeorm";
-import { RolePermissionEntity } from "src/role-permission/entities/role-permission.entity";
-import { PaginateMeta } from "src/shared/interfaces/paginate-meta.interface";
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { ModuleEntity } from 'src/module/entities/module.entity';
+import { Role } from './entities/role.entity';
+import { UpdateRoleDto } from './dtos/update-role.dto';
+import { buildPaginationMeta } from 'src/shared/helpers/pagination-meta.helper';
+import { POSTGRES_ERROR_CODES } from 'src/shared/constants/postgres-error-codes.constant';
+import { PostgresError } from 'src/shared/enums/post-gres.enum';
+import { CreateRoleDto } from './dtos/create-role.dto';
+import { Repository } from 'typeorm';
+import { PermissionEntity } from 'src/permission/entities/permission.entity';
+import { InjectRepository } from '@nestjs/typeorm';
+import { RolePermissionEntity } from 'src/role-permission/entities/role-permission.entity';
+import { PaginateMeta } from 'src/shared/interfaces/paginate-meta.interface';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
@@ -27,7 +30,7 @@ export class RoleService {
     private readonly rolePermissionRepository: Repository<RolePermissionEntity>,
 
     @InjectRepository(PermissionEntity)
-    private readonly permissionRepository: Repository<PermissionEntity>, 
+    private readonly permissionRepository: Repository<PermissionEntity>,
   ) {}
 
   async onModuleInit() {
@@ -57,7 +60,10 @@ export class RoleService {
     }
   }
 
-  async findAll(page = 1, limit = 10): Promise<{ data: Role[]; meta: Omit<PaginateMeta, 'page'> }> {
+  async findAll(
+    page = 1,
+    limit = 10,
+  ): Promise<{ data: Role[]; meta: Omit<PaginateMeta, 'page'> }> {
     const [data, total] = await this.roleRepository
       .createQueryBuilder('role')
       .orderBy('role.created_at', 'DESC')
@@ -93,8 +99,12 @@ export class RoleService {
     await this.roleRepository.softDelete({ id: role.id });
   }
 
-  async findAllPermissions(roleUuid: string): Promise<{ modules: ModuleEntity[]; role: Role }> {
-    const role = await this.roleRepository.findOne({ where: { uuid: roleUuid } });
+  async findAllPermissions(
+    roleUuid: string,
+  ): Promise<{ modules: ModuleEntity[]; role: Role }> {
+    const role = await this.roleRepository.findOne({
+      where: { uuid: roleUuid },
+    });
     if (!role) throw new NotFoundException('Aucun rôle trouvé');
 
     const modules = await this.moduleRepository.find({
@@ -121,101 +131,102 @@ export class RoleService {
     return { modules, role };
   }
 
-  
-async findGlobalPermissions(roleUuid: string): Promise<{
-  role: Role;
-  modules: any[];
-  permissions: any[];
-}> {
-  const role = await this.roleRepository.findOne({ where: { uuid: roleUuid } });
-  if (!role) {
-    throw new NotFoundException('Aucun rôle trouvé');
-  }
-
-  const modules = await this.moduleRepository.find({
-    relations: ['permissions'],
-    order: { name: 'ASC' },
-  });
-
-  
-  const modulesWithPermissions: any[] = [];
-  const allPermissions: any[] = [];
-
-  for (const module of modules) {
-    const permissionsWithStatus: any[] = [];
-
-    for (const permission of module.permissions) {
-      const rolePerm = await this.rolePermissionRepository.findOne({
-        where: {
-          role_uuid: role.uuid,
-          permission_uuid: permission.uuid,
-        },
-      });
-
-      const permissionWithStatus = {
-        ...permission,
-        role_permission_uuid: rolePerm ? rolePerm.uuid : null,
-        status: rolePerm ? rolePerm.status : false,
-        module_uuid: module.uuid,
-        module_name: module.name,
-      };
-
-      permissionsWithStatus.push(permissionWithStatus); 
-      allPermissions.push(permissionWithStatus); 
+  async findGlobalPermissions(roleUuid: string): Promise<{
+    role: Role;
+    modules: any[];
+    permissions: any[];
+  }> {
+    const role = await this.roleRepository.findOne({
+      where: { uuid: roleUuid },
+    });
+    if (!role) {
+      throw new NotFoundException('Aucun rôle trouvé');
     }
 
-    modulesWithPermissions.push({
-      uuid: module.uuid,
-      name: module.name,
-      permissions: permissionsWithStatus,
+    const modules = await this.moduleRepository.find({
+      relations: ['permissions'],
+      order: { name: 'ASC' },
     });
+
+    const modulesWithPermissions: any[] = [];
+    const allPermissions: any[] = [];
+
+    for (const module of modules) {
+      const permissionsWithStatus: any[] = [];
+
+      for (const permission of module.permissions) {
+        const rolePerm = await this.rolePermissionRepository.findOne({
+          where: {
+            role_uuid: role.uuid,
+            permission_uuid: permission.uuid,
+          },
+        });
+
+        const permissionWithStatus = {
+          ...permission,
+          role_permission_uuid: rolePerm ? rolePerm.uuid : null,
+          status: rolePerm ? rolePerm.status : false,
+          module_uuid: module.uuid,
+          module_name: module.name,
+        };
+
+        permissionsWithStatus.push(permissionWithStatus);
+        allPermissions.push(permissionWithStatus);
+      }
+
+      modulesWithPermissions.push({
+        uuid: module.uuid,
+        name: module.name,
+        permissions: permissionsWithStatus,
+      });
+    }
+
+    return {
+      role,
+      modules: modulesWithPermissions,
+      permissions: allPermissions,
+    };
   }
 
-  return {
-    role,
-    modules: modulesWithPermissions,
-    permissions: allPermissions,
-  };
-}
-
-
-
   async togglePermission(rolePermissionUuid: string): Promise<void> {
-    const rolePerm = await this.rolePermissionRepository.findOne({ where: { uuid: rolePermissionUuid } });
+    const rolePerm = await this.rolePermissionRepository.findOne({
+      where: { uuid: rolePermissionUuid },
+    });
     if (!rolePerm) throw new NotFoundException('Aucun élément trouvé');
 
     rolePerm.status = !rolePerm.status;
     await this.rolePermissionRepository.save(rolePerm);
   }
-async generateRolePermissions(roleUuid: string): Promise<void> {
-  // Récupère le rôle pour obtenir son ID numérique
-  const role = await this.roleRepository.findOne({ where: { uuid: roleUuid } });
-  if (!role) throw new NotFoundException('Rôle non trouvé');
+  async generateRolePermissions(roleUuid: string): Promise<void> {
+    // Récupère le rôle pour obtenir son ID numérique
+    const role = await this.roleRepository.findOne({
+      where: { uuid: roleUuid },
+    });
+    if (!role) throw new NotFoundException('Rôle non trouvé');
 
-  const permissions = await this.permissionRepository.find();
+    const permissions = await this.permissionRepository.find();
 
-  await Promise.all(
-    permissions.map(async (permission) => {
-      // Vérifie si la relation existe déjà en utilisant les IDs numériques
-      const exists = await this.rolePermissionRepository.findOne({
-        where: { role_id: role.id, permission_id: permission.id },
-      });
-
-      if (!exists) {
-        // Crée la relation avec role_id, permission_id et conserve les UUID
-        const rolePermission = this.rolePermissionRepository.create({
-          role_id: role.id,
-          permission_id: permission.id,
-          role_uuid: role.uuid,
-          permission_uuid: permission.uuid,
-          status: false,
-          uuid: uuidv4(), // UUID logique pour API
+    await Promise.all(
+      permissions.map(async (permission) => {
+        // Vérifie si la relation existe déjà en utilisant les IDs numériques
+        const exists = await this.rolePermissionRepository.findOne({
+          where: { role_id: role.id, permission_id: permission.id },
         });
 
-        await this.rolePermissionRepository.save(rolePermission);
-      }
-    }),
-  );
-}
+        if (!exists) {
+          // Crée la relation avec role_id, permission_id et conserve les UUID
+          const rolePermission = this.rolePermissionRepository.create({
+            role_id: role.id,
+            permission_id: permission.id,
+            role_uuid: role.uuid,
+            permission_uuid: permission.uuid,
+            status: false,
+            uuid: uuidv4(), // UUID logique pour API
+          });
 
+          await this.rolePermissionRepository.save(rolePermission);
+        }
+      }),
+    );
+  }
 }
