@@ -1,7 +1,7 @@
-import { IsNotEmpty, IsOptional, IsString, MaxLength, IsEnum } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-export class CreateResponsabilityDto {
+export class CreateResponsibilityDto {
   @ApiProperty({
     description: 'libellé',
     example: '',
@@ -13,7 +13,7 @@ export class CreateResponsabilityDto {
 
   @ApiPropertyOptional({
     description: 'Statut',
-     example: 'enable',
+    example: 'enable',
   })
   @IsString()
   @IsOptional()

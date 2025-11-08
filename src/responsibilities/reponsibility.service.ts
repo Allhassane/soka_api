@@ -1,15 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { MemberEntity } from './entities/member.entity';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
+import { ResponsibilityEntity } from './entities/responsibility.entity';
 
 @Injectable()
-export class MemberService {
+export class ResponsibilityService {
   constructor(
-    @InjectRepository(MemberEntity)
-    private readonly formationRepo: Repository<MemberEntity>,
+    @InjectRepository(ResponsibilityEntity)
+    private readonly responsibilityRepo: Repository<ResponsibilityEntity>,
     private readonly logService: LogActivitiesService,
 
     @InjectRepository(User)
@@ -17,7 +17,7 @@ export class MemberService {
   ) {}
 
   async findAll(admin_uuid: string) {
-    const formation = await this.formationRepo.find({
+    const responsibility = await this.responsibilityRepo.find({
       order: { name: 'DESC' },
     });
 
@@ -28,12 +28,12 @@ export class MemberService {
     }
 
     await this.logService.logAction(
-      'formations-findAll',
+      'responsabilities-findAll',
       admin.id,
-      'recupération de la liste de tous les formations',
+      'recupération de la liste de toutes les responsabilités !',
     );
 
-    return formation;
+    return responsibility;
   }
 
   async store(payload: any, admin_uuid) {
@@ -41,7 +41,7 @@ export class MemberService {
       throw new NotFoundException('Veuillez renseigner tous les champs');
     }
 
-    const newDivision = this.formationRepo.create({
+    const newJob = this.responsibilityRepo.create({
       name: payload.name,
       admin_uuid: admin_uuid ?? null,
     });
@@ -53,21 +53,23 @@ export class MemberService {
     }
 
     await this.logService.logAction(
-      'formations-store',
+      'responsibilities-store',
       admin.id,
-      'Enregistrer une division',
+      'Enregistrer une responsabilité',
     );
 
-    const saved = await this.formationRepo.save(newDivision);
+    const saved = await this.responsibilityRepo.save(newJob);
 
     return saved;
   }
 
   async findOne(uuid: string, admin_uuid) {
-    const formation = await this.formationRepo.findOne({ where: { uuid } });
+    const responsibility = await this.responsibilityRepo.findOne({
+      where: { uuid },
+    });
 
-    if (!formation) {
-      throw new NotFoundException('Aucune division trouvé');
+    if (!responsibility) {
+      throw new NotFoundException('Aucune responsabilité trouvé');
     }
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
 
@@ -76,12 +78,12 @@ export class MemberService {
     }
 
     await this.logService.logAction(
-      'formations-findOne',
+      'responsabilities-findOne',
       admin.id,
-      'Recupérer un division',
+      'Recupérer une responsabilité',
     );
 
-    return formation;
+    return responsibility;
   }
 
   async update(uuid: string, payload: any, admin_uuid: string) {
@@ -97,24 +99,28 @@ export class MemberService {
       throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
-    const existing = await this.formationRepo.findOne({ where: { uuid } });
+    const existing = await this.responsibilityRepo.findOne({ where: { uuid } });
     if (!existing) {
       throw new NotFoundException('Aucune correspondance retrouvée !');
     }
 
     existing.name = name;
 
-    const updated = await this.formationRepo.save(existing);
+    const updated = await this.responsibilityRepo.save(existing);
 
-    await this.logService.logAction('fortmations-update', admin.id, updated);
+    await this.logService.logAction(
+      'responsabilities-update',
+      admin.id,
+      updated,
+    );
 
     return updated;
   }
 
   async delete(uuid: string, admin_uuid: string) {
-    const formation = await this.formationRepo.findOne({ where: { uuid } });
+    const city = await this.responsibilityRepo.findOne({ where: { uuid } });
 
-    if (!formation) {
+    if (!city) {
       throw new NotFoundException('Aucun élément trouvé');
     }
 
@@ -125,14 +131,14 @@ export class MemberService {
     }
 
     await this.logService.logAction(
-      'civilities-delete',
+      'responsabilities-delete',
       admin.id,
-      'Suppression de la civilité ' +
-        formation.name +
+      'Suppression de la responsabilité ' +
+        city.name +
         ' pour uuid' +
-        formation.uuid,
+        city.uuid,
     );
 
-    return await this.formationRepo.softRemove(formation);
+    return await this.responsibilityRepo.softRemove(city);
   }
 }

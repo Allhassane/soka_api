@@ -1,5 +1,11 @@
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
-import { Entity, PrimaryGeneratedColumn, Column, BeforeInsert, BeforeUpdate} from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  BeforeInsert,
+  BeforeUpdate,
+} from 'typeorm';
 
 function slugify(s: string) {
   return s
@@ -10,8 +16,8 @@ function slugify(s: string) {
     .replace(/(^-|-$)+/g, '');
 }
 
-@Entity({ name: 'responsabilities' })
-export class ResponsabilityEntity extends DateTimeEntity {
+@Entity({ name: 'responsibilities' })
+export class ResponsibilityEntity extends DateTimeEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
@@ -35,5 +41,4 @@ export class ResponsabilityEntity extends DateTimeEntity {
   generateSlug() {
     if (this.name) this.slug = slugify(this.name);
   }
-
 }
