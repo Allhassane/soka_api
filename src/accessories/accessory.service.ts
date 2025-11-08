@@ -6,7 +6,7 @@ import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
 
 @Injectable()
-export class accessoryService {
+export class AccessoryService {
   constructor(
     @InjectRepository(AccessoryEntity)
     private readonly accessoryRepo: Repository<AccessoryEntity>,

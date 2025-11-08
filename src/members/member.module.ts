@@ -10,15 +10,23 @@ import { ResponsibilityModule } from 'src/responsibilities/reponsibility.module'
 import { MemberResponsibilityModule } from 'src/⁠member-responsibility/⁠member-responsibility.module';
 import { CivilityEntity } from 'src/civilities/entities/civility.entity';
 import { CivilityModule } from 'src/civilities/civility.module';
+import { AccessoryModule } from 'src/accessories/accessory.module';
+import { MemberResponsibilityEntity } from 'src/⁠member-responsibility/entities/member-responsibility.entity';
+import { MemberAccessoryEntity } from 'src/member-accessories/entities/member-accessories.entity';
+import { MemberAccessoryModule } from 'src/member-accessories/member-accessories.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([MemberEntity, User,CivilityEntity]),
+    TypeOrmModule.forFeature([MemberEntity, User,CivilityEntity,MemberResponsibilityEntity,MemberAccessoryEntity]),
     LogActivitiesModule,
     UserModule,
     ResponsibilityModule,
     CivilityModule,
+    ResponsibilityModule, 
+    AccessoryModule,
+    MemberAccessoryModule,
     forwardRef(() => MemberResponsibilityModule),
+
   ],
   controllers: [MemberController],
   providers: [MemberService],

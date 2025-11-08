@@ -160,8 +160,14 @@ export class CreateMemberDto {
   @ApiPropertyOptional({ description: 'UUID de la responsabilité du membre' })
   @IsOptional()
   @IsUUID()
-  member_responsibility_uuid?: string;
+  responsibility_uuid?: string;
 
+  
+  @ApiPropertyOptional({ description: 'Liste des UUIDs des accessoires du membre', type: [String] })
+  @IsOptional()
+  @IsUUID('all', { each: true })
+  accessories?: string[];
+    
   @ApiPropertyOptional({ description: 'Possède un Gohonzon' })
   @IsOptional()
   @IsBoolean()
