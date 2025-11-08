@@ -208,9 +208,6 @@ export class CreateMemberDto {
   @IsUUID()
   structure_uuid?: string;
 
-  @ApiProperty({ description: "UUID de l'administrateur ayant créé le membre" })
-  @IsUUID()
-  admin_uuid: string;
 
   @ApiPropertyOptional({ description: 'Statut du membre', default: 'enable' })
   @IsOptional()
