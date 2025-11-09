@@ -113,9 +113,6 @@ export class MemberEntity extends DateTimeEntity {
   @Column({ type: 'uuid', nullable: true })
   division_uuid: string;
 
-  @Column({ type: 'uuid', nullable: true })
-  member_responsibility_uuid: string;
-
   @Column({ type: 'boolean', default: false })
   has_gohonzon: boolean;
 
