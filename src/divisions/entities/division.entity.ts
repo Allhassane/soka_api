@@ -42,7 +42,7 @@ export class DivisionEntity extends DateTimeEntity {
   description?: string;
 
   /** Identifiant UUID du département parent */
-  @Column({ type: 'uuid', nullable: true })
+  @Column({  type: 'char', length: 36, nullable: true })
   department_uuid?: string;
 
   /** Identifiant numérique du département parent */
