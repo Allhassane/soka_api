@@ -26,5 +26,5 @@ export class UpdateDepartmentDto {
   })
   @IsString()
   @IsOptional()
-  statut?: 'enable';
+  status?: 'enable';
 }

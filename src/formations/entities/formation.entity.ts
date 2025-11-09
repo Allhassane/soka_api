@@ -28,7 +28,7 @@ export class FormationEntity extends DateTimeEntity {
   admin_uuid: string;
 
   @Column({ type: 'varchar', length: 36, default: 'enable' })
-  statut: string;
+  status: string;
 
   @BeforeInsert()
   @BeforeUpdate()
