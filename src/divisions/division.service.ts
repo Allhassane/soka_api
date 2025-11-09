@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DivisionEntity } from './entities/division.entity';
@@ -41,38 +41,40 @@ export class DivisionService {
     return division;
   }
 
-  async store(payload: any, admin_uuid) {
-    if (!payload?.name) {
-      throw new NotFoundException('Veuillez renseigner tous les champs');
+  async store(payload: any, admin_uuid: string) {
+    if (!payload?.name || !payload?.department_uuid) {
+      throw new BadRequestException('Veuillez renseigner tous les champs requis.');
+    }
+
+    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+    if (!admin) {
+      throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
     const department = await this.departmentRepo.findOne({
       where: { uuid: payload.department_uuid },
     });
-
     if (!department) {
-      throw new NotFoundException('Identifiant du département introuvable');
+      throw new NotFoundException('Département introuvable.');
     }
 
     const newDivision = this.divisionRepo.create({
-      department_uuid: payload.department_uuid,
       name: payload.name,
-      admin_uuid: admin_uuid ?? null,
+      description: payload.description ?? null,
+      department_uuid: department.uuid,
+      department_id: department.id,
+      admin_uuid,
+      status: 'enable',
     });
 
-    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+    const saved = await this.divisionRepo.save(newDivision);
 
-    if (!admin) {
-      throw new NotFoundException("Identifiant de l'auteur introuvable");
-    }
-
+    // Journalisation de l’action
     await this.logService.logAction(
       'division-store',
       admin.id,
-      'Enregistrer une division',
+      `Création de la division "${saved.name}" rattachée au département "${department.name}"`,
     );
-
-    const saved = await this.divisionRepo.save(newDivision);
 
     return saved;
   }
@@ -120,7 +122,8 @@ export class DivisionService {
       throw new NotFoundException('Aucune correspondance retrouvée !');
     }
 
-    existing.department_uuid = department_uuid;
+    existing.department_uuid = department.uuid;
+    existing.department_id = department.id;
     existing.name = name;
 
     const updated = await this.divisionRepo.save(existing);

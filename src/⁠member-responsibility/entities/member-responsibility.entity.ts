@@ -19,9 +19,6 @@ export class MemberResponsibilityEntity extends DateTimeEntity {
   @Column({ type: 'char', length: 36, unique: true, default: () => '(UUID())' })
   uuid: string;
 
-  @Column({ nullable: false })
-  name: string;
-
   @Column({ type: 'varchar', length: 36, nullable: true })
   @IsOptional()
   member_uuid?: string;
