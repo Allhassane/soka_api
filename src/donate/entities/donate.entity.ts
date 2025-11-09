@@ -11,25 +11,28 @@ export class DonateEntity extends DateTimeEntity {
   @Column({ type: 'char', length: 36, unique: true, default: () => '(UUID())' })
   uuid: string;
 
-  @Column({ nullable: false })
+  @Column({ nullable: false, length: 191 })
   name: string;
 
-  @Column({ nullable: false })
+  @Column({ nullable: false, length: 191 })
   structure_uuid: string;
 
-  @Column({ nullable: false })
+  @Column({ nullable: false, type: 'date' })
   starts_at: Date;
 
-  @Column({ nullable: false })
+  @Column({ nullable: false, type: 'date' })
   stops_at: Date;
 
   @Column({ nullable: false, type: 'enum', enum: DonateCategory })
   category: string;
 
-  @Column({ nullable: true, type: 'longtext' })
+  @Column({ nullable: true, default: 0, type: 'double' })
+  amount: number;
+
+  @Column({ nullable: true, type: 'text' })
   history: string;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true, length: 191 })
   admin_uuid: string;
 
   @Column({
