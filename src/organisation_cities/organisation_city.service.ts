@@ -1,15 +1,15 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { AccessoryEntity } from './entities/accessory.entity';
+import { OrganisationCityEntity } from './entities/organisation_city.entity';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
 
 @Injectable()
-export class AccessoryService {
+export class OrganisationCityService {
   constructor(
-    @InjectRepository(AccessoryEntity)
-    private readonly accessoryRepo: Repository<AccessoryEntity>,
+    @InjectRepository(OrganisationCityEntity)
+    private readonly organisationCityRepo: Repository<OrganisationCityEntity>,
     private readonly logService: LogActivitiesService,
     
     @InjectRepository(User)
@@ -17,7 +17,7 @@ export class AccessoryService {
   ) {}
 
   async findAll(admin_uuid: string) {
-    const accessory = await this.accessoryRepo.find({
+    const city = await this.organisationCityRepo.find({
       order: { name: 'DESC' },
     });
 
@@ -28,12 +28,12 @@ export class AccessoryService {
     }
 
     await this.logService.logAction(
-      'accessories-findAll',
+      'organisation-cities-findAll',
       admin.id,
-      'recupération de la liste de tous les accessoires !'
+      'recupération de la liste de tous les villes'
     );
 
-    return accessory;
+    return city;
   }
 
   async store(payload: any,admin_uuid) {
@@ -41,7 +41,7 @@ export class AccessoryService {
         throw new NotFoundException('Veuillez renseigner tous les champs');
     }
 
-    const newJob = this.accessoryRepo.create({
+    const newCity = this.organisationCityRepo.create({
       name: payload.name,
       admin_uuid: admin_uuid ?? null,
     });
@@ -53,21 +53,21 @@ export class AccessoryService {
     }
 
     await this.logService.logAction(
-      'accessories-store',
+      'organisation-cities-store',
       admin.id,
-      'Enregistrer une division'
+      'Enregistrer une ville'
     );
 
-    const saved = await this.accessoryRepo.save(newJob);
+    const saved = await this.organisationCityRepo.save(newCity);
 
     return saved;
   }
 
   async findOne(uuid: string,admin_uuid) {
-    const accessory = await this.accessoryRepo.findOne({ where: { uuid } });
+    const city = await this.organisationCityRepo.findOne({ where: { uuid } });
 
-    if (!accessory) {
-        throw new NotFoundException('Aucun accessoire trouvé');
+    if (!city) {
+        throw new NotFoundException('Aucune division trouvé');
     }
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
     
@@ -76,16 +76,16 @@ export class AccessoryService {
     }
 
     await this.logService.logAction(
-      'accessories-findOne',
+      'organisation-cities-findOne',
       admin.id,
-      'Recupérer un division'
+      'Recupérer un ville'
     );
 
-    return accessory;
+    return city;
   }
 
   async update(uuid: string,payload: any,admin_uuid: string) {
-    const { name } = payload;
+    const { name, gender } = payload;
 
     if (!uuid || !name || !admin_uuid) {
         throw new NotFoundException('Veuillez renseigner tous les champs');
@@ -99,17 +99,17 @@ export class AccessoryService {
 
  
 
-    const existing = await this.accessoryRepo.findOne({ where: { uuid } });
+    const existing = await this.organisationCityRepo.findOne({ where: { uuid } });
     if (!existing) {
         throw new NotFoundException('Aucune correspondance retrouvée !');
     }
 
     existing.name = name;
 
-    const updated = await this.accessoryRepo.save(existing);
+    const updated = await this.organisationCityRepo.save(existing);
 
     await this.logService.logAction(
-      'accessories-update',
+      'organisation-cities-update',
       admin.id,
       updated
     );
@@ -118,9 +118,9 @@ export class AccessoryService {
   }
 
   async delete(uuid: string,admin_uuid:string) {
-    const job = await this.accessoryRepo.findOne({ where: { uuid } });
+    const city = await this.organisationCityRepo.findOne({ where: { uuid } });
 
-    if (!job) {
+    if (!city) {
         throw new NotFoundException('Aucun élément trouvé');
     }
 
@@ -131,12 +131,12 @@ export class AccessoryService {
     }
 
     await this.logService.logAction(
-      'accessories-delete',
+      'civilities-delete',
       admin.id,
-      "Suppression de l'accessoire "+job.name+" pour uuid"+job.uuid,
+      "Suppression de la civilité "+city.name+" pour uuid"+city.uuid,
     );
 
-   return await this.accessoryRepo.softRemove(job);
+   return await this.organisationCityRepo.softRemove(city);
 
   }
 }

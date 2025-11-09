@@ -5,7 +5,7 @@ import { Transform } from 'class-transformer';
 export class LoginDto {
   @ApiProperty({
     description: "Numéro de téléphone de l'utilisateur",
-    example: '0712345678',
+    example: '0700000000',
   })
   @IsString()
   @IsNotEmpty()

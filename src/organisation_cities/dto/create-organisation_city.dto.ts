@@ -1,7 +1,7 @@
 import { IsNotEmpty, IsOptional, IsString, MaxLength, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-export class CreateJobDto {
+export class CreateOrganisationCityDto {
   @ApiProperty({
     description: 'libellé',
     example: 'Monsieur',

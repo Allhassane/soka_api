@@ -1,21 +1,16 @@
-import { IsOptional, IsString, MaxLength, IsEnum } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { PartialType, ApiPropertyOptional } from '@nestjs/swagger';
+import { CreateMemberDto } from './create-member.dto';
+import { IsUUID, IsOptional } from 'class-validator';
 
-export class UpdateMemberDto {
+/**
+ * DTO de mise à jour d'un membre existant.
+ * Étend le CreateMemberDto mais rend tous les champs optionnels.
+ */
+export class UpdateMemberDto extends PartialType(CreateMemberDto) {
   @ApiPropertyOptional({
-    description: 'Libellé ',
-    example: 'Madame',
+    description: "UUID du membre à mettre à jour (utile pour les validations internes)",
   })
-  @IsString()
   @IsOptional()
-  @MaxLength(150)
-  name?: string;
-
-  @ApiPropertyOptional({
-    description: 'Statut',
-     example: 'enable',
-  })
-  @IsString()
-  @IsOptional()
-  statut?: 'enable';
+  @IsUUID()
+  uuid?: string;
 }

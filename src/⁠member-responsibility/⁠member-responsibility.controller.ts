@@ -34,11 +34,11 @@ export class MemberResponsibilityController {
   })
   public create(
     @Body() createMemberResponsibilityDto: CreateMemberResponsibilityDto,
-    @Request() req: any,
+    @Request() req,
   ) {
     return this.service.create(
       createMemberResponsibilityDto,
-      req.user.admin_uuid as string,
+      req.user.uuid,
     );
   }
 }

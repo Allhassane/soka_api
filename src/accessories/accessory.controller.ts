@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
-import { accessoryService } from './accessory.service';
+import { AccessoryService } from './accessory.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateAccessoryDto } from './dto/create-accessory.dto';
 import { UpdateAccessoryDto } from './dto/update-accessory.dto';
@@ -10,7 +10,7 @@ import { UpdateAccessoryDto } from './dto/update-accessory.dto';
 @Controller('accessoires')
 @UseGuards(JwtAuthGuard)
 export class AccessoryController {
-  constructor(private readonly accessoryService: accessoryService) {}
+  constructor(private readonly accessoryService: AccessoryService) {}
 
   @Get()
   @ApiOperation({ summary: 'Liste toutes les métiers ' })
