@@ -26,10 +26,9 @@ import { UserRoleModule } from './user-roles/user-roles.module';
 import { AccessoryModule } from './accessories/accessory.module';
 import { MemberAccessoryModule } from './member-accessories/member-accessories.module';
 import { MemberModule } from './members/member.module';
-
-
 //import { PermissionsModule } from './permissions/permission.module';
 import { OrganisationCitiesModule } from './organisation_cities/organisation_cities.module';
+import { DonatesModule } from './donates/donates.module';
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
@@ -72,9 +71,9 @@ import { OrganisationCitiesModule } from './organisation_cities/organisation_cit
     LogActivitiesModule,
     ModuleModule,
     PermissionModule,
-    RolePermissionModule,    
+    RolePermissionModule,
     //PermissionsModule,
-    RolePermissionModule,  
+    RolePermissionModule,
     CommitteeModule,
     DepartmentModule,
     DivisionModule,
@@ -86,6 +85,7 @@ import { OrganisationCitiesModule } from './organisation_cities/organisation_cit
     MemberAccessoryModule,
     MemberModule,
     OrganisationCitiesModule,
+    DonatesModule,
   ],
   controllers: [AppController, RolePermissionController],
   providers: [AppService, RolePermissionService],
