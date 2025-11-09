@@ -33,6 +33,7 @@ import { MaritalStatusModule } from './marital-status/marital-status.module';
 import { ResponsibilityModule } from './responsibilities/reponsibility.module';
 
 //import { PermissionsModule } from './permissions/permission.module';
+import { DonateModule } from './donate/donate.module';
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
@@ -92,6 +93,7 @@ import { ResponsibilityModule } from './responsibilities/reponsibility.module';
     CountryModule,
     MaritalStatusModule,
     ResponsibilityModule,
+    DonateModule,
   ],
   controllers: [AppController, RolePermissionController],
   providers: [AppService, RolePermissionService],
