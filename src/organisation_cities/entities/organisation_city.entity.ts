@@ -10,7 +10,7 @@ function slugify(s: string) {
     .replace(/(^-|-$)+/g, '');
 }
 
-@Entity({ name: 'organisation_civilities' })
+@Entity({ name: 'organisation_cities' })
 export class OrganisationCityEntity extends DateTimeEntity {
   @PrimaryGeneratedColumn()
   id: number;
