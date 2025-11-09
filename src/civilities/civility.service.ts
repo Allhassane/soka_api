@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CivilityEntity } from './entities/civility.entity';
@@ -11,7 +15,7 @@ export class CivilityService {
     @InjectRepository(CivilityEntity)
     private readonly civilitiesRepo: Repository<CivilityEntity>,
     private readonly logService: LogActivitiesService,
-    
+
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
   ) {}
@@ -22,43 +26,43 @@ export class CivilityService {
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
-        throw new NotFoundException("Identifiant de l'auteur introuvable");
+      throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
     await this.logService.logAction(
       'civilities-findAll',
       admin.id,
-      'recupération de la liste de tous les divisions'
+      'recupération de la liste de tous les divisions',
     );
 
     return civility;
   }
 
-  async store(payload: any,admin_uuid) {
+  async store(payload: any, admin_uuid) {
     if (!payload?.name) {
-        throw new NotFoundException('Veuillez renseigner tous les champs');
+      throw new NotFoundException('Veuillez renseigner tous les champs');
     }
 
     const newCivility = this.civilitiesRepo.create({
       name: payload.name,
       sigle: payload.sigle,
       gender: payload.gender,
-      description:payload.description,
+      description: payload.description,
       admin_uuid: admin_uuid ?? null,
     });
-    
+
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
-        throw new NotFoundException("Identifiant de l'auteur introuvable");
+      throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
     await this.logService.logAction(
       'civilities-store',
       admin.id,
-      'Enregistrer une civilité'
+      'Enregistrer une civilité',
     );
 
     const saved = await this.civilitiesRepo.save(newCivility);
@@ -66,45 +70,43 @@ export class CivilityService {
     return saved;
   }
 
-  async findOne(uuid: string,admin_uuid) {
+  async findOne(uuid: string, admin_uuid) {
     const civility = await this.civilitiesRepo.findOne({ where: { uuid } });
 
     if (!civility) {
-        throw new NotFoundException('Aucune division trouvé');
+      throw new NotFoundException('Aucune division trouvé');
     }
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
-        throw new NotFoundException("Identifiant de l'auteur introuvable");
+      throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
     await this.logService.logAction(
       'civilities-findOne',
       admin.id,
-      'Recupérer un division'
+      'Recupérer un division',
     );
 
     return civility;
   }
 
-  async update(uuid: string,payload: any,admin_uuid: string) {
+  async update(uuid: string, payload: any, admin_uuid: string) {
     const { name, gender } = payload;
 
     if (!uuid || !name || !admin_uuid) {
-        throw new NotFoundException('Veuillez renseigner tous les champs');
+      throw new NotFoundException('Veuillez renseigner tous les champs');
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
-    if (!admin) {
-        throw new NotFoundException("Identifiant de l'auteur introuvable");
-    }
 
- 
+    if (!admin) {
+      throw new NotFoundException("Identifiant de l'auteur introuvable");
+    }
 
     const existing = await this.civilitiesRepo.findOne({ where: { uuid } });
     if (!existing) {
-        throw new NotFoundException('Aucune correspondance retrouvée !');
+      throw new NotFoundException('Aucune correspondance retrouvée !');
     }
 
     existing.name = name;
@@ -112,35 +114,33 @@ export class CivilityService {
 
     const updated = await this.civilitiesRepo.save(existing);
 
-    await this.logService.logAction(
-      'civilities-update',
-      admin.id,
-      updated
-    );
+    await this.logService.logAction('civilities-update', admin.id, updated);
 
     return updated;
   }
 
-  async delete(uuid: string,admin_uuid:string) {
+  async delete(uuid: string, admin_uuid: string) {
     const civility = await this.civilitiesRepo.findOne({ where: { uuid } });
 
     if (!civility) {
-        throw new NotFoundException('Aucun élément trouvé');
+      throw new NotFoundException('Aucun élément trouvé');
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
-        throw new NotFoundException("Identifiant de l'auteur introuvable");
+      throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
     await this.logService.logAction(
       'civilities-delete',
       admin.id,
-      "Suppression de la civilité "+civility.name+" pour uuid"+civility.uuid,
+      'Suppression de la civilité ' +
+        civility.name +
+        ' pour uuid' +
+        civility.uuid,
     );
 
-   return await this.civilitiesRepo.softRemove(civility);
-
+    return await this.civilitiesRepo.softRemove(civility);
   }
 }

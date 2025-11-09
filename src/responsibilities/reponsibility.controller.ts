@@ -14,6 +14,7 @@ import {
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
+  ApiParam,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateResponsibilityDto } from './dto/create-responsibility.dto';
@@ -50,6 +51,34 @@ export class ResponsibilityController {
   findOne(@Param('uuid') uuid: string, @Request() req) {
     const admin_uuid = req.user.uuid as string;
     return this.responsibilityService.findOne(uuid, admin_uuid);
+  }
+
+  @Get('find-by-level/:uuid')
+  @ApiOperation({ summary: 'Récupérer une reponsabilité par uuid du niveau' })
+  @ApiResponse({ status: 200, description: 'reponsabilité trouvé.' })
+  @ApiResponse({ status: 400, description: 'reponsabilité non trouvé.' })
+  findByLevel(@Param('uuid') uuid: string, @Request() req) {
+    const admin_uuid = req.user.uuid as string;
+    return this.responsibilityService.findByLevel(uuid, admin_uuid);
+  }
+
+  @Get('find-by/:level_uuid/gender/:gender')
+  @ApiOperation({ summary: 'Récupérer une reponsabilité par uuid du niveau' })
+  @ApiResponse({ status: 200, description: 'reponsabilité trouvé.' })
+  @ApiResponse({ status: 400, description: 'reponsabilité non trouvé.' })
+  @ApiParam({ name: 'level_uuid', required: true })
+  @ApiParam({ name: 'gender', required: true, enum: ['homme', 'femme'] })
+  findByLevelAndCivility(
+    @Param('level_uuid') level_uuid: string,
+    @Param('gender') gender: string,
+    @Request() req,
+  ) {
+    const admin_uuid = req.user.uuid as string;
+    return this.responsibilityService.findByLevelAndCivility(
+      level_uuid,
+      gender,
+      admin_uuid,
+    );
   }
 
   @Put(':uuid')

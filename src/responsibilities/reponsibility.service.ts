@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
 import { ResponsibilityEntity } from './entities/responsibility.entity';
@@ -93,6 +93,31 @@ export class ResponsibilityService {
       admin.id,
       'Recupérer une responsabilité',
     );
+
+    return responsibility;
+  }
+
+  async findByLevel(uuid: string, admin_uuid) {
+    //await this.levelRepo.findOne(uuid);
+
+    const responsibility = await this.responsibilityRepo.find({
+      where: { level_uuid: uuid },
+    });
+
+    return responsibility;
+  }
+
+  async findByLevelAndCivility(level_uuid: string, gender: string, admin_uuid) {
+    let genders: string[] = [];
+    genders.push(gender);
+    genders.push('mixte');
+
+    const responsibility = await this.responsibilityRepo.find({
+      where: {
+        level_uuid: level_uuid,
+        gender: In(genders),
+      },
+    });
 
     return responsibility;
   }
