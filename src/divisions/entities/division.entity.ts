@@ -55,7 +55,7 @@ export class DivisionEntity extends DateTimeEntity {
     eager: false,
   })
   @JoinColumn([
-    { name: 'department_uuid', referencedColumnName: 'uuid' },
+   // { name: 'department_uuid', referencedColumnName: 'uuid' },
     { name: 'department_id', referencedColumnName: 'id' },
   ])
   department?: DepartmentEntity;
