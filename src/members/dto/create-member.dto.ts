@@ -54,15 +54,10 @@ export class CreateMemberDto {
   @IsUUID()
   marital_status_uuid?: string;
 
-  @ApiPropertyOptional({ description: 'Prénom du conjoint' })
-  @IsOptional()
-  @IsString()
-  spouse_firstname?: string;
-
   @ApiPropertyOptional({ description: 'Nom du conjoint' })
   @IsOptional()
   @IsString()
-  spouse_lastname?: string;
+  spouse_name?: string;
 
   @ApiPropertyOptional({ description: 'Le conjoint est aussi membre ?' })
   @IsOptional()
@@ -117,12 +112,8 @@ export class CreateMemberDto {
   @ApiPropertyOptional({ description: 'Prénom du tuteur' })
   @IsOptional()
   @IsString()
-  tutor_firstname?: string;
+  tutor_name?: string;
 
-  @ApiPropertyOptional({ description: 'Nom du tuteur' })
-  @IsOptional()
-  @IsString()
-  tutor_lastname?: string;
 
   @ApiPropertyOptional({ description: 'Téléphone du tuteur' })
   @IsOptional()
