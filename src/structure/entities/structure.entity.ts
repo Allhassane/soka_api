@@ -27,7 +27,7 @@ export class StructureEntity extends DateTimeEntity {
 
   @ManyToOne(() => StructureEntity, (structure) => structure.parent, {
     nullable: true,
-    onDelete: 'SET NULL',
+    // onDelete: 'SET NULL',
   })
   @JoinColumn({ name: 'parent_id', referencedColumnName: 'id' })
   parent?: StructureEntity | null;
@@ -38,7 +38,7 @@ export class StructureEntity extends DateTimeEntity {
 
   @ManyToOne(() => LevelEntity, (level) => level.id, {
     nullable: true,
-    onDelete: 'SET NULL',
+    // onDelete: 'SET NULL',
   })
   @JoinColumn({ name: 'level_id', referencedColumnName: 'id' })
   level?: LevelEntity | null;

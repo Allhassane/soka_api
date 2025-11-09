@@ -6,6 +6,7 @@ import { StructureEntity } from './entities/structure.entity';
 import { LogActivitiesModule } from '../log-activities/log-activities.module';
 import { UserModule } from '../users/user.module';
 import { LevelModule } from 'src/level/level.module';
+import { StructureOldModule } from 'src/structure-old/structure-old.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { LevelModule } from 'src/level/level.module';
     LogActivitiesModule,
     UserModule,
     LevelModule,
+    StructureOldModule,
   ],
   controllers: [StructureController],
   providers: [StructureService],

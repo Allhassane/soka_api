@@ -10,6 +10,7 @@ import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { CreateStructureDto } from './dto/create-structure.dto';
 import { UpdateStructureDto } from './dto/update-structure.dto';
 import { LevelService } from 'src/level/level.service';
+import { StructureOldService } from 'src/structure-old/structure-old.service';
 
 @Injectable()
 export class StructureService {
@@ -18,6 +19,7 @@ export class StructureService {
     private readonly structureRepo: Repository<StructureEntity>,
     private readonly logService: LogActivitiesService,
     private readonly levelService: LevelService,
+    private readonly structureOldService: StructureOldService,
   ) {}
 
   async findAll() {
@@ -136,7 +138,9 @@ export class StructureService {
 
     let level;
     if (parent) {
-      level = await this.levelService.findNextLevelByParent(parent.uuid);
+      level = await this.levelService.findNextLevelByParent(
+        parent.level_uuid as string,
+      );
     }
 
     existing.level_uuid = level?.uuid;
@@ -145,6 +149,30 @@ export class StructureService {
     const updated = await this.structureRepo.save(existing);
 
     return updated;
+  }
+
+  async migrate(uuid: string, updateStructureDto: UpdateStructureDto) {
+    const existing = await this.findOne(uuid);
+
+    if (!updateStructureDto.name) {
+      throw new BadRequestException('Le nom de la structure est requis');
+    }
+
+    let parent: StructureEntity | null = null;
+    if (updateStructureDto.parent_uuid) {
+      parent = await this.findOne(updateStructureDto.parent_uuid);
+    }
+
+    const level = await this.levelService.findOne(
+      updateStructureDto.level_uuid as string,
+    );
+
+    existing.parent_uuid = updateStructureDto.parent_uuid;
+    existing.parent = parent ?? null;
+    existing.level_uuid = level?.uuid;
+    existing.level = level ?? null;
+
+    await this.structureRepo.save(existing);
   }
 
   async delete(uuid: string) {
@@ -163,6 +191,33 @@ export class StructureService {
     return {
       level,
       data,
+    };
+  }
+
+  async findByOrganisation(uuid: string) {
+    const currentStructure = await this.structureRepo.find({ where: { uuid } });
+
+    console.log(currentStructure);
+  }
+
+  // Hypothèses : TypeORM + relations parent/level sur l'entité Structure
+  // this.findOne(uuid) -> récupère une Structure par uuid
+  // this.levelService.findOne(uuid) -> récupère un Level par uuid
+
+  async migration() {
+    const old_structures = await this.structureOldService.findAll();
+
+    old_structures.forEach(async (data) => {
+      const updateStructureDto: UpdateStructureDto = {
+        name: data.name,
+        parent_uuid: data.parent_id,
+        level_uuid: data.id_niveau,
+      };
+      await this.migrate(data.id, updateStructureDto);
+    });
+
+    return {
+      message: 'Migration terminée',
     };
   }
 }

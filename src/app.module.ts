@@ -35,6 +35,7 @@ import { OrganisationCityModule } from './organisation_cities/organisation_city.
 
 //import { PermissionsModule } from './permissions/permission.module';
 import { DonateModule } from './donate/donate.module';
+import { StructureOldModule } from './structure-old/structure-old.module';
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
@@ -96,6 +97,7 @@ import { DonateModule } from './donate/donate.module';
     ResponsibilityModule,
     DonateModule,
     OrganisationCityModule,
+    StructureOldModule,
   ],
   controllers: [AppController, RolePermissionController],
   providers: [AppService, RolePermissionService],

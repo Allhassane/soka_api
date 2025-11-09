@@ -66,6 +66,22 @@ export class StructureController {
     return this.structureService.create(createStructureDto);
   }
 
+  @Get('migration')
+  @ApiOperation({
+    summary: 'Migration des structures',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Migration effectuée avec succès',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Non autorisé - Authentification requise',
+  })
+  public migration() {
+    return this.structureService.migration();
+  }
+
   @Get(':uuid')
   @ApiOperation({
     summary: 'Recupérer une structure',
@@ -138,6 +154,22 @@ export class StructureController {
   })
   public findByLevel(@Param('level_uuid') level_uuid: string) {
     return this.structureService.findByLevel(level_uuid);
+  }
+
+  @Get('find-organisation/:uuid')
+  @ApiOperation({
+    summary: "Recupérer les structures d'une organisation",
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Structures récupérées avec succès',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Non autorisé - Authentification requise',
+  })
+  public findByOrganisation(@Param('uuid') uuid: string) {
+    return this.structureService.findByOrganisation(uuid);
   }
 
   @Put(':uuid')
