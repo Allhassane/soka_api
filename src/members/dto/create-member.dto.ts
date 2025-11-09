@@ -11,9 +11,6 @@ import {
 } from 'class-validator';
 
 export class CreateMemberDto {
-  @ApiProperty({ description: 'Nom complet du membre' })
-  @IsString()
-  name: string;
 
   @ApiPropertyOptional({ description: "URL ou chemin de la photo du membre" })
   @IsOptional()

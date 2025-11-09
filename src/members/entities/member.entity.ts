@@ -26,9 +26,6 @@ export class MemberEntity extends DateTimeEntity {
   @Column({ type: 'char', length: 36, unique: true, default: () => '(UUID())' })
   uuid: string;
 
-  @Column({ type: 'varchar', length: 191 })
-  name: string;
-
   @Column({ type: 'varchar', length: 255, nullable: true })
   picture: string;
 
