@@ -12,7 +12,7 @@ export class CreateDonateDto {
   name: string;
 
   @ApiProperty({
-    example: '01/01/2025',
+    example: '2025-01-01',
     required: true,
   })
   @IsNotEmpty()
@@ -20,7 +20,7 @@ export class CreateDonateDto {
   starts_at: Date;
 
   @ApiProperty({
-    example: '01/06/2025',
+    example: '2025-06-01',
     required: true,
   })
   @IsNotEmpty()
@@ -28,7 +28,7 @@ export class CreateDonateDto {
   stops_at: Date;
 
   @ApiProperty({
-    example: 'created',
+    example: 'fixed_amount/free_amount',
     required: true,
     enum: DonateCategory,
   })
