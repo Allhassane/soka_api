@@ -54,10 +54,7 @@ export class MemberEntity extends DateTimeEntity {
   marital_status_uuid: string;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
-  spouse_firstname: string;
-
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  spouse_lastname: string;
+  spouse_name: string;
 
   @Column({ type: 'boolean', default: false })
   spouse_member: boolean;
@@ -90,10 +87,7 @@ export class MemberEntity extends DateTimeEntity {
   email: string;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
-  tutor_firstname: string;
-
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  tutor_lastname: string;
+  tutor_name: string;
 
   @Column({ type: 'varchar', length: 30, nullable: true })
   tutor_phone: string;

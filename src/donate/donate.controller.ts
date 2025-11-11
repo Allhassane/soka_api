@@ -12,6 +12,7 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { DonateService } from './donate.service';
 import { CreateDonateDto } from './dto/create-donate.dto';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
+import { UpdateDonateDto } from './dto/update-donate.dto';
 
 @ApiTags('Don')
 @Controller('donate')
@@ -37,9 +38,22 @@ export class DonateController {
     const admin_uuid = req.user.uuid as string;
     return this.donateService.findOne(uuid, admin_uuid);
   }
+  
+   @Put(':uuid')
+   @ApiOperation({ summary: 'Modifier un don' })
+   @ApiResponse({ status: 200, description: 'Don modifié avec succès.' })
+   @ApiResponse({ status: 400, description: 'Champs invalides ou manquants.' })
+   update(
+   @Param('uuid') uuid: string,
+   @Request() req,
+   @Body() payload: UpdateDonateDto,
+      ) {
+      return this.donateService.update(uuid, payload,req.user.uuid);
+   }
+
 
   @Post()
-  @ApiOperation({ summary: 'Liste de toutes les dons' })
+  @ApiOperation({ summary: 'Ajouter un don' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   @ApiResponse({ status: 400, description: 'Liste non récupérée.' })
   create(@Body() createDonateDto: CreateDonateDto, @Request() req) {
