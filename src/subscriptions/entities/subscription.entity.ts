@@ -21,6 +21,9 @@ export class SubscriptionEntity extends DateTimeEntity {
 
   @Column()
   name: string;
+  
+  @Column({ nullable: true, default: 0, type: 'double' })
+  amount: number;
 
   @Column()
   year: number;
