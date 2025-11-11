@@ -11,12 +11,19 @@ export class CreateSubscriptionDto {
   @MaxLength(191)
   name: string;
 
-
+  @ApiProperty({
+    example: '1000',
+    required: true,
+  })
+  @IsNotEmpty()
+  @IsNumber()
+  amount: number;
+  
   @ApiProperty({
     description: "Année de l'abonnement",
     example: '2025',
   })
-  @IsDate()
+  @IsNumber()
   @IsNotEmpty({ message: "l'année de la campagne d'abonnement est requis" })
   year: number;
 
