@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDate, IsEnum, IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import {
+  IsDate,
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { DonateCategory } from 'src/shared/enums/donate.enum';
 
@@ -8,8 +15,8 @@ export class CreateDonateDto {
     example: 'Campagne de don pour la structure',
     required: true,
   })
-  @IsNotEmpty({ message: 'Le nom de la campagne est requis' })
   @IsString()
+  @IsNotEmpty({ message: 'Le nom de la campagne est requis' })
   name: string;
 
   @ApiProperty({
@@ -32,20 +39,22 @@ export class CreateDonateDto {
 
   @ApiProperty({
     example: 'fixed_amount',
-    required: true,
     enum: DonateCategory,
+    required: true,
     description: 'Type de campagne : montant fixe ou libre',
   })
-  @IsEnum(DonateCategory, { message: 'La catégorie doit être "fixed_amount" ou "free_amount"' })
+  @IsEnum(DonateCategory, {
+    message: 'La catégorie doit être "fixed_amount" ou "free_amount"'
+  })
   @IsNotEmpty({ message: 'La catégorie est requise' })
   category: DonateCategory;
 
   @ApiProperty({
     example: 1000,
-    required: true,
-    description: 'Montant du don (si catégorie = fixed_amount)',
+    required: false,
+    description: 'Montant du don (obligatoire si catégorie = fixed_amount)',
   })
   @IsNumber({}, { message: 'Le montant doit être un nombre' })
-  @IsNotEmpty({ message: 'Le montant est requis' })
-  amount: number;
+  @IsOptional()
+  amount?: number;
 }
