@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { DivisionEntity } from './entities/division.entity';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
@@ -100,8 +100,24 @@ export class DivisionService {
     return division;
   }
 
+    async findByDepartmentAndCivility(department_uuid: string, gender: string, admin_uuid) {
+      let genders: string[] = [];
+      genders.push(gender);
+      genders.push('mixte');
+  
+      const division = await this.divisionRepo.find({
+        where: {
+          department_uuid: department_uuid,
+          gender: In(genders),
+        },
+      });
+  
+      return division;
+    }
+  
+
   async update(uuid: string, payload: any, admin_uuid: string) {
-    const { name, department_uuid } = payload;
+    const { name, department_uuid, gender } = payload;
 
     if (!uuid || !name || !admin_uuid) {
       throw new NotFoundException('Veuillez renseigner tous les champs');
@@ -110,7 +126,7 @@ export class DivisionService {
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
 
     const department = await this.departmentRepo.findOne({
-      where: { uuid: admin_uuid },
+      where: { uuid: department_uuid },
     });
 
     if (!department) {
@@ -125,6 +141,7 @@ export class DivisionService {
     existing.department_uuid = department.uuid;
     existing.department_id = department.id;
     existing.name = name;
+    existing.gender = gender;
 
     const updated = await this.divisionRepo.save(existing);
 

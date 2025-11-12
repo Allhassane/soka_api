@@ -60,6 +60,9 @@ export class DivisionEntity extends DateTimeEntity {
   ])
   department?: DepartmentEntity;
 
+  @Column({ type: 'varchar', length: 10, default: 'mixte' })
+  gender: string;
+
   /** UUID de l'administrateur ayant créé la division */
   @Column({ type: 'uuid', nullable: false })
   admin_uuid: string;
