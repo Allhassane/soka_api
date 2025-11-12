@@ -7,9 +7,9 @@ export class UpdateDivisionDto {
     example: 'Département Homme',
   })
   @IsString()
-  @IsNotEmpty({ message: 'uuid du département est requise' })
+  @IsOptional()
   @MaxLength(150)
-  department_uuid: string;
+  department_uuid?: string;
 
   @ApiPropertyOptional({
     description: 'Nom de la division',
@@ -19,6 +19,14 @@ export class UpdateDivisionDto {
   @IsOptional()
   @MaxLength(150)
   name?: string;
+
+  @ApiPropertyOptional({
+    description: 'Genre',
+    example: 'homme',
+  })
+  @IsString()
+  @IsOptional({ message: 'le genre est requis' })
+  gender?: 'mixte' | 'homme' | 'femme';
 
   @ApiPropertyOptional({
     description: 'Description de la division',

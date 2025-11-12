@@ -21,6 +21,14 @@ export class CreateDivisionDto {
   name: string;
 
   @ApiPropertyOptional({
+    description: 'Genre',
+    example: 'homme',
+  })
+  @IsString()
+  @IsNotEmpty({ message: 'le genre est requis' })
+  gender: 'mixte' | 'homme' | 'femme';
+
+  @ApiPropertyOptional({
     description: 'Description de la division',
     example: 'Division pour gérer les activités !',
   })

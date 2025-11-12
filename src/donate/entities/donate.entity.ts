@@ -14,9 +14,6 @@ export class DonateEntity extends DateTimeEntity {
   @Column({ nullable: false, length: 191 })
   name: string;
 
-  @Column({ nullable: false, length: 191 })
-  structure_uuid: string;
-
   @Column({ nullable: false, type: 'date' })
   starts_at: Date;
 
