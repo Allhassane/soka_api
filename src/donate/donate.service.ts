@@ -56,37 +56,58 @@ export class DonateService {
   }
 
   async create(createDonateDto: CreateDonateDto, admin_uuid: string) {
+    // Vérification de l'admin
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+
     if (!admin) {
       throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
+    // Validation business
+    if (
+      createDonateDto.category === 'fixed_amount' &&
+      (createDonateDto.amount == null || createDonateDto.amount <= 0)
+    ) {
+      throw new NotFoundException(
+        "Le montant de don est obligatoire pour la catégorie à montant fixe"
+      );
+    }
+
+    // Historique
     const history = {
       action: "Création d'un don",
-      table_action: "donate-store",
+      table: "donates",
+      event: "donate-store",
       performed_by: `${admin.firstname} ${admin.lastname}`,
-      data: createDonateDto,
-      admin_uuid: admin_uuid,
+      admin_uuid,
+      payload: {
+        name: createDonateDto.name,
+        category: createDonateDto.category,
+        amount: createDonateDto.amount ?? null,
+        starts_at: createDonateDto.starts_at,
+        stops_at: createDonateDto.stops_at,
+      },
       performed_at: new Date(),
     };
 
-    const saved = this.donateRepo.save({
+    // Enregistrement
+    const saved = await this.donateRepo.save({
       ...createDonateDto,
       status: GlobalStatus.STARTED,
       history: JSON.stringify(history),
-      admin_uuid
+      admin_uuid,
     });
 
     // Journalisation
     await this.logService.logAction(
-      'subscription-store',
+      'donate-store',
       admin.id,
-      `Création de l’abonnement "${createDonateDto.name}" par ${admin.firstname} ${admin.lastname}`
+      `Création du don "${createDonateDto.name}" par ${admin.firstname} ${admin.lastname}`
     );
-
 
     return saved;
   }
+
 
   async update(uuid: string, updateDonateDto: UpdateDonateDto, admin_uuid: string) {
 
@@ -205,7 +226,7 @@ export class DonateService {
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
