@@ -34,7 +34,7 @@ export class MemberService {
 
     @InjectRepository(MemberAccessoryEntity)
     private readonly memberAccessoryRepo: Repository<MemberAccessoryEntity>,
-            
+
     private readonly responsibilityService: ResponsibilityService,
 
     private readonly accessoryService: AccessoryService,
@@ -127,7 +127,7 @@ export class MemberService {
       admin.id,
       `Création du membre ${saved.firstname} ${saved.lastname} (${saved.matricule})`,
     );
-   
+
     return saved;
   }
 
@@ -249,25 +249,45 @@ export class MemberService {
   }
 
   /** Trouver un membre par UUID */
-  async findOne(uuid: string, admin_uuid: string): Promise<MemberEntity> {
-    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
-
-    const member = await this.memberRepo.findOne({
-      where: { uuid },
-      relations: ['member_accessories'],
-    });
-
-    if (!member) throw new NotFoundException('Aucun membre trouvé avec cet identifiant.');
-
-    await this.logService.logAction(
-      'members-findOne',
-      admin.id,
-      `Consultation du membre ${member.firstname} ${member.lastname}`,
-    );
-
-    return member;
+async findOne(uuid: string, admin_uuid: string): Promise<MemberEntity> {
+  const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+  if (!admin) {
+    throw new NotFoundException("Identifiant de l'auteur introuvable");
   }
+
+  const member = await this.memberRepo.findOne({
+    where: { uuid },
+    relations: [
+      // Relations simples
+      'civility',
+      'marital_status',
+      'country',
+      'city',
+      'formation',
+      'job',
+      'organisation_city',
+      'department',
+      'division',
+      'structure',
+
+      // Collections
+      'member_accessories',
+      'member_responsibilities',
+    ],
+  });
+
+  if (!member) {
+    throw new NotFoundException('Aucun membre trouvé avec cet identifiant.');
+  }
+
+  await this.logService.logAction(
+    'members-findOne',
+    admin.id,
+    `Consultation du membre ${member.firstname} ${member.lastname}`,
+  );
+
+  return member;
+}
 
   /** Suppression logique d’un membre */
   async delete(uuid: string, admin_uuid: string): Promise<void> {

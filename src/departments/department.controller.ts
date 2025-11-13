@@ -7,7 +7,7 @@ import { UpdateDepartmentDto } from './dto/update-department.dto';
 
 @ApiBearerAuth()
 @ApiTags('Departement')
-@Controller('Departement')
+@Controller('departement')
 @UseGuards(JwtAuthGuard)
 export class DepartmentController {
   constructor(private readonly departmentService: DepartmentService) {}
