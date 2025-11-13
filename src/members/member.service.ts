@@ -15,6 +15,7 @@ import { MemberResponsibilityEntity } from 'src/⁠member-responsibility/entitie
 import { ResponsibilityService } from 'src/responsibilities/reponsibility.service';
 import { AccessoryService } from 'src/accessories/accessory.service';
 import { MemberAccessoryEntity } from 'src/member-accessories/entities/member-accessories.entity';
+import { VerifyPhoneNumberDto } from './dto/verify-phone.dto';
 
 @Injectable()
 export class MemberService {
@@ -284,5 +285,22 @@ export class MemberService {
       admin.id,
       `Suppression logique du membre ${member.firstname} ${member.lastname}`,
     );
+  }
+
+  async verifyPhoneNumber(payload: VerifyPhoneNumberDto) {
+
+    let member;
+    if(payload.category === 'principal') {
+      member = await this.memberRepo.findOne({ where: { phone: payload.phone } });
+    }else if(payload.category === 'whatsapp') {
+      member = await this.memberRepo.findOne({ where: { phone_whatsapp: payload.phone } });
+    }
+
+    //if (member) throw new BadRequestException('Le numero de telephone est deja utilise.');
+
+    return {
+      message: member ? 'Le numero de telephone est deja utilise.' : 'Le numero de telephone est disponible.',
+      is_available: !member,
+    }
   }
 }
