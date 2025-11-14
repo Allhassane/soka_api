@@ -5,6 +5,7 @@ export enum GlobalStatus {
   CANCELED = 'canceled',
   COMPLETED = 'completed',
   DELETED = 'deleted',
+  ARCHIVED = 'archived',
   PENDING = 'pending',
   INIT = 'init',
 }
@@ -17,4 +18,5 @@ export interface GlobalStatusCount {
   CANCELED: number;
   PENDING: number;
   STOPPED: number;
+  ARCHIVED: number;
 }

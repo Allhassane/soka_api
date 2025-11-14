@@ -2,7 +2,7 @@ import { IsNotEmpty, IsString, IsInt } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateLevelDto {
-  @ApiProperty({ example: 'Première', description: 'Nom du niveau' })
+  @ApiProperty({ example: 'Region', description: 'Nom du niveau' })
   @IsNotEmpty()
   @IsString()
   name: string;
@@ -13,11 +13,11 @@ export class CreateLevelDto {
   order: number;
 
   @ApiProperty({
-    example: 'geographic',
+    example: 'mixte',
     description: 'Categorie du niveau',
-    default: 'geographic',
+    default: 'mixte',
   })
   @IsNotEmpty()
   @IsString()
-  category: 'geographic' | 'pedagogic';
+  category: 'level' | 'responsibility';
 }

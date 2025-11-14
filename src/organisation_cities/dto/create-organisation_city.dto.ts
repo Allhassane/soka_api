@@ -1,10 +1,10 @@
 import { IsNotEmpty, IsOptional, IsString, MaxLength, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-export class CreateResponsabilityDto {
+export class CreateOrganisationCityDto {
   @ApiProperty({
     description: 'libellé',
-    example: '',
+    example: 'Monsieur',
   })
   @IsString()
   @IsNotEmpty({ message: 'le libellé est requis' })

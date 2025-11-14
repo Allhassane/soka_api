@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { DivisionService } from './division.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateDivisionDto } from './dto/create-division.dto';
@@ -37,6 +37,26 @@ export class DivisionController {
     return this.divisionService.findOne(uuid, admin_uuid);
   }
 
+  
+  @Get('find-by/:department_uuid/gender/:gender')
+  @ApiOperation({ summary: 'Récupérer une division par uuid du niveau' })
+  @ApiResponse({ status: 200, description: 'Division trouvé.' })
+  @ApiResponse({ status: 400, description: 'Division non trouvé.' })
+  @ApiParam({ name: 'department_uuid', required: true })
+  @ApiParam({ name: 'gender', required: true, enum: ['homme', 'femme'] })
+  findByLevelAndCivility(
+    @Param('department_uuid') department_uuid: string,
+    @Param('gender') gender: string,
+    @Request() req,
+  ) {
+    const admin_uuid = req.user.uuid as string;
+    return this.divisionService.findByDepartmentAndCivility(
+      department_uuid,
+      gender,
+      admin_uuid,
+    );
+  }
+  
  @Put(':uuid')
  @ApiOperation({ summary: 'Modifier un division' })
  @ApiResponse({ status: 200, description: 'Division modifié avec succès.' })

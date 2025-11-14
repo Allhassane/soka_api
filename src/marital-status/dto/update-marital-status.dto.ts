@@ -17,5 +17,5 @@ export class UpdateMaritalStatusDto {
   })
   @IsString()
   @IsOptional()
-  statut?: 'enable';
+  status?: 'enable';
 }

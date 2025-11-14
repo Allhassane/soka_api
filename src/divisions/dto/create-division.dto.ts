@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsOptional, IsString, MaxLength, IsEnum } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateDivisionDto {
@@ -21,6 +21,14 @@ export class CreateDivisionDto {
   name: string;
 
   @ApiPropertyOptional({
+    description: 'Genre',
+    example: 'homme',
+  })
+  @IsString()
+  @IsNotEmpty({ message: 'le genre est requis' })
+  gender: 'mixte' | 'homme' | 'femme';
+
+  @ApiPropertyOptional({
     description: 'Description de la division',
     example: 'Division pour gérer les activités !',
   })
@@ -31,7 +39,7 @@ export class CreateDivisionDto {
 
   @ApiPropertyOptional({
     description: 'Statut de la division',
-     example: 'enable',
+    example: 'enable',
   })
   @IsString()
   @IsOptional()

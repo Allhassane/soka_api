@@ -1,5 +1,15 @@
+import { IsNotEmpty, IsOptional } from 'class-validator';
+import { LevelEntity } from 'src/level/entities/level.entity';
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
-import { Entity, PrimaryGeneratedColumn, Column, BeforeInsert, BeforeUpdate} from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  BeforeInsert,
+  BeforeUpdate,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 
 function slugify(s: string) {
   return s
@@ -10,8 +20,8 @@ function slugify(s: string) {
     .replace(/(^-|-$)+/g, '');
 }
 
-@Entity({ name: 'responsabilities' })
-export class ResponsabilityEntity extends DateTimeEntity {
+@Entity({ name: 'responsibilities' })
+export class ResponsibilityEntity extends DateTimeEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
@@ -30,10 +40,23 @@ export class ResponsabilityEntity extends DateTimeEntity {
   @Column({ type: 'varchar', length: 36, default: 'enable' })
   status: string;
 
+  @Column({ type: 'varchar', length: 10, default: 'mixte' })
+  gender: string;
+
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  @IsNotEmpty()
+  level_uuid?: string;
+
+  @ManyToOne(() => LevelEntity, (level) => level.id, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'level_id', referencedColumnName: 'id' })
+  level?: LevelEntity;
+
   @BeforeInsert()
   @BeforeUpdate()
   generateSlug() {
     if (this.name) this.slug = slugify(this.name);
   }
-
 }

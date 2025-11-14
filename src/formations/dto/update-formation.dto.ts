@@ -17,5 +17,5 @@ export class UpdateFormationDto {
   })
   @IsString()
   @IsOptional()
-  statut?: 'enable';
+  status?: 'enable';
 }

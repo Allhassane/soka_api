@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { DivisionEntity } from './entities/division.entity';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
@@ -12,175 +12,166 @@ export class DivisionService {
     @InjectRepository(DivisionEntity)
     private readonly divisionRepo: Repository<DivisionEntity>,
     private readonly logService: LogActivitiesService,
-    
+
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
 
-    @InjectRepository(DepartmentEntity) 
+    @InjectRepository(DepartmentEntity)
     private readonly departmentRepo: Repository<DepartmentEntity>,
-
   ) {}
 
   async findAll(admin_uuid: string) {
     const division = await this.divisionRepo.find({
-       relations: ['department'],
+      relations: ['department'],
       order: { name: 'DESC' },
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
-        throw new NotFoundException("Identifiant de l'auteur introuvable");
+      throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
     await this.logService.logAction(
       'division-findAll',
       admin.id,
-      'recupération de la liste de tous les divisions'
+      'recupération de la liste de tous les divisions',
     );
 
     return division;
   }
 
-  async store(payload: any,admin_uuid) {
-    if (!payload?.name) {
-        throw new NotFoundException('Veuillez renseigner tous les champs');
+  async store(payload: any, admin_uuid: string) {
+    if (!payload?.name || !payload?.department_uuid) {
+      throw new BadRequestException('Veuillez renseigner tous les champs requis.');
     }
 
-    const department = await this.departmentRepo.findOne({ where: { uuid: payload.department_uuid } });
-    
+    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+    if (!admin) {
+      throw new NotFoundException("Identifiant de l'auteur introuvable");
+    }
+
+    const department = await this.departmentRepo.findOne({
+      where: { uuid: payload.department_uuid },
+    });
     if (!department) {
-        throw new NotFoundException("Identifiant du département introuvable");
+      throw new NotFoundException('Département introuvable.');
     }
 
     const newDivision = this.divisionRepo.create({
-      department_uuid: payload.department_uuid,
       name: payload.name,
-      admin_uuid: admin_uuid ?? null,
+      description: payload.description ?? null,
+      department_uuid: department.uuid,
+      department_id: department.id,
+      admin_uuid,
+      status: 'enable',
     });
-    
-    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
-    if (!admin) {
-        throw new NotFoundException("Identifiant de l'auteur introuvable");
-    }
 
+    const saved = await this.divisionRepo.save(newDivision);
+
+    // Journalisation de l’action
     await this.logService.logAction(
       'division-store',
       admin.id,
-      'Enregistrer une division'
+      `Création de la division "${saved.name}" rattachée au département "${department.name}"`,
     );
-
-    const saved = await this.divisionRepo.save(newDivision);
 
     return saved;
   }
 
-  async findOne(uuid: string,admin_uuid) {
-    const division = await this.divisionRepo.findOne({ where: { uuid }, relations: ['department'], });
+  async findOne(uuid: string, admin_uuid) {
+    const division = await this.divisionRepo.findOne({ where: { uuid } });
 
     if (!division) {
-        throw new NotFoundException('Aucune division trouvé');
+      throw new NotFoundException('Aucune division trouvé');
     }
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
-        throw new NotFoundException("Identifiant de l'auteur introuvable");
+      throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
     await this.logService.logAction(
       'division-findOne',
       admin.id,
-      'Recupérer un division'
+      'Recupérer un division',
     );
 
     return division;
   }
 
-  async findByDepartmentUuid(uuid: string,admin_uuid) {
-  const division = await this.divisionRepo.findOne({
-    where: { department: { uuid } },
-    relations: ['department'], // si tu veux récupérer aussi les infos du département
-  });
-
-    if (!division) {
-        throw new NotFoundException('Aucune division trouvé');
+    async findByDepartmentAndCivility(department_uuid: string, gender: string, admin_uuid) {
+      let genders: string[] = [];
+      genders.push(gender);
+      genders.push('mixte');
+  
+      const division = await this.divisionRepo.find({
+        where: {
+          department_uuid: department_uuid,
+          gender: In(genders),
+        },
+      });
+  
+      return division;
     }
-    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
-    if (!admin) {
-        throw new NotFoundException("Identifiant de l'auteur introuvable");
-    }
+  
 
-    await this.logService.logAction(
-      'division-findOne',
-      admin.id,
-      'Recupérer un division'
-    );
-
-    return division;
-  }
-
-  async update(uuid: string,payload: any,admin_uuid: string) {
-    const { name, department_uuid } = payload;
+  async update(uuid: string, payload: any, admin_uuid: string) {
+    const { name, department_uuid, gender } = payload;
 
     if (!uuid || !name || !admin_uuid) {
-        throw new NotFoundException('Veuillez renseigner tous les champs');
+      throw new NotFoundException('Veuillez renseigner tous les champs');
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
-    if (!admin) {
-        throw new NotFoundException("Identifiant de l'auteur introuvable");
-    }
 
- 
-    
-    const department = await this.departmentRepo.findOne({ where: { uuid: admin_uuid } });
-    
+    const department = await this.departmentRepo.findOne({
+      where: { uuid: department_uuid },
+    });
+
     if (!department) {
-        throw new NotFoundException("Identifiant du département introuvable");
+      throw new NotFoundException('Identifiant du département introuvable');
     }
 
     const existing = await this.divisionRepo.findOne({ where: { uuid } });
     if (!existing) {
-        throw new NotFoundException('Aucune correspondance retrouvée !');
+      throw new NotFoundException('Aucune correspondance retrouvée !');
     }
 
-    existing.department_uuid = department_uuid;
+    existing.department_uuid = department.uuid;
+    existing.department_id = department.id;
     existing.name = name;
+    existing.gender = gender;
 
     const updated = await this.divisionRepo.save(existing);
 
-    await this.logService.logAction(
-      'division-update',
-      admin.id,
-      updated
-    );
+    //await this.logService.logAction('division-update', admin.uuid, updated);
 
     return updated;
   }
 
-  async delete(uuid: string,admin_uuid:string) {
+  async delete(uuid: string, admin_uuid: string) {
     const division = await this.divisionRepo.findOne({ where: { uuid } });
 
     if (!division) {
-        throw new NotFoundException('Aucun élément trouvé');
+      throw new NotFoundException('Aucun élément trouvé');
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
-        throw new NotFoundException("Identifiant de l'auteur introuvable");
+      throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
     await this.logService.logAction(
       'division-delete',
       admin.id,
-      "Suppression de la division  "+division.name+" pour uuid"+division.uuid,
+      'Suppression de la division  ' +
+        division.name +
+        ' pour uuid' +
+        division.uuid,
     );
 
-   return await this.divisionRepo.softRemove(division);
-
+    return await this.divisionRepo.softRemove(division);
   }
 }

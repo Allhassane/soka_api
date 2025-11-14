@@ -5,8 +5,9 @@ import {
   IsString,
   IsBoolean,
   MinLength,
+  IsUUID,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateUserDto {
   @ApiProperty({ description: 'Prénom', required: false })
@@ -49,4 +50,9 @@ export class CreateUserDto {
   @IsString()
   @IsNotEmpty()
   phone_number: string;
+
+    @ApiPropertyOptional({ description: 'UUID du membre' })
+    @IsOptional()
+    @IsUUID()
+    member_uuid?: string;
 }

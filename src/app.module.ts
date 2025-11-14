@@ -14,21 +14,28 @@ import { RolePermissionController } from './role-permission/role-permission.cont
 import { RolePermissionService } from './role-permission/role-permission.service';
 import { RolePermissionModule } from './role-permission/role-permission.module';
 import { MailerModule } from '@nestjs-modules/mailer';
-import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
 import { CommitteeModule } from './committees/committee.module';
 import { DepartmentModule } from './departments/department.module';
 import { DivisionModule } from './divisions/division.module';
 import { CityModule } from './cities/city.module';
 import { CivilityModule } from './civilities/civility.module';
 import { FormationModule } from './formations/formation.module';
+import { StructureModule } from './structure/structure.module';
+import { MemberResponsibilityModule } from './⁠member-responsibility/⁠member-responsibility.module';
 import { UserRole } from './user-roles/entities/user-roles.entity';
 import { UserRoleModule } from './user-roles/user-roles.module';
 import { AccessoryModule } from './accessories/accessory.module';
 import { MemberAccessoryModule } from './member-accessories/member-accessories.module';
 import { MemberModule } from './members/member.module';
+import { JobModule } from './jobs/job.module';
+import { CountryModule } from './countries/country.module';
+import { MaritalStatusModule } from './marital-status/marital-status.module';
+import { ResponsibilityModule } from './responsibilities/reponsibility.module';
+import { OrganisationCityModule } from './organisation_cities/organisation_city.module';
+
 //import { PermissionsModule } from './permissions/permission.module';
-import { OrganisationCitiesModule } from './organisation_cities/organisation_cities.module';
-import { DonatesModule } from './donates/donates.module';
+import { DonateModule } from './donate/donate.module';
+import { SubscriptionModule } from './subscriptions/subscription.module';
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
@@ -72,20 +79,25 @@ import { DonatesModule } from './donates/donates.module';
     ModuleModule,
     PermissionModule,
     RolePermissionModule,
-    //PermissionsModule,
-    RolePermissionModule,
+    LevelModule,
     CommitteeModule,
     DepartmentModule,
-    DivisionModule,
     DivisionModule,
     CityModule,
     CivilityModule,
     FormationModule,
+    StructureModule,
+    MemberResponsibilityModule,
     AccessoryModule,
     MemberAccessoryModule,
     MemberModule,
-    OrganisationCitiesModule,
-    DonatesModule,
+    JobModule,
+    CountryModule,
+    MaritalStatusModule,
+    ResponsibilityModule,
+    DonateModule,
+    OrganisationCityModule,
+    SubscriptionModule,
   ],
   controllers: [AppController, RolePermissionController],
   providers: [AppService, RolePermissionService],

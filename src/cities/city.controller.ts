@@ -6,7 +6,7 @@ import { CreateCityDto } from './dto/create-city.dto';
 import { UpdateCityDto } from './dto/update-city.dto';
 
 @ApiBearerAuth()
-@ApiTags('Localité de résidence')
+@ApiTags('Cities')
 @Controller('cities')
 @UseGuards(JwtAuthGuard)
 export class CityController {

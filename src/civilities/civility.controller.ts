@@ -2,8 +2,8 @@ import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request } f
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { CivilityService } from './civility.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
-import { CreateMaritalStatusDto } from './dto/create-civility.dto';
-import { UpdateMaritalStatusDto } from './dto/update-civility.dto';
+import { CreateCivilityDto } from './dto/create-civility.dto';
+import { UpdateCivilityDto } from './dto/update-civility.dto';
 
 @ApiBearerAuth()
 @ApiTags('Civilité')
@@ -24,7 +24,7 @@ export class CivilityController {
   @ApiOperation({ summary: 'Créer une civilité ' })
   @ApiResponse({ status: 200, description: 'Civiilité créé avec succès.' })
   @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
-  store(@Body() payload: CreateMaritalStatusDto, @Request() req) {
+  store(@Body() payload: CreateCivilityDto, @Request() req) {
     return this.civilityService.store(payload, req.user.uuid as string);
   }
 
@@ -44,7 +44,7 @@ export class CivilityController {
  update(
  @Param('uuid') uuid: string,
  @Request() req,
- @Body() payload: UpdateMaritalStatusDto,
+ @Body() payload: UpdateCivilityDto,
     ) {
     return this.civilityService.update(uuid, payload,req.user.uuid);
  }

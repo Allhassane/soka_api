@@ -63,6 +63,10 @@ export class User extends DateTimeEntity {
     }
   }
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  member_uuid: string;
+
+
   @BeforeInsert()
   @BeforeUpdate()
   async hashPassword(): Promise<void> {

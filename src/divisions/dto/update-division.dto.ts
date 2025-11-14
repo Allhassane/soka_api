@@ -1,16 +1,15 @@
-import { IsOptional, IsString, MaxLength, IsEnum, IsNotEmpty } from 'class-validator';
+import { IsOptional, IsString, MaxLength, IsNotEmpty } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateDivisionDto {
-    
   @ApiProperty({
     description: 'Département uuid',
     example: 'Département Homme',
   })
   @IsString()
-  @IsNotEmpty({ message: 'uuid du département est requise' })
+  @IsOptional()
   @MaxLength(150)
-  department_uuid: string;
+  department_uuid?: string;
 
   @ApiPropertyOptional({
     description: 'Nom de la division',
@@ -20,6 +19,14 @@ export class UpdateDivisionDto {
   @IsOptional()
   @MaxLength(150)
   name?: string;
+
+  @ApiPropertyOptional({
+    description: 'Genre',
+    example: 'homme',
+  })
+  @IsString()
+  @IsOptional({ message: 'le genre est requis' })
+  gender?: 'mixte' | 'homme' | 'femme';
 
   @ApiPropertyOptional({
     description: 'Description de la division',
@@ -32,9 +39,9 @@ export class UpdateDivisionDto {
 
   @ApiPropertyOptional({
     description: 'Statut de la division',
-     example: 'enable',
+    example: 'enable',
   })
   @IsString()
   @IsOptional()
-  statut?: 'enable';
+  status?: 'enable';
 }

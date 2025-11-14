@@ -1,15 +1,15 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ResponsabilityEntity } from './entities/responsability.entity';
+import { OrganisationCityEntity } from './entities/organisation_city.entity';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
 
 @Injectable()
-export class ResponsabilityService {
+export class OrganisationCityService {
   constructor(
-    @InjectRepository(ResponsabilityEntity)
-    private readonly responsabilityRepo: Repository<ResponsabilityEntity>,
+    @InjectRepository(OrganisationCityEntity)
+    private readonly organisationCityRepo: Repository<OrganisationCityEntity>,
     private readonly logService: LogActivitiesService,
     
     @InjectRepository(User)
@@ -17,7 +17,7 @@ export class ResponsabilityService {
   ) {}
 
   async findAll(admin_uuid: string) {
-    const responsability = await this.responsabilityRepo.find({
+    const city = await this.organisationCityRepo.find({
       order: { name: 'DESC' },
     });
 
@@ -28,12 +28,12 @@ export class ResponsabilityService {
     }
 
     await this.logService.logAction(
-      'responsabilities-findAll',
+      'organisation-cities-findAll',
       admin.id,
-      'recupération de la liste de toutes les responsabilités !'
+      'recupération de la liste de tous les villes'
     );
 
-    return responsability;
+    return city;
   }
 
   async store(payload: any,admin_uuid) {
@@ -41,7 +41,7 @@ export class ResponsabilityService {
         throw new NotFoundException('Veuillez renseigner tous les champs');
     }
 
-    const newJob = this.responsabilityRepo.create({
+    const newCity = this.organisationCityRepo.create({
       name: payload.name,
       admin_uuid: admin_uuid ?? null,
     });
@@ -53,21 +53,21 @@ export class ResponsabilityService {
     }
 
     await this.logService.logAction(
-      'cities-store',
+      'organisation-cities-store',
       admin.id,
-      'Enregistrer une responsabilité'
+      'Enregistrer une ville'
     );
 
-    const saved = await this.responsabilityRepo.save(newJob);
+    const saved = await this.organisationCityRepo.save(newCity);
 
     return saved;
   }
 
   async findOne(uuid: string,admin_uuid) {
-    const responsability = await this.responsabilityRepo.findOne({ where: { uuid } });
+    const city = await this.organisationCityRepo.findOne({ where: { uuid } });
 
-    if (!responsability) {
-        throw new NotFoundException('Aucune responsabilité trouvé');
+    if (!city) {
+        throw new NotFoundException('Aucune division trouvé');
     }
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
     
@@ -76,16 +76,16 @@ export class ResponsabilityService {
     }
 
     await this.logService.logAction(
-      'responsabilities-findOne',
+      'organisation-cities-findOne',
       admin.id,
-      'Recupérer une responsabilité'
+      'Recupérer un ville'
     );
 
-    return responsability;
+    return city;
   }
 
   async update(uuid: string,payload: any,admin_uuid: string) {
-    const { name } = payload;
+    const { name, gender } = payload;
 
     if (!uuid || !name || !admin_uuid) {
         throw new NotFoundException('Veuillez renseigner tous les champs');
@@ -99,17 +99,17 @@ export class ResponsabilityService {
 
  
 
-    const existing = await this.responsabilityRepo.findOne({ where: { uuid } });
+    const existing = await this.organisationCityRepo.findOne({ where: { uuid } });
     if (!existing) {
         throw new NotFoundException('Aucune correspondance retrouvée !');
     }
 
     existing.name = name;
 
-    const updated = await this.responsabilityRepo.save(existing);
+    const updated = await this.organisationCityRepo.save(existing);
 
     await this.logService.logAction(
-      'responsabilities-update',
+      'organisation-cities-update',
       admin.id,
       updated
     );
@@ -118,7 +118,7 @@ export class ResponsabilityService {
   }
 
   async delete(uuid: string,admin_uuid:string) {
-    const city = await this.responsabilityRepo.findOne({ where: { uuid } });
+    const city = await this.organisationCityRepo.findOne({ where: { uuid } });
 
     if (!city) {
         throw new NotFoundException('Aucun élément trouvé');
@@ -131,12 +131,12 @@ export class ResponsabilityService {
     }
 
     await this.logService.logAction(
-      'responsabilities-delete',
+      'civilities-delete',
       admin.id,
-      "Suppression de la responsabilité "+city.name+" pour uuid"+city.uuid,
+      "Suppression de la civilité "+city.name+" pour uuid"+city.uuid,
     );
 
-   return await this.responsabilityRepo.softRemove(city);
+   return await this.organisationCityRepo.softRemove(city);
 
   }
 }

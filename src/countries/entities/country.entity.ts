@@ -27,19 +27,8 @@ export class CountryEntity extends DateTimeEntity {
   @Column({type: 'char', length: 191, nullable: true})
   continent?: string;
 
-  @Column({ unique: true })
-  slug: string;
-
-  @Column({ type: 'varchar', length: 36 })
-  admin_uuid: string;
-
   @Column({ type: 'varchar', length: 36, default: 'enable' })
   status: string;
 
-  @BeforeInsert()
-  @BeforeUpdate()
-  generateSlug() {
-    if (this.name) this.slug = slugify(this.name);
-  }
 
 }
