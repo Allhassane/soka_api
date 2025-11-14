@@ -97,7 +97,7 @@ export class MemberEntity extends DateTimeEntity {
   @JoinColumn({ name: 'country_uuid', referencedColumnName: 'uuid' })
   country: CountryEntity | null;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: 'uuid',length: 36, nullable: true })
   city_uuid: string;
 
 
@@ -108,14 +108,14 @@ export class MemberEntity extends DateTimeEntity {
   @Column({ type: 'varchar', length: 191, nullable: true })
   town: string;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: 'uuid',length: 36, nullable: true })
   formation_uuid: string;
 
     @ManyToOne(() => FormationEntity, { nullable: true })
   @JoinColumn({ name: 'formation_uuid', referencedColumnName: 'uuid' })
   formation: FormationEntity | null;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: 'uuid',length: 36, nullable: true })
   job_uuid: string;
 
   @ManyToOne(() => JobEntity, { nullable: true })
