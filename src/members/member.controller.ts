@@ -51,6 +51,16 @@ export class MemberController {
   }
 
 
+  @Get('find-list/:uuid')
+  @ApiOperation({ summary: 'Récupérer tous les membres d une structure par UUID' })
+  @ApiResponse({ status: 200, description: 'Membres trouvés.' })
+  @ApiResponse({ status: 400, description: 'Structure non trouvée.' })
+  findList(@Param('uuid') uuid: string, @Request() req) {
+    const admin_uuid = req.user.uuid as string;
+    return this.membreService.findList(uuid, admin_uuid);
+  }
+
+
   @Get(':uuid')
   @ApiOperation({ summary: 'Récupérer un membre par UUID' })
   @ApiResponse({ status: 200, description: 'Membre trouvé.' })

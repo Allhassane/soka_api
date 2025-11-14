@@ -335,4 +335,37 @@ export class MemberService {
 
     return members;
   }
+
+  async findList(uuid: string, admin_uuid: string){
+    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+    if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
+
+    const connectedMember = await this.memberRepo.findOne({ where: { uuid } });
+    if (!connectedMember) throw new NotFoundException('Membre introuvable.');
+
+    const memberResponsibility = await this.memberResponsibilityRepo.findOne({ where: { member_uuid: uuid } });
+
+    console.log(memberResponsibility);
+
+    /*const sous_groups = await this.structureService.findByAllChildrens(uuid);
+
+    const members = await this.memberRepo.find({
+      where: { structure_uuid: In(sous_groups) },
+      order: { firstname: 'ASC' },
+    });
+
+    await this.logService.logAction(
+      'members-findList',
+      admin.id,
+      `Consultation des membres de la structure ${uuid}`,
+    );
+
+    return {
+      pageHeaders: {
+        name: 'Liste des membres',
+        description: 'Liste des membres',
+      },
+      data: members
+    }*/
+  }
 }

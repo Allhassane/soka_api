@@ -252,8 +252,7 @@ export class MigrationService {
                     console.log('division ................... OK');
                     
                     // structure
-                    
-                    let structure = await this.structureService.findOne(member.structure_uuid);
+                    let structure = await this.structureService.findOne(member.structure_id);
                     console.log('structure ................... OK');
                     
                     // responsability
