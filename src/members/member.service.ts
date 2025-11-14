@@ -15,6 +15,15 @@ import { MemberResponsibilityEntity } from 'src/⁠member-responsibility/entitie
 import { ResponsibilityService } from 'src/responsibilities/reponsibility.service';
 import { AccessoryService } from 'src/accessories/accessory.service';
 import { MemberAccessoryEntity } from 'src/member-accessories/entities/member-accessories.entity';
+import { MaritalStatusEntity } from 'src/marital-status/entities/marital-status.entity';
+import { CountryEntity } from 'src/countries/entities/country.entity';
+import { CityEntity } from 'src/cities/entities/city.entity';
+import { FormationEntity } from 'src/formations/entities/formation.entity';
+import { JobEntity } from 'src/jobs/entities/job.entity';
+import { OrganisationCityEntity } from 'src/organisation_cities/entities/organisation_city.entity';
+import { DepartmentEntity } from 'src/departments/entities/department.entity';
+import { DivisionEntity } from 'src/divisions/entities/division.entity';
+import { StructureEntity } from 'src/structure/entities/structure.entity';
 import { VerifyPhoneNumberDto } from './dto/verify-phone.dto';
 import { v4 as uuidv4 } from 'uuid';
 import { StructureService } from 'src/structure/structure.service';
@@ -37,7 +46,37 @@ export class MemberService {
 
     @InjectRepository(MemberAccessoryEntity)
     private readonly memberAccessoryRepo: Repository<MemberAccessoryEntity>,
-            
+
+    @InjectRepository(MaritalStatusEntity)
+    private readonly maritalStatusRepo: Repository<MaritalStatusEntity>,
+
+    @InjectRepository(CountryEntity)
+    private readonly countryRepo: Repository<CountryEntity>,
+
+    @InjectRepository(CityEntity)
+    private readonly cityRepo: Repository<CityEntity>,
+
+    @InjectRepository(FormationEntity)
+    private readonly formationRepo: Repository<FormationEntity>,
+
+    @InjectRepository(JobEntity)
+    private readonly jobRepo: Repository<JobEntity>,
+
+    @InjectRepository(OrganisationCityEntity)
+    private readonly organisationCityRepo: Repository<OrganisationCityEntity>,
+
+    @InjectRepository(DepartmentEntity)
+    private readonly departmentRepo: Repository<DepartmentEntity>,
+
+    @InjectRepository(DivisionEntity)
+    private readonly divisionRepo: Repository<DivisionEntity>,
+
+    @InjectRepository(StructureEntity)
+    private readonly structureRepo: Repository<StructureEntity>,
+
+
+
+
     private readonly responsibilityService: ResponsibilityService,
 
     private readonly accessoryService: AccessoryService,
@@ -47,15 +86,13 @@ export class MemberService {
   ) {}
 
 
-  async store(dto: CreateMemberDto, admin_uuid: string): Promise<MemberEntity> {
+    async store(dto: CreateMemberDto, admin_uuid: string): Promise<MemberEntity> {
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
-
-    //  Vérification de la civilité
-    if (!dto.civility_uuid) {
-      throw new BadRequestException('Veuillez renseigner la civilité du membre.');
+    if (!admin) {
+      throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
+    // ---- Vérification civilité obligatoire ----
     const civility = await this.civilityRepo.findOne({
       where: { uuid: dto.civility_uuid },
     });
@@ -63,7 +100,7 @@ export class MemberService {
       throw new NotFoundException('Civilité introuvable.');
     }
 
-    //  Génération du matricule unique
+    // ---- Génération matricule ----
     const lastMember = await this.memberRepo
       .createQueryBuilder('m')
       .orderBy('m.id', 'DESC')
@@ -71,9 +108,9 @@ export class MemberService {
 
     const nextId = lastMember ? lastMember.id + 1 : 1;
     const yearSuffix = new Date().getFullYear().toString().slice(-2);
-    const matricule = `${yearSuffix}-${String(nextId).padStart(4, '0')}`; // ex: 25-0007
+    const matricule = `${yearSuffix}-${String(nextId).padStart(4, '0')}`;
 
-    // Création et sauvegarde du membre
+    // ---- Création du membre ----
     const member = this.memberRepo.create({
       ...dto,
       matricule,
@@ -82,36 +119,88 @@ export class MemberService {
       status: dto.status ?? 'enable',
     });
 
+    member.civility = civility;
+
+    if (dto.marital_status_uuid) {
+      member.marital_status = await this.maritalStatusRepo.findOne({
+        where: { uuid: dto.marital_status_uuid },
+      });
+    }
+
+    if (dto.country_uuid) {
+      member.country = await this.countryRepo.findOne({
+        where: { uuid: dto.country_uuid },
+      });
+    }
+
+    if (dto.city_uuid) {
+      member.city = await this.cityRepo.findOne({
+        where: { uuid: dto.city_uuid },
+      });
+    }
+
+    if (dto.formation_uuid) {
+      member.formation = await this.formationRepo.findOne({
+        where: { uuid: dto.formation_uuid },
+      });
+    }
+
+    if (dto.job_uuid) {
+      member.job = await this.jobRepo.findOne({
+        where: { uuid: dto.job_uuid },
+      });
+    }
+
+    if (dto.organisation_city_uuid) {
+      member.organisation_city = await this.organisationCityRepo.findOne({
+        where: { uuid: dto.organisation_city_uuid },
+      });
+    }
+
+    if (dto.department_uuid) {
+      member.department = await this.departmentRepo.findOne({
+        where: { uuid: dto.department_uuid },
+      });
+    }
+
+    if (dto.division_uuid) {
+      member.division = await this.divisionRepo.findOne({
+        where: { uuid: dto.division_uuid },
+      });
+    }
+
+    if (dto.structure_uuid) {
+      member.structure = await this.structureRepo.findOne({
+        where: { uuid: dto.structure_uuid },
+      });
+    }
+
     const saved = await this.memberRepo.save(member);
 
-    // Création de la responsabilité du membre (si renseignée)
+
     if (dto.responsibility_uuid) {
       const responsibility = await this.responsibilityService.findOne(
         dto.responsibility_uuid,
-        admin_uuid
+        admin_uuid,
       );
-
-      if (!responsibility) {
-        throw new NotFoundException('Responsabilité introuvable.');
-      }
 
       const memberResponsibility = this.memberResponsibilityRepo.create({
         member_uuid: saved.uuid,
         member: saved,
         responsibility_uuid: dto.responsibility_uuid,
         responsibility,
-        priority:'high'
+        priority: 'high',
       });
 
       await this.memberResponsibilityRepo.save(memberResponsibility);
     }
 
-    //  Création des accessoires du membre (si présents)
+
     if (dto.accessories && dto.accessories.length > 0) {
       for (const accessoryUuid of dto.accessories) {
         const accessory = await this.accessoryService.findOne(
           accessoryUuid,
-          admin_uuid
+          admin_uuid,
         );
 
         if (accessory) {
@@ -126,15 +215,16 @@ export class MemberService {
       }
     }
 
-    // Journalisation
+
     await this.logService.logAction(
       'members-store',
       admin.id,
       `Création du membre ${saved.firstname} ${saved.lastname} (${saved.matricule})`,
     );
-   
+
     return saved;
   }
+
 
   async update(uuid: string, dto: UpdateMemberDto, admin_uuid: string): Promise<MemberEntity> {
     // Vérification de l'administrateur
@@ -254,25 +344,45 @@ export class MemberService {
   }
 
   /** Trouver un membre par UUID */
-  async findOne(uuid: string, admin_uuid: string): Promise<MemberEntity> {
-    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
-
-    const member = await this.memberRepo.findOne({
-      where: { uuid },
-      relations: ['member_accessories'],
-    });
-
-    if (!member) throw new NotFoundException('Aucun membre trouvé avec cet identifiant.');
-
-    await this.logService.logAction(
-      'members-findOne',
-      admin.id,
-      `Consultation du membre ${member.firstname} ${member.lastname}`,
-    );
-
-    return member;
+async findOne(uuid: string, admin_uuid: string): Promise<MemberEntity> {
+  const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+  if (!admin) {
+    throw new NotFoundException("Identifiant de l'auteur introuvable");
   }
+
+  const member = await this.memberRepo.findOne({
+    where: { uuid },
+    relations: [
+      // Relations simples
+      'civility',
+      'marital_status',
+      'country',
+      'city',
+      'formation',
+      'job',
+      'organisation_city',
+      'department',
+      'division',
+      'structure',
+
+      // Collections
+      'member_accessories',
+      'member_responsibilities',
+    ],
+  });
+
+  if (!member) {
+    throw new NotFoundException('Aucun membre trouvé avec cet identifiant.');
+  }
+
+  await this.logService.logAction(
+    'members-findOne',
+    admin.id,
+    `Consultation du membre ${member.firstname} ${member.lastname}`,
+  );
+
+  return member;
+}
 
   async findOneByUuid(uuid: string){
     const member = await this.memberRepo.findOne({
