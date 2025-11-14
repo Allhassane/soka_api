@@ -82,7 +82,7 @@ export class MemberService {
   ) {}
 
 
-    async store(dto: CreateMemberDto, admin_uuid: string): Promise<MemberEntity> {
+    async store__(dto: CreateMemberDto, admin_uuid: string): Promise<MemberEntity> {
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
     if (!admin) {
       throw new NotFoundException("Identifiant de l'auteur introuvable");
@@ -212,6 +212,160 @@ export class MemberService {
     }
 
 
+    await this.logService.logAction(
+      'members-store',
+      admin.id,
+      `Création du membre ${saved.firstname} ${saved.lastname} (${saved.matricule})`,
+    );
+
+    return saved;
+  }
+
+    async store(dto: CreateMemberDto, admin_uuid: string): Promise<MemberEntity> {
+    // --- Vérification admin ---
+    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+    if (!admin) {
+      throw new NotFoundException("Identifiant de l'auteur introuvable");
+    }
+
+    // ---- Vérification civilité obligatoire ----
+    const civility = await this.civilityRepo.findOne({
+      where: { uuid: dto.civility_uuid },
+    });
+    if (!civility) {
+      throw new NotFoundException('Civilité introuvable.');
+    }
+
+    // ---- Génération matricule ----
+    const lastMember = await this.memberRepo
+      .createQueryBuilder('m')
+      .orderBy('m.id', 'DESC')
+      .getOne();
+
+    const nextId = lastMember ? lastMember.id + 1 : 1;
+    const yearSuffix = new Date().getFullYear().toString().slice(-2);
+    const matricule = `${yearSuffix}-${String(nextId).padStart(4, '0')}`;
+
+    // ---- Création du membre ----
+    const member = this.memberRepo.create({
+      ...dto,
+      matricule,
+      gender: civility.gender,
+      admin_uuid,
+      status: dto.status ?? 'enable',
+    });
+
+    member.civility = civility;
+
+    // ---- Relations optionnelles ----
+
+    if (dto.marital_status_uuid) {
+      member.marital_status = await this.maritalStatusRepo.findOne({
+        where: { uuid: dto.marital_status_uuid },
+      });
+    }
+
+    if (dto.country_uuid) {
+      member.country = await this.countryRepo.findOne({
+        where: { uuid: dto.country_uuid },
+      });
+    }
+
+    if (dto.city_uuid) {
+      member.city = await this.cityRepo.findOne({
+        where: { uuid: dto.city_uuid },
+      });
+    }
+
+    if (dto.formation_uuid) {
+      member.formation = await this.formationRepo.findOne({
+        where: { uuid: dto.formation_uuid },
+      });
+    }
+
+    if (dto.job_uuid) {
+      member.job = await this.jobRepo.findOne({
+        where: { uuid: dto.job_uuid },
+      });
+    }
+
+    // --------------------------------------------------------------
+    //  🔥🔥 CORRECTION FK : organisation_city_uuid 🔥🔥
+    // --------------------------------------------------------------
+    if (dto.organisation_city_uuid) {
+      const orgCity = await this.organisationCityRepo.findOne({
+        where: { uuid: dto.organisation_city_uuid },
+      });
+
+      if (!orgCity) {
+        throw new NotFoundException("Ville d'organisation introuvable");
+      }
+
+      // IMPORTANT : assigner les deux
+      member.organisation_city = orgCity;
+      member.organisation_city_uuid = dto.organisation_city_uuid;
+    }
+
+    if (dto.department_uuid) {
+      member.department = await this.departmentRepo.findOne({
+        where: { uuid: dto.department_uuid },
+      });
+    }
+
+    if (dto.division_uuid) {
+      member.division = await this.divisionRepo.findOne({
+        where: { uuid: dto.division_uuid },
+      });
+    }
+
+    if (dto.structure_uuid) {
+      member.structure = await this.structureRepo.findOne({
+        where: { uuid: dto.structure_uuid },
+      });
+    }
+
+    // ---- Sauvegarde du membre principal ----
+    const saved = await this.memberRepo.save(member);
+
+    // ---- Gestion de la responsabilité ----
+    if (dto.responsibility_uuid) {
+      const responsibility = await this.responsibilityService.findOne(
+        dto.responsibility_uuid,
+        admin_uuid,
+      );
+
+      const memberResponsibility = this.memberResponsibilityRepo.create({
+        member_uuid: saved.uuid,
+        member: saved,
+        responsibility_uuid: dto.responsibility_uuid,
+        responsibility,
+        priority: 'high',
+      });
+
+      await this.memberResponsibilityRepo.save(memberResponsibility);
+    }
+
+    // ---- Gestion des accessoires ----
+    if (dto.accessories && dto.accessories.length > 0) {
+      for (const accessoryUuid of dto.accessories) {
+        const accessory = await this.accessoryService.findOne(
+          accessoryUuid,
+          admin_uuid,
+        );
+
+        if (accessory) {
+          const memberAccessory = this.memberAccessoryRepo.create({
+            member_uuid: saved.uuid,
+            member: saved,
+            accessory_uuid: accessoryUuid,
+            accessory,
+          });
+          await this.memberAccessoryRepo.save(memberAccessory);
+        }
+      }
+    }
+
+    // ---- LOG ----
     await this.logService.logAction(
       'members-store',
       admin.id,
