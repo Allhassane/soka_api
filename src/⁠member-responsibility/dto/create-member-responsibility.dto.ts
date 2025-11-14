@@ -27,5 +27,5 @@ export class CreateMemberResponsibilityDto {
   @IsString()
   @IsNotEmpty({ message: 'Veuillez selectionner une priorité' })
   @MaxLength(150)
-  priority: 'hight' | 'low';
+  priority: 'high' | 'low';
 }

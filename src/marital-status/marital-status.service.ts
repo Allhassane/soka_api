@@ -84,6 +84,11 @@ export class MaritalStatusService {
     return division;
   }
 
+  async findOneByName(name: string) {
+    const division = await this.divisionRepo.findOne({ where: { name } });
+    return division;
+  }
+
   async update(uuid: string,payload: any,admin_uuid: string) {
     const { name } = payload;
 

@@ -43,6 +43,7 @@ export class AccessoryService {
 
     const newJob = this.accessoryRepo.create({
       name: payload.name,
+      from_last_version: payload.from_last_version ?? null,
       admin_uuid: admin_uuid ?? null,
     });
     
@@ -80,6 +81,18 @@ export class AccessoryService {
       admin.id,
       'Recupérer un division'
     );
+
+    return accessory;
+  }
+
+  async findOneByName(name: string) {
+    const accessory = await this.accessoryRepo.findOne({ where: { name } });
+
+    return accessory;
+  }
+
+  async findOneByLastVersionName(name: string) {
+    const accessory = await this.accessoryRepo.findOne({ where: { from_last_version: name } });
 
     return accessory;
   }

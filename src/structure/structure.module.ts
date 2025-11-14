@@ -16,5 +16,6 @@ import { LevelModule } from 'src/level/level.module';
   ],
   controllers: [StructureController],
   providers: [StructureService],
+  exports: [StructureService]
 })
 export class StructureModule {}

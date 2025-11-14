@@ -11,6 +11,15 @@ export class CreateAccessoryDto {
   @MaxLength(150)
   name: string;
 
+  @ApiProperty({
+    description: 'libellé',
+    example: '',
+  })
+  @IsString()
+  @IsOptional()
+  @MaxLength(150)
+  from_last_version?: string;
+
   @ApiPropertyOptional({
     description: 'Statut',
      example: 'enable',

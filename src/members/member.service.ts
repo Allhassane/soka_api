@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { MemberEntity } from './entities/member.entity';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
@@ -25,6 +25,8 @@ import { DepartmentEntity } from 'src/departments/entities/department.entity';
 import { DivisionEntity } from 'src/divisions/entities/division.entity';
 import { StructureEntity } from 'src/structure/entities/structure.entity';
 import { VerifyPhoneNumberDto } from './dto/verify-phone.dto';
+import { v4 as uuidv4 } from 'uuid';
+import { StructureService } from 'src/structure/structure.service';
 
 @Injectable()
 export class MemberService {
@@ -78,6 +80,8 @@ export class MemberService {
     private readonly responsibilityService: ResponsibilityService,
 
     private readonly accessoryService: AccessoryService,
+
+    private readonly structureService: StructureService,
 
   ) {}
 
@@ -380,6 +384,14 @@ async findOne(uuid: string, admin_uuid: string): Promise<MemberEntity> {
   return member;
 }
 
+  async findOneByUuid(uuid: string){
+    const member = await this.memberRepo.findOne({
+      where: { uuid },
+    });
+
+    return member;
+  }
+
   /** Suppression logique d’un membre */
   async delete(uuid: string, admin_uuid: string): Promise<void> {
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
@@ -412,5 +424,58 @@ async findOne(uuid: string, admin_uuid: string): Promise<MemberEntity> {
       message: member ? 'Le numero de telephone est deja utilise.' : 'Le numero de telephone est disponible.',
       is_available: !member,
     }
+  }
+
+  async findByStructure(uuid: string, admin_uuid: string){
+    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+    if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
+
+    const sous_groups = await this.structureService.findByAllChildrens(uuid);
+
+    const members = await this.memberRepo.find({
+      where: { structure_uuid: In(sous_groups) },
+      order: { firstname: 'ASC' },
+    });
+
+    await this.logService.logAction(
+      'members-findByStructure',
+      admin.id,
+      `Consultation des membres de la structure ${uuid}`,
+    );
+
+    return members;
+  }
+
+  async findList(uuid: string, admin_uuid: string){
+    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+    if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
+
+    const connectedMember = await this.memberRepo.findOne({ where: { uuid } });
+    if (!connectedMember) throw new NotFoundException('Membre introuvable.');
+
+    const memberResponsibility = await this.memberResponsibilityRepo.findOne({ where: { member_uuid: uuid } });
+
+    console.log(memberResponsibility);
+
+    /*const sous_groups = await this.structureService.findByAllChildrens(uuid);
+
+    const members = await this.memberRepo.find({
+      where: { structure_uuid: In(sous_groups) },
+      order: { firstname: 'ASC' },
+    });
+
+    await this.logService.logAction(
+      'members-findList',
+      admin.id,
+      `Consultation des membres de la structure ${uuid}`,
+    );
+
+    return {
+      pageHeaders: {
+        name: 'Liste des membres',
+        description: 'Liste des membres',
+      },
+      data: members
+    }*/
   }
 }
