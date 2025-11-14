@@ -7,7 +7,7 @@ import { UpdateDivisionDto } from './dto/update-division.dto';
 
 @ApiBearerAuth()
 @ApiTags('Division')
-@Controller('Division')
+@Controller('division')
 @UseGuards(JwtAuthGuard)
 export class DivisionController {
   constructor(private readonly divisionService: DivisionService) {}
@@ -37,7 +37,7 @@ export class DivisionController {
     return this.divisionService.findOne(uuid, admin_uuid);
   }
 
-  
+
   @Get('find-by/:department_uuid/gender/:gender')
   @ApiOperation({ summary: 'Récupérer une division par uuid du niveau' })
   @ApiResponse({ status: 200, description: 'Division trouvé.' })
@@ -56,7 +56,7 @@ export class DivisionController {
       admin_uuid,
     );
   }
-  
+
  @Put(':uuid')
  @ApiOperation({ summary: 'Modifier un division' })
  @ApiResponse({ status: 200, description: 'Division modifié avec succès.' })
