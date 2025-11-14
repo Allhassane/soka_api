@@ -1,9 +1,10 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { MemberService } from './member.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateMemberDto } from './dto/create-member.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
+import { VerifyPhoneNumberDto } from './dto/verify-phone.dto';
 
 @ApiBearerAuth()
 @ApiTags('Membres')
@@ -27,6 +28,15 @@ export class MemberController {
   store(@Body() payload: CreateMemberDto, @Request() req) {
     const admin_uuid = req.user.uuid as string;
     return this.membreService.store(payload, admin_uuid);
+  }
+
+  @Post('/verify/phone-number')
+  @ApiOperation({ summary: 'Verifier si le numero de telephone est disponible ' })
+  @ApiResponse({ status: 200, description: 'Numero de telephone disponible.' })
+  @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
+  @ApiBody({ type: VerifyPhoneNumberDto })
+  verifyPhoneNumber(@Body() payload: VerifyPhoneNumberDto) {
+    return this.membreService.verifyPhoneNumber(payload);
   }
 
   @Get(':uuid')

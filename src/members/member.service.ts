@@ -24,6 +24,7 @@ import { OrganisationCityEntity } from 'src/organisation_cities/entities/organis
 import { DepartmentEntity } from 'src/departments/entities/department.entity';
 import { DivisionEntity } from 'src/divisions/entities/division.entity';
 import { StructureEntity } from 'src/structure/entities/structure.entity';
+import { VerifyPhoneNumberDto } from './dto/verify-phone.dto';
 
 @Injectable()
 export class MemberService {
@@ -114,10 +115,6 @@ export class MemberService {
       status: dto.status ?? 'enable',
     });
 
-    // ----------------------------------------------------------
-    // 🔵 Hydrate toutes les relations ManyToOne ici
-    // ----------------------------------------------------------
-
     member.civility = civility;
 
     if (dto.marital_status_uuid) {
@@ -174,14 +171,9 @@ export class MemberService {
       });
     }
 
-    // ----------------------------------------------------------
-    // Sauvegarde
-    // ----------------------------------------------------------
     const saved = await this.memberRepo.save(member);
 
-    // ----------------------------------------------------------
-    // Responsabilité
-    // ----------------------------------------------------------
+
     if (dto.responsibility_uuid) {
       const responsibility = await this.responsibilityService.findOne(
         dto.responsibility_uuid,
@@ -199,9 +191,7 @@ export class MemberService {
       await this.memberResponsibilityRepo.save(memberResponsibility);
     }
 
-    // ----------------------------------------------------------
-    // Accessoires
-    // ----------------------------------------------------------
+
     if (dto.accessories && dto.accessories.length > 0) {
       for (const accessoryUuid of dto.accessories) {
         const accessory = await this.accessoryService.findOne(
@@ -221,9 +211,7 @@ export class MemberService {
       }
     }
 
-    // ----------------------------------------------------------
-    // Logs
-    // ----------------------------------------------------------
+
     await this.logService.logAction(
       'members-store',
       admin.id,
@@ -407,5 +395,22 @@ async findOne(uuid: string, admin_uuid: string): Promise<MemberEntity> {
       admin.id,
       `Suppression logique du membre ${member.firstname} ${member.lastname}`,
     );
+  }
+
+  async verifyPhoneNumber(payload: VerifyPhoneNumberDto) {
+
+    let member;
+    if(payload.category === 'principal') {
+      member = await this.memberRepo.findOne({ where: { phone: payload.phone } });
+    }else if(payload.category === 'whatsapp') {
+      member = await this.memberRepo.findOne({ where: { phone_whatsapp: payload.phone } });
+    }
+
+    //if (member) throw new BadRequestException('Le numero de telephone est deja utilise.');
+
+    return {
+      message: member ? 'Le numero de telephone est deja utilise.' : 'Le numero de telephone est disponible.',
+      is_available: !member,
+    }
   }
 }
