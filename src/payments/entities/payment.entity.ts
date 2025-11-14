@@ -15,12 +15,8 @@ export class PaymentEntity extends DateTimeEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({
-    type: 'char',
-    length: 36,
-    unique: true,
-    default: () => '(UUID())',
-  })
+
+  @Column({ type: 'char', length: 36, unique: true, default: () => '(UUID())' })
   uuid: string;
 
   // -----------------------------------------------------------
@@ -40,7 +36,7 @@ export class PaymentEntity extends DateTimeEntity {
   @Column({ type: 'char', length: 36 })
   beneficiary_uuid: string;
 
-  @Column({ type: 'varchar', length: 191 })
+  @Column({ type: 'varchar', length: 36 })
   beneficiary_name: string;
 
   // Relation optionnelle vers Member (si tu veux)
@@ -94,7 +90,7 @@ export class PaymentEntity extends DateTimeEntity {
   @Column({ type: 'varchar', length: 255, nullable: true })
   payment_url: string;
 
-  @Column({ type: 'varchar', length: 50, default: 'PENDING' })
-  payment_status: 'PENDING' | 'PAID' | 'FAILED';
+  @Column({ type: 'varchar', length: 50, default: GlobalStatus.PENDING })
+  payment_status: GlobalStatus;
 
 }

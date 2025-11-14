@@ -36,8 +36,14 @@ export class MemberEntity extends DateTimeEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'char', length: 191, unique: true, default: () => '(UUID())' })
+  @Column({ type: 'char', length: 36 })
   uuid: string;
+
+  @BeforeInsert()
+  setUuid() {
+    this.uuid = crypto.randomUUID();
+  }
+
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   picture: string;
@@ -83,7 +89,7 @@ export class MemberEntity extends DateTimeEntity {
   @Column({ type: 'int', default: 0 })
   childrens: number;
 
-  @Column({ type: 'uuid',length: 191, nullable: true })
+  @Column({ type: 'uuid',length: 36, nullable: true })
   country_uuid: string;
 
 
@@ -91,7 +97,7 @@ export class MemberEntity extends DateTimeEntity {
   @JoinColumn({ name: 'country_uuid', referencedColumnName: 'uuid' })
   country: CountryEntity | null;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: 'uuid',length: 36, nullable: true })
   city_uuid: string;
 
 
@@ -102,14 +108,14 @@ export class MemberEntity extends DateTimeEntity {
   @Column({ type: 'varchar', length: 191, nullable: true })
   town: string;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: 'uuid',length: 36, nullable: true })
   formation_uuid: string;
 
     @ManyToOne(() => FormationEntity, { nullable: true })
   @JoinColumn({ name: 'formation_uuid', referencedColumnName: 'uuid' })
   formation: FormationEntity | null;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: 'uuid',length: 36, nullable: true })
   job_uuid: string;
 
   @ManyToOne(() => JobEntity, { nullable: true })
@@ -132,7 +138,7 @@ export class MemberEntity extends DateTimeEntity {
   @Column({ type: 'varchar', length: 30, nullable: true })
   tutor_phone: string;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: 'uuid', length: 36, nullable: true })
   organisation_city_uuid: string;
 
   @ManyToOne(() => OrganisationCityEntity, { nullable: true })
@@ -145,14 +151,14 @@ export class MemberEntity extends DateTimeEntity {
   @Column({ type: 'boolean', default: false })
   sokahan_byakuren: boolean;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: 'uuid', length: 36, nullable: true })
   department_uuid: string;
 
   @ManyToOne(() => DepartmentEntity, { nullable: true })
   @JoinColumn({ name: 'department_uuid', referencedColumnName: 'uuid' })
   department: DepartmentEntity | null;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: 'uuid', length: 36, nullable: true })
   division_uuid: string;
 
   @ManyToOne(() => DivisionEntity, { nullable: true })
@@ -181,7 +187,7 @@ export class MemberEntity extends DateTimeEntity {
   @Column({ type: 'int', nullable: true })
   structure_id: number;
 
-  @Column({ type: 'varchar', length: 191, nullable: true })
+  @Column({ type: 'varchar', length: 36, nullable: true })
   structure_uuid: string;
 
   @ManyToOne(() => StructureEntity, { nullable: true })
