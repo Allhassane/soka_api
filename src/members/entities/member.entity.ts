@@ -36,7 +36,7 @@ export class MemberEntity extends DateTimeEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'char', length: 36, unique: true, default: () => '(UUID())' })
+  @Column({ type: 'char', length: 191, unique: true, default: () => '(UUID())' })
   uuid: string;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
@@ -83,7 +83,7 @@ export class MemberEntity extends DateTimeEntity {
   @Column({ type: 'int', default: 0 })
   childrens: number;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: 'uuid',length: 191, nullable: true })
   country_uuid: string;
 
 

@@ -15,7 +15,7 @@ export class CountryEntity extends DateTimeEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'char', length: 36, unique: true, default: () => '(UUID())' })
+  @Column({ type: 'char', length: 191, unique: true, default: () => '(UUID())' })
   uuid: string;
 
   @Column()
