@@ -14,6 +14,7 @@ import { AccessoryModule } from 'src/accessories/accessory.module';
 import { MemberResponsibilityEntity } from 'src/⁠member-responsibility/entities/member-responsibility.entity';
 import { MemberAccessoryEntity } from 'src/member-accessories/entities/member-accessories.entity';
 import { MemberAccessoryModule } from 'src/member-accessories/member-accessories.module';
+import { StructureModule } from 'src/structure/structure.module';
 
 @Module({
   imports: [
@@ -26,7 +27,7 @@ import { MemberAccessoryModule } from 'src/member-accessories/member-accessories
     AccessoryModule,
     MemberAccessoryModule,
     forwardRef(() => MemberResponsibilityModule),
-
+    StructureModule
   ],
   controllers: [MemberController],
   providers: [MemberService],

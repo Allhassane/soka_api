@@ -25,6 +25,9 @@ export class AccessoryEntity extends DateTimeEntity {
   @Column({ unique: true })
   slug: string;
 
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  from_last_version?: string;
+
   @Column({ type: 'varchar', length: 36 })
   admin_uuid: string;
 

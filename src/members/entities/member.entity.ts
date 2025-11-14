@@ -32,10 +32,10 @@ export class MemberEntity extends DateTimeEntity {
   @Column({ type: 'varchar', length: 100, nullable: true })
   matricule: string;
 
-  @Column({ type: 'varchar', length: 100 })
+  @Column({ type: 'varchar', length: 100, collation: 'utf8mb4_unicode_ci' })
   firstname: string;
 
-  @Column({ type: 'varchar', length: 100 })
+  @Column({ type: 'varchar', length: 100, collation: 'utf8mb4_unicode_ci' })
   lastname: string;
 
   @Column({ type: 'enum', enum: ['homme', 'femme'] })
@@ -53,7 +53,7 @@ export class MemberEntity extends DateTimeEntity {
   @Column({ type: 'varchar', length: 50, nullable: true })
   marital_status_uuid: string;
 
-  @Column({ type: 'varchar', length: 100, nullable: true })
+  @Column({ type: 'varchar', length: 100, nullable: true, collation: 'utf8mb4_unicode_ci' })
   spouse_name: string;
 
   @Column({ type: 'boolean', default: false })

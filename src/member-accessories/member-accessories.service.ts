@@ -83,6 +83,15 @@ export class MemberAccessoryService {
     return memberAccessory;
   }
 
+
+  async findOneMemberAndAccessory(member_uuid: string, accessory_uuid: string) {
+    const memberAccessory = await this.memberAccessoryRepo.findOne({
+      where: { member_uuid, accessory_uuid },
+    });
+
+    return memberAccessory;
+  }
+
   /** Suppression logique */
   async softDelete(uuid: string): Promise<void> {
     const memberAccessory = await this.findOneByUuid(uuid);

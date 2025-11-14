@@ -5,6 +5,8 @@ import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
 import { ResponsibilityEntity } from './entities/responsibility.entity';
 import { LevelService } from 'src/level/level.service';
+import { v4 as uuidv4 } from 'uuid';
+import { slugify } from 'transliteration';
 
 @Injectable()
 export class ResponsibilityService {
@@ -50,7 +52,9 @@ export class ResponsibilityService {
     }
 
     const newJob = this.responsibilityRepo.create({
+      uuid: payload.uuid ?? uuidv4(),
       name: payload.name,
+      slug: slugify(payload.name),
       admin_uuid: admin_uuid ?? null,
       level_uuid: level.uuid,
       level,
@@ -93,6 +97,22 @@ export class ResponsibilityService {
       admin.id,
       'Recupérer une responsabilité',
     );
+
+    return responsibility;
+  }
+
+  async findOneByName(name: string) {
+    const responsibility = await this.responsibilityRepo.findOne({
+      where: { name },
+    });
+
+    return responsibility;
+  }
+
+  async findOneBySlug(slug: string) {
+    const responsibility = await this.responsibilityRepo.findOne({
+      where: { slug },
+    });
 
     return responsibility;
   }

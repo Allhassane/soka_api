@@ -84,6 +84,18 @@ export class JobService {
     return job;
   }
 
+  async findOneByName(name: string) {
+    const job = await this.jobRepo.findOne({ where: { name } });
+
+    return job;
+  }
+
+  async findOneBySlug(slug: string) {
+    const job = await this.jobRepo.findOne({ where: { slug } });
+
+    return job;
+  }
+
   async update(uuid: string,payload: any,admin_uuid: string) {
     const { name } = payload;
 

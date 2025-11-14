@@ -70,6 +70,14 @@ export class LevelService {
     return level;
   }
 
+  async findOneByName(name: string) {
+    const level = await this.levelRepo.findOne({
+      where: { name },
+    });
+
+    return level;
+  }
+
   async findNextLevelByParent(uuid: string) {
     const level = await this.levelRepo.findOne({
       where: { uuid },

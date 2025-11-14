@@ -30,8 +30,8 @@ export class DepartmentEntity extends DateTimeEntity {
   @Column({ type: 'text', nullable: true })
   description: string;
 
-  @Column({ type: 'varchar', length: 36 })
-  admin_uuid: string;
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  admin_uuid?: string;
 
   @Column({ type: 'varchar', length: 36, default: 'enable' })
   status: string;
