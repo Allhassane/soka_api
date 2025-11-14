@@ -72,7 +72,7 @@ export class MemberEntity extends DateTimeEntity {
 
   @ManyToOne(() => MaritalStatusEntity, { nullable: true })
   @JoinColumn({ name: 'marital_status_uuid', referencedColumnName: 'uuid' })
-  marital_status: MaritalStatusEntity;
+  marital_status: MaritalStatusEntity | null;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
   spouse_name: string;
@@ -89,7 +89,7 @@ export class MemberEntity extends DateTimeEntity {
 
   @ManyToOne(() => CountryEntity, { nullable: true })
   @JoinColumn({ name: 'country_uuid', referencedColumnName: 'uuid' })
-  country: CountryEntity;
+  country: CountryEntity | null;
 
   @Column({ type: 'uuid', nullable: true })
   city_uuid: string;
@@ -97,7 +97,7 @@ export class MemberEntity extends DateTimeEntity {
 
   @ManyToOne(() => CityEntity, { nullable: true })
   @JoinColumn({ name: 'city_uuid', referencedColumnName: 'uuid' })
-  city: CityEntity;
+  city: CityEntity | null;
 
   @Column({ type: 'varchar', length: 191, nullable: true })
   town: string;
@@ -107,14 +107,14 @@ export class MemberEntity extends DateTimeEntity {
 
     @ManyToOne(() => FormationEntity, { nullable: true })
   @JoinColumn({ name: 'formation_uuid', referencedColumnName: 'uuid' })
-  formation: FormationEntity;
+  formation: FormationEntity | null;
 
   @Column({ type: 'uuid', nullable: true })
   job_uuid: string;
 
   @ManyToOne(() => JobEntity, { nullable: true })
   @JoinColumn({ name: 'job_uuid', referencedColumnName: 'uuid' })
-  job: JobEntity;
+  job: JobEntity | null;
 
 
   @Column({ type: 'varchar', length: 30, nullable: true })
@@ -137,7 +137,7 @@ export class MemberEntity extends DateTimeEntity {
 
   @ManyToOne(() => OrganisationCityEntity, { nullable: true })
   @JoinColumn({ name: 'organisation_city_uuid', referencedColumnName: 'uuid' })
-  organisation_city: OrganisationCityEntity;
+  organisation_city: OrganisationCityEntity | null;
 
   @Column({ type: 'date', nullable: true })
   membership_date: Date;
@@ -150,14 +150,14 @@ export class MemberEntity extends DateTimeEntity {
 
   @ManyToOne(() => DepartmentEntity, { nullable: true })
   @JoinColumn({ name: 'department_uuid', referencedColumnName: 'uuid' })
-  department: DepartmentEntity;
+  department: DepartmentEntity | null;
 
   @Column({ type: 'uuid', nullable: true })
   division_uuid: string;
 
   @ManyToOne(() => DivisionEntity, { nullable: true })
   @JoinColumn({ name: 'division_uuid', referencedColumnName: 'uuid' })
-  division: DivisionEntity;
+  division: DivisionEntity | null;
 
   @Column({ type: 'boolean', default: false })
   has_gohonzon: boolean;
@@ -186,7 +186,7 @@ export class MemberEntity extends DateTimeEntity {
 
   @ManyToOne(() => StructureEntity, { nullable: true })
   @JoinColumn({ name: 'structure_uuid', referencedColumnName: 'uuid' })
-  structure: StructureEntity;
+  structure: StructureEntity | null;
 
   @Column({ type: 'varchar', length: 36 })
   admin_uuid: string;

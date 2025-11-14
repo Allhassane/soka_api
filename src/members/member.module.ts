@@ -14,15 +14,40 @@ import { AccessoryModule } from 'src/accessories/accessory.module';
 import { MemberResponsibilityEntity } from 'src/⁠member-responsibility/entities/member-responsibility.entity';
 import { MemberAccessoryEntity } from 'src/member-accessories/entities/member-accessories.entity';
 import { MemberAccessoryModule } from 'src/member-accessories/member-accessories.module';
+import { MaritalStatusEntity } from 'src/marital-status/entities/marital-status.entity';
+import { CountryEntity } from 'src/countries/entities/country.entity';
+import { CityEntity } from 'src/cities/entities/city.entity';
+import { FormationEntity } from 'src/formations/entities/formation.entity';
+import { JobEntity } from 'src/jobs/entities/job.entity';
+import { OrganisationCityEntity } from 'src/organisation_cities/entities/organisation_city.entity';
+import { DepartmentEntity } from 'src/departments/entities/department.entity';
+import { DivisionEntity } from 'src/divisions/entities/division.entity';
+import { StructureEntity } from 'src/structure/entities/structure.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([MemberEntity, User,CivilityEntity,MemberResponsibilityEntity,MemberAccessoryEntity]),
+    TypeOrmModule.forFeature(
+      [
+        MemberEntity,
+        User,
+        CivilityEntity,
+        MemberResponsibilityEntity,
+        MemberAccessoryEntity,
+        MaritalStatusEntity,
+        CountryEntity,
+        CityEntity,
+        FormationEntity,
+        JobEntity,
+        OrganisationCityEntity,
+        DepartmentEntity,
+        DivisionEntity,
+        StructureEntity
+      ]),
     LogActivitiesModule,
     UserModule,
     ResponsibilityModule,
     CivilityModule,
-    ResponsibilityModule, 
+    ResponsibilityModule,
     AccessoryModule,
     MemberAccessoryModule,
     forwardRef(() => MemberResponsibilityModule),
