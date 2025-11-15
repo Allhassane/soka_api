@@ -21,14 +21,14 @@ export class SubscriptionEntity extends DateTimeEntity {
 
   @Column()
   name: string;
-  
+
   @Column({ nullable: true, default: 0, type: 'double' })
   amount: number;
 
   @Column()
   year: number;
 
-  
+
   @Column()
   starts_at: Date;
 
@@ -38,6 +38,8 @@ export class SubscriptionEntity extends DateTimeEntity {
   @Column({type:"longtext", nullable:true})
   history: string;
 
+  @Column({ type: 'int', nullable: true })
+  max_payments_per_beneficiary: number | null;
 
   @Column({ type: 'varchar', length: 36 })
   admin_uuid: string;

@@ -2,10 +2,12 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsDate,
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
-  IsString
+  IsString,
+  Min
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { DonateCategory } from 'src/shared/enums/donate.enum';
@@ -57,4 +59,13 @@ export class CreateDonateDto {
   @IsNumber({}, { message: 'Le montant doit être un nombre' })
   @IsOptional()
   amount?: number;
+
+  @ApiProperty({
+    description: "Nombre maximum de paiements par bénéficiaire. Null = illimité.",
+    example: 3,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  max_payments_per_beneficiary?: number | null;
 }

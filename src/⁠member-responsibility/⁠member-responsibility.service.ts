@@ -38,8 +38,20 @@ export class MemberResponsibilityService {
       member,
       responsibility_uuid: createMemberResponsibilityDto.responsibility_uuid,
       responsibility,
+      priority: createMemberResponsibilityDto.priority ?? 'high',
     });
     return this.memberResponsibilityRepo.save(memberResponsibility);
+  }
+
+  async findOneByResponsibilityAndMember(responsibility_uuid: string, member_uuid: string) {
+    const memberResponsibility = await this.memberResponsibilityRepo.findOne({
+      where: {
+        responsibility_uuid,
+        member_uuid,
+      },
+    });
+    
+    return memberResponsibility;
   }
 
   // async find

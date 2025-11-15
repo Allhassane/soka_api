@@ -84,6 +84,18 @@ export class FormationService {
     return formation;
   }
 
+  async findOneByName(name: string) {
+    const formation = await this.formationRepo.findOne({ where: { name } });
+
+    return formation;
+  }
+
+  async findOneBySlug(slug: string) {
+    const formation = await this.formationRepo.findOne({ where: { slug } });
+
+    return formation;
+  }
+
   async update(uuid: string,payload: any,admin_uuid: string) {
     const { name } = payload;
 

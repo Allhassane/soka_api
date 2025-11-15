@@ -9,3 +9,5 @@ export const SMTP_USER = process.env.MAIL_USERNAME;
 export const SMTP_PASSWORD = process.env.MAIL_PASSWORD;
 export const FROM = process.env.MAIL_FROM_ADRESSE;
 export const MAIL_FROM = process.env.MAIL_FROM_ADRESSE;
+
+export const MIGRATION_URL = process.env.MIGRATION_URL;

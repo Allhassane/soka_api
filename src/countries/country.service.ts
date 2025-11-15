@@ -11,17 +11,19 @@ export class CountryService {
     @InjectRepository(CountryEntity)
     private readonly countryRepo: Repository<CountryEntity>,
     private readonly logService: LogActivitiesService,
-    
+
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
   ) {}
 
+
     async onModuleInit() {
-    const count = await this.countryRepo.count();
-    if (count > 0) {
-      console.log(` ${count} pays déjà présents — aucune insertion.`);
-      return;
-    }
+    // Vérifie si la table contient déjà tes pays (pas juste > 0)
+    const existingCountries = await this.countryRepo.find({
+      select: ['name'],
+    });
+
+    const existingNames = new Set(existingCountries.map((c) => c.name.trim().toUpperCase()));
 
     const paysList = [
       { name: 'AFGHANISTAN', capital: 'KABOUL', continent: 'ASIE', status: 'enable' },
@@ -224,11 +226,23 @@ export class CountryService {
       { name: 'ZIMBABWE', capital: 'HARARE', continent: 'AFRIQUE', status: 'enable' },
 
       //{ name: '', capital: '', continent: '', status: 'enable' },
-      
+
     ];
 
-    await this.countryRepo.save(paysList);
-    console.log(`${paysList.length} pays ont été insérés avec succès.`);
+    // Filtrer pour insérer uniquement ceux qui n’existent pas encore
+    const toInsert = paysList.filter(
+      (p) => !existingNames.has(p.name.trim().toUpperCase())
+    );
+
+    if (toInsert.length === 0) {
+      console.log('Aucun pays à insérer. La base est déjà à jour.');
+      return;
+    }
+
+    // Insertion sécurisée, sans doublons
+    await this.countryRepo.insert(toInsert);
+
+    console.log(`${toInsert.length} nouveaux pays insérés.`);
   }
 
 
@@ -238,7 +252,7 @@ export class CountryService {
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -262,9 +276,9 @@ export class CountryService {
       captial:payload.captial ?? null,
       continent: payload.continent ?? null,
     });
-    
+
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -287,7 +301,7 @@ export class CountryService {
         throw new NotFoundException('Aucune pays trouvé');
     }
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -301,6 +315,18 @@ export class CountryService {
     return country;
   }
 
+  async findByUuid(uuid: string) {
+    const country = await this.countryRepo.findOne({ where: { uuid } });
+
+    return country;
+  }
+
+  async findOneByName(name: string) {
+    const country = await this.countryRepo.findOne({ where: { name } });
+
+    return country;
+  }
+
   async update(uuid: string,payload: any,admin_uuid: string) {
     const { name, capital, continent } = payload;
 
@@ -309,12 +335,12 @@ export class CountryService {
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
- 
+
 
     const existing = await this.countryRepo.findOne({ where: { uuid } });
     if (!existing) {
@@ -344,7 +370,7 @@ export class CountryService {
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }

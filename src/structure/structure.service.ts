@@ -10,6 +10,7 @@ import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { CreateStructureDto } from './dto/create-structure.dto';
 import { UpdateStructureDto } from './dto/update-structure.dto';
 import { LevelService } from 'src/level/level.service';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class StructureService {
@@ -40,6 +41,7 @@ export class StructureService {
     }
 
     const newStructure = this.structureRepo.create({
+      uuid: createStructureDto.uuid ?? uuidv4(),
       name: createStructureDto.name,
       ...(admin_uuid ? { admin_uuid } : {}),
       ...(createStructureDto.parent_uuid
@@ -164,5 +166,44 @@ export class StructureService {
       level,
       data,
     };
+  }
+
+  async findByAllChildrens(uuid: string) {
+    // 1) Vérifier que le point de départ existe
+    console.log('children' + uuid);
+    const start = await this.structureRepo.findOne({
+      where: { uuid },
+      select: ['id', 'uuid'],
+    });
+    if (!start) {
+      throw new NotFoundException('Nœud de départ introuvable');
+    }
+
+    // 2) Exécuter le CTE récursif
+    const sql = `
+      WITH RECURSIVE tree AS (
+        SELECT s.id, s.uuid, s.name, s.parent_id, s.level_id
+        FROM structures s
+        WHERE s.uuid = ?
+
+        UNION ALL
+
+        SELECT c.id, c.uuid, c.name, c.parent_id, c.level_id
+        FROM structures c
+        JOIN tree t ON c.parent_id = t.id
+      )
+      SELECT sg.*
+      FROM tree sg
+      JOIN levels l ON l.id = sg.level_id
+      WHERE l.\`order\` = 7
+      ORDER BY sg.name ASC
+    `;
+
+    const rows = await this.structureRepo.query(sql, [uuid]);
+    const sousGroups: string[] = [];
+    for (const row of rows) {
+      sousGroups.push(row.uuid);
+    }
+    return sousGroups;
   }
 }

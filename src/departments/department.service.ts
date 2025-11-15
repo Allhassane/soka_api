@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { DepartmentEntity } from './entities/department.entity';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
+import { v4 as uuid } from 'uuid';
 
 @Injectable()
 export class DepartmentService {
@@ -44,6 +45,7 @@ export class DepartmentService {
     }
 
     const newModule = this.departmentRepo.create({
+      uuid: payload.uuid ?? uuid(),
       name: payload.name,
       admin_uuid: admin_uuid ?? null,
     });
@@ -83,6 +85,11 @@ export class DepartmentService {
       'Recupérer un département'
     );
 
+    return  departement;
+  }
+  
+  async findOneByName(name: string) {
+    const departement = await this.departmentRepo.findOne({ where: { name } });
     return  departement;
   }
 

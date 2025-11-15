@@ -8,6 +8,8 @@ export enum GlobalStatus {
   ARCHIVED = 'archived',
   PENDING = 'pending',
   INIT = 'init',
+  SUCCESS = 'success',
+  FAILED = 'fail',
 }
 
 export interface GlobalStatusCount {

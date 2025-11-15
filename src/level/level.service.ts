@@ -27,7 +27,7 @@ export class LevelService {
 
     const level = this.levelRepo.create({
       ...dto,
-      uuid: uuidv4(),
+      uuid: dto.uuid ?? uuidv4(),
     });
 
     return this.levelRepo.save(level);
@@ -66,6 +66,14 @@ export class LevelService {
     if (!level) {
       throw new NotFoundException('Niveau introuvable');
     }
+
+    return level;
+  }
+
+  async findOneByName(name: string) {
+    const level = await this.levelRepo.findOne({
+      where: { name },
+    });
 
     return level;
   }

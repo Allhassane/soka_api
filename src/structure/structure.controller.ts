@@ -124,6 +124,28 @@ export class StructureController {
     return this.structureService.findByChildrens(uuid);
   }
 
+
+  @Get('by-all-childrens/:uuid')
+  @ApiOperation({
+    summary: "Recupérer les enfants d'une structure",
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Enfants récupérés avec succès',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Non autorisé - Authentification requise',
+  })
+  @ApiQuery({
+    name: 'uuid',
+    description: 'UUID de la structure',
+    required: true,
+  })
+  public findByAllChildrens(@Query('uuid') uuid: string) {
+    return this.structureService.findByAllChildrens(uuid);
+  }
+
   @Get('find-by-level/:level_uuid')
   @ApiOperation({
     summary: "Recupérer les structures d'un niveau",
