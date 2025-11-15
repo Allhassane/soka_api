@@ -10,11 +10,17 @@ import { PaymentSource } from '../dto/create-payment.dto';
 import { MemberEntity } from 'src/members/entities/member.entity';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 
+export enum PaymentStatus {
+  PENDING = 'pending',
+  PAID = 'paid',
+  FAILED = 'failed',
+  CANCELLED = 'cancelled',
+}
+
 @Entity({ name: 'payments' })
 export class PaymentEntity extends DateTimeEntity {
   @PrimaryGeneratedColumn()
   id: number;
-
 
   @Column({ type: 'char', length: 36, unique: true, default: () => '(UUID())' })
   uuid: string;
@@ -30,36 +36,36 @@ export class PaymentEntity extends DateTimeEntity {
   source_uuid: string;
 
   // -----------------------------------------------------------
-  // Beneficiary (membre bénéficiaire)
+  // Beneficiary
   // -----------------------------------------------------------
 
   @Column({ type: 'char', length: 36 })
   beneficiary_uuid: string;
 
-  @Column({ type: 'varchar', length: 36 })
+  @Column({ type: 'varchar', length: 191 })
   beneficiary_name: string;
 
-  // Relation optionnelle vers Member (si tu veux)
-  @ManyToOne(() => MemberEntity, { nullable: true })
+  @ManyToOne(() => MemberEntity, { nullable: false })
   @JoinColumn({ name: 'beneficiary_uuid', referencedColumnName: 'uuid' })
-  beneficiary?: MemberEntity;
+  beneficiary: MemberEntity;
+
 
   // -----------------------------------------------------------
-  //  Actor (personne ayant effectué l’action)
+  // Actor
   // -----------------------------------------------------------
 
-  @Column({ type: 'char', length: 36 })
+  @Column({ type: 'char', length: 36,nullable:false })
   actor_uuid: string;
 
   @Column({ type: 'varchar', length: 191 })
   actor_name: string;
 
-  @ManyToOne(() => MemberEntity, { nullable: true })
+  @ManyToOne(() => MemberEntity, { nullable: false })
   @JoinColumn({ name: 'actor_uuid', referencedColumnName: 'uuid' })
-  actor?: MemberEntity;
+  actor: MemberEntity;
 
   // -----------------------------------------------------------
-  //  Montant & Quantité
+  // Montant & Quantité
   // -----------------------------------------------------------
 
   @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
@@ -68,21 +74,23 @@ export class PaymentEntity extends DateTimeEntity {
   @Column({ type: 'int', nullable: true })
   quantity: number | null;
 
-  // -----------------------------------------------------------
-  // Montant total (optionnel mais recommandé)
-  // -----------------------------------------------------------
-
   @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   total_amount: number;
 
+  // -----------------------------------------------------------
+  // Statut général
+  // -----------------------------------------------------------
 
   @Column({
-    nullable: false,
     type: 'enum',
     enum: GlobalStatus,
     default: GlobalStatus.INIT,
   })
-  status: string;
+  status: GlobalStatus;
+
+  // -----------------------------------------------------------
+  // Paiement CinetPay
+  // -----------------------------------------------------------
 
   @Column({ type: 'varchar', length: 191, nullable: true })
   transaction_id: string;
@@ -90,7 +98,10 @@ export class PaymentEntity extends DateTimeEntity {
   @Column({ type: 'varchar', length: 255, nullable: true })
   payment_url: string;
 
-  @Column({ type: 'varchar', length: 50, default: GlobalStatus.PENDING })
-  payment_status: GlobalStatus;
-
+  @Column({
+    type: 'enum',
+    enum: PaymentStatus,
+    default: PaymentStatus.PENDING,
+  })
+  payment_status: PaymentStatus;
 }

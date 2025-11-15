@@ -35,12 +35,12 @@ function slugify(s: string) {
 }
 
 @Entity({ name: 'members' })
-@Index('uniq_members_uuid', ['uuid'], { unique: true })
 export class MemberEntity extends DateTimeEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'char', length: 36, unique: true })
+  @Column({ type: 'char', length: 36 })
+  @Index()
   uuid: string;
 
   @BeforeInsert()

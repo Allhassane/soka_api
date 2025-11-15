@@ -51,6 +51,7 @@ export class MigrationService {
 
     async migrate(option: string, admin_uuid: string) {
         
+        // console.log(MIGRATION_URL + '/migration?option=' + option);
         const query = await fetch(MIGRATION_URL + '/migration?option=' + option);
         const response = await query.json();
 

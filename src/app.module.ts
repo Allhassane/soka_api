@@ -36,6 +36,8 @@ import { OrganisationCityModule } from './organisation_cities/organisation_city.
 //import { PermissionsModule } from './permissions/permission.module';
 import { DonateModule } from './donate/donate.module';
 import { SubscriptionModule } from './subscriptions/subscription.module';
+import { PaymentEntity } from './payments/entities/payment.entity';
+import { PaymentModule } from './payments/payment.module';
 import { MigrationModule } from './migration/migration.module';
 import { MemberTravelModule } from './member-travel/member-travel.module';
 @Module({
@@ -100,6 +102,7 @@ import { MemberTravelModule } from './member-travel/member-travel.module';
     DonateModule,
     OrganisationCityModule,
     SubscriptionModule,
+    PaymentModule,
     MigrationModule,
     MemberTravelModule,
   ],

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { MemberService } from './member.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
@@ -14,12 +14,17 @@ export class MemberController {
   constructor(private readonly membreService: MemberService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Liste toutes les membres ' })
+  @ApiOperation({ summary: 'Liste paginée des membres' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
-  findAll(@Request() req) {
+  findAll(
+    @Request() req,
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 15,
+  ) {
     const admin_uuid = req.user.uuid as string;
-    return this.membreService.findAll(admin_uuid);
+    return this.membreService.findAll(admin_uuid, Number(page), Number(limit));
   }
+
 
   @Post()
   @ApiOperation({ summary: 'Créer un membre ' })
