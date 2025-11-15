@@ -16,6 +16,7 @@ import { buildPaginationMeta } from 'src/shared/helpers/pagination-meta.helper';
 import { v4 as uuidv4 } from 'uuid';
 import * as crypto from 'crypto';
 import { MailerService } from '@nestjs-modules/mailer';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UserService {
@@ -160,6 +161,24 @@ export class UserService {
       return saved;
     } catch (error: unknown) {
       this.handlePostgresUniqueViolation(error);
+    }
+  }
+
+
+  async createUserByMigration(dto: CreateUserDto): Promise<{ message: string }> {
+    const user = this.userRepo.create({
+      uuid: uuidv4(),
+      ...dto,
+      password: dto.password,
+      password_no_hashed: dto.password,
+      is_active: dto.is_active ?? true,
+      phone_number: dto.phone_number?.trim(),
+    });
+
+    await this.userRepo.save(user);
+
+    return {
+      message: 'Utilisateur créé avec succès',
     }
   }
 

@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { MemberService } from './member.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateMemberDto } from './dto/create-member.dto';
@@ -26,13 +26,31 @@ export class MemberController {
   }
 
 
-  @Get(':member_uuid')
+  @Get('structures')
   @ApiOperation({ summary: 'Récupérer tous les membres en fonction du user connecté par son UUID' })  
   @ApiResponse({ status: 200, description: 'Liste des membres récupérée avec succès.' })
   @ApiResponse({ status: 400, description: 'Liste des membres non trouvée.' })
-  findAllByUser(@Param('member_uuid') member_uuid: string, @Request() req) {
-    const user_connected_uuid = req.user.member_uuid as string;
-    return this.membreService.findAllMemberByUserConnected(user_connected_uuid);
+  @ApiQuery({ name: 'page', required: false, description: 'Page actuelle', default: 1 })
+  @ApiQuery({ name: 'limit', required: false, description: 'Nombre d\'éléments par page', default: 15 })
+  findAllMemberByUserConnected(
+    @Request() req,
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 15,
+  ) {
+    const admin_uuid = req.user.uuid as string;
+    return this.membreService.findAllMemberByUserConnected(admin_uuid, Number(page), Number(limit));
+  }
+
+
+  @Get('beneficiary')
+  @ApiOperation({ summary: 'Récupérer tous les bénéficiaires en fonction du membre connecté par son UUID' })  
+  @ApiResponse({ status: 200, description: 'Liste des bénéficiaires récupérée avec succès.' })
+  @ApiResponse({ status: 400, description: 'Liste des bénéficiaires non trouvée.' })
+  findAllBeneficiaryByUserConnected(
+    @Request() req,
+  ) {
+    const admin_uuid = req.user.uuid as string;
+    return this.membreService.findAllBeneficiaryByUserConnected(admin_uuid);
   }
 
   @Post()

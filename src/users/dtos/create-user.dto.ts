@@ -51,8 +51,8 @@ export class CreateUserDto {
   @IsNotEmpty()
   phone_number: string;
 
-    @ApiPropertyOptional({ description: 'UUID du membre' })
-    @IsOptional()
-    @IsUUID()
-    member_uuid?: string;
+  @ApiPropertyOptional({ description: 'UUID du membre' })
+  @IsOptional()
+  @IsUUID()
+  member_uuid?: string;
 }

@@ -29,6 +29,7 @@ import { StructureEntity } from 'src/structure/entities/structure.entity';
 import { VerifyPhoneNumberDto } from './dto/verify-phone.dto';
 import { v4 as uuidv4 } from 'uuid';
 import { StructureService } from 'src/structure/structure.service';
+import { MemberList } from 'src/shared/interfaces/member.interface';
 
 @Injectable()
 export class MemberService {
@@ -238,30 +239,30 @@ export class MemberService {
     //creation du compte utilisateur lié au membre
     if (saved.phone!=null) {
 
-    // Générer un mot de passe temporaire
-    //let newUser: any = null;
-    const tempPassword = Math.random().toString(36).slice(-8); // ex: kf8d2j3s
+      // Générer un mot de passe temporaire
+      //let newUser: any = null;
+      const tempPassword = Math.random().toString(36).slice(-8); // ex: kf8d2j3s
 
-    const user = this.userRepo.create({
-      firstname: saved.firstname,
-      lastname: saved.lastname,
-      email: saved.email,
-      phone_number: saved.phone,
-      password: tempPassword,
-      is_active: true,
-      member_uuid: saved.uuid,
-      password_no_hashed: tempPassword,
-    });
+      const user = this.userRepo.create({
+        firstname: saved.firstname,
+        lastname: saved.lastname,
+        email: saved.email,
+        phone_number: saved.phone,
+        password: tempPassword,
+        is_active: true,
+        member_uuid: saved.uuid,
+        password_no_hashed: tempPassword,
+      });
 
-    const newUser = await this.userRepo.save(user);
+      const newUser = await this.userRepo.save(user);
 
-    await this.logService.logAction(
-      'user-create-from-member',
-      admin.id,
-      `Compte utilisateur créé automatiquement pour ${saved.firstname} ${saved.lastname}`,
-    );
+      await this.logService.logAction(
+        'user-create-from-member',
+        admin.id,
+        `Compte utilisateur créé automatiquement pour ${saved.firstname} ${saved.lastname}`,
+      );
 
-}
+    }
 
     // Journalisation
     await this.logService.logAction(
@@ -269,6 +270,15 @@ export class MemberService {
       admin.id,
       `Création du membre ${saved.firstname} ${saved.lastname} (${saved.matricule})`,
     );
+
+    return saved;
+  }
+    
+  
+  async storeFromMigration(dto: CreateMemberDto, admin_uuid: string): Promise<MemberEntity> {
+
+    // ---- Sauvegarde du membre principal ----
+    const saved = await this.memberRepo.save({...dto, admin_uuid});
 
     return saved;
   }
@@ -503,34 +513,87 @@ export class MemberService {
     );
   }
 
-  //liste des membres en fonction de l'utilisateur connecté
-  async findAllMemberByUserConnected(member_uuid: string): Promise<MemberEntity[]> {
-    
-    //on verifie si le membre connecté est un responsable
-    const memberResponsibility = await this.memberResponsibilityRepo.findOne({ where: { member_uuid: member_uuid, priority: 'high' }, relations: ['member'] });
+  async prepareMemberList(admin_uuid: string) {
+    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+    if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
+
+    const memberResponsibility = await this.memberResponsibilityRepo.findOne({ where: { member_uuid: admin.member_uuid, priority: 'high' }, relations: ['member'] });
     if (!memberResponsibility) throw new NotFoundException("Identifiant de la responsabilité introuvable");
-    //on recupere responsability_uuid si le membre connecté est un responsable
+
     const responsibility_uuid = memberResponsibility.responsibility_uuid;
-    console.log('responsibility_uuid-------> OK');
-    //req sur responsability
-    console.log(responsibility_uuid);
+
+    
     const responsibility = await this.responsibilityRepo.findOne({ relations: ['level'], where: { uuid: responsibility_uuid } });
-    console.log(responsibility);
     if (!responsibility) throw new NotFoundException("Identifiant de la responsabilité introuvable");
     if (!memberResponsibility.member) throw new NotFoundException("Identifiant du membre introuvable");
-    //on recupere les structures du level_uuid
-    //const structures = await this.structureService.findOne({ level_uuid: responsibility.level_uuid });
-    //if (!structures) throw new NotFoundException("Identifiant de la structure introuvable");
+    
     const sous_groupes = await this.structureService.findByAllChildrens(memberResponsibility.member.structure_uuid);
-    console.log('sous_groupes-------> OK');
-    //on recupere les membres de la structure concerné
+    return sous_groupes;
+  }
+
+  //liste des membres en fonction de l'utilisateur connecté
+  async findAllMemberByUserConnected(
+    admin_uuid: string,
+    page: number = 1,
+    limit: number = 15,
+  ): Promise<any> {
+    const sous_groupes = await this.prepareMemberList(admin_uuid);
+
+    const skip = (page - 1) * limit;
+    const members = await this.memberRepo.find({
+      where: { structure_uuid: In(sous_groupes) },
+      relations: ['formation'],
+      order: { firstname: 'ASC' },
+      skip,
+      take: limit,
+    });
+    if (!members) throw new NotFoundException("Aucun membre trouvé");
+
+    const total = await this.memberRepo.count({
+      where: { structure_uuid: In(sous_groupes) },
+    });
+
+    return {
+      results: members.map((member) => ({
+        uuid: member.uuid,
+        firstname: member.firstname,
+        lastname: member.lastname,
+        phone_number: member.phone,
+        formation: member.formation?.name,
+        status: member.status,
+        gohonzon: member.has_gohonzon,
+      })),
+      meta: {
+        current_page: page,
+        limit,
+        total_items: total,
+        total_pages: Math.ceil(total / limit),
+        has_next: page * limit < total,
+        has_prev: page > 1,
+      },
+    }
+  }
+
+
+  async findAllBeneficiaryByUserConnected(
+    admin_uuid: string,
+  ): Promise<any> {
+    const sous_groupes = await this.prepareMemberList(admin_uuid);
+
     const members = await this.memberRepo.find({
       where: { structure_uuid: In(sous_groupes) },
       order: { firstname: 'ASC' },
     });
-    console.log('members-------> OK');
     if (!members) throw new NotFoundException("Aucun membre trouvé");
-    return members;
+
+    return {
+      results: members.map((member) => ({
+        uuid: member.uuid,
+        firstname: member.firstname,
+        lastname: member.lastname,
+        phone_number: member.phone,
+      }))
+    }
   }
 
 

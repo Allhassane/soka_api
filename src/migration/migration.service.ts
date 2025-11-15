@@ -27,6 +27,8 @@ import { slugify } from 'src/shared/functions/slug';
 import { CreateLevelDto } from 'src/level/dto/create-level.dto';
 import { CreateStructureDto } from 'src/structure/dto/create-structure.dto';
 import { MIGRATION_URL } from 'src/shared/constants/constants';
+import { UserService } from 'src/users/user.service';
+import { CreateUserDto } from 'src/users/dtos/create-user.dto';
 
 @Injectable()
 export class MigrationService {
@@ -47,6 +49,7 @@ export class MigrationService {
         private readonly accessoryService : AccessoryService,
         private readonly memberAccessoryService : MemberAccessoryService,
         private readonly memberResponsibilityService : MemberResponsibilityService,
+        private readonly userService : UserService,
     ){}
 
     async migrate(option: string, admin_uuid: string) {
@@ -329,42 +332,48 @@ export class MigrationService {
                     }
                     console.log('responsability ................... ' + responsibilityUuid);
 
+                    const verifyPhone = await this.memberService.verifyPhoneNumber({phone: member.contact, category: 'principal'});
+                    let member_phone = undefined;
+                    if(member.phone){
+                        member_phone = verifyPhone.is_available ? undefined : member.contact;
+                    }
+
                     const prepareSaveMember: CreateMemberDto = {
                         picture: member.picture,
                         matricule: member.matricule,
                         firstname: member.nom,
                         lastname: member.prenom,
-                        gender: member.sexe,
-                        birth_date: member.date_naissance,
-                        birth_city: member.lieu_naissance,
+                        gender: civility?.gender as string,
+                        birth_date: member.date_naissance ?? null,
+                        birth_city: member.lieu_naissance ?? null,
                         civility_uuid: civility?.uuid,
                         marital_status_uuid: maritalStatus?.uuid,
-                        spouse_name: member.nom_conjoint,
+                        spouse_name: member.nom_conjoint ?? null,
                         spouse_member: member.conjoint_membre ?? false,
-                        childrens: member.nb_enfants,
+                        childrens: member.nb_enfants ?? 0,
                         country_uuid: country?.uuid,
                         city_uuid: cityUuid,
-                        town: member.ville_residence,
+                        town: member.ville_residence ?? null,
                         formation_uuid: formationUuid,
                         job_uuid: jobUuid,
-                        phone: member.contact,
-                        phone_whatsapp: member.whatsapp,
-                        email: member.email,
-                        tutor_name: member.contact_urgence_nom,
-                        tutor_phone: member.contact_urgence_numero,
+                        phone: member_phone,
+                        phone_whatsapp: member.whatsapp ?? null,
+                        email: member.email ?? null,
+                        tutor_name: member.contact_urgence_nom ?? null,
+                        tutor_phone: member.contact_urgence_numero ?? null,
                         organisation_city_uuid: organisationUuid,
-                        membership_date: member.debut_pratique,
+                        membership_date: member.debut_pratique ?? null,
                         sokahan_byakuren: member.sokahan_byakuren ?? false,
                         department_uuid: departmentUuid,
                         division_uuid: divisionUuid,
                         responsibility_uuid: responsibilityUuid,
-                        accessories: member.accessories,
-                        has_gohonzon: member.possede_gohonzon,
-                        date_gohonzon: member.date_gohonzon,
-                        has_tokusso: member.possede_tokusso,
-                        date_tokusso: member.date_tokusso,
-                        has_omamori: member.possede_omamori,
-                        date_omamori: member.date_omamori,
+                        accessories: member.accessories ?? [],
+                        has_gohonzon: member.possede_gohonzon ?? false,
+                        date_gohonzon: member.date_gohonzon ?? null,
+                        has_tokusso: member.possede_tokusso ?? false,
+                        date_tokusso: member.date_tokusso ?? null,
+                        has_omamori: member.possede_omamori ?? false,
+                        date_omamori: member.date_omamori ?? null,
                         structure_id: structure.id,
                         structure_uuid: structure.uuid,
                         status: 'success',
@@ -372,8 +381,25 @@ export class MigrationService {
 
                 
                     console.log(prepareSaveMember);
-                    const saveMember = await this.memberService.store({...prepareSaveMember, uuid: member.id}, admin_uuid);
+                    const saveMember = await this.memberService.storeFromMigration({...prepareSaveMember, uuid: member.id}, admin_uuid);
                     console.log('member ................... OK');
+                    
+                    // creation du compte utilisateur lié au membre
+                    if(member_phone != undefined){
+
+                        const prepareUser : CreateUserDto = {
+                            phone_number: member_phone,
+                            email: member.user_email,
+                            firstname: saveMember.firstname,
+                            lastname: saveMember.lastname,
+                            password: member.user_password_no_hashed,
+                            is_active: true,
+                            member_uuid: saveMember.uuid,
+                        };
+
+                        await this.userService.createUserByMigration(prepareUser);
+                        console.log('user ................... OK');
+                    }
 
                     if(member.accessoires){
                         const tmp_accessories = member.accessoires.split(',');

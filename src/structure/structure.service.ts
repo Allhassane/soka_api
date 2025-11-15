@@ -170,7 +170,6 @@ export class StructureService {
 
   async findByAllChildrens(uuid: string) {
     // 1) Vérifier que le point de départ existe
-    console.log('children' + uuid);
     const start = await this.structureRepo.findOne({
       where: { uuid },
       select: ['id', 'uuid'],
