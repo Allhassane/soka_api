@@ -40,6 +40,7 @@ import { PaymentModule } from './payments/payment.module';
 import { MigrationModule } from './migration/migration.module';
 import { DonatePaymentModule } from './donate-payment/donate-payment.module';
 import { MemberTravelModule } from './member-travel/member-travel.module';
+import { SubscriptionPaymentModule } from './subscription-payment/subscription-payment.module';
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
@@ -106,6 +107,7 @@ import { MemberTravelModule } from './member-travel/member-travel.module';
     MigrationModule,
     DonatePaymentModule,
     MemberTravelModule,
+    SubscriptionPaymentModule
   ],
   controllers: [AppController, RolePermissionController],
   providers: [AppService, RolePermissionService],

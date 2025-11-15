@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
+import { SubscriptionPaymentController } from './subscription-payment.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { SubscriptionPaymentEntity } from './entities/subscription-payment.entity';
 import { LogActivitiesModule } from 'src/log-activities/log-activities.module';
 import { UserModule } from 'src/users/user.module';
 import { User } from 'src/users/entities/user.entity';
@@ -9,17 +11,20 @@ import { DonateEntity } from 'src/donate/entities/donate.entity';
 import { DonatePaymentEntity } from 'src/donate-payment/entities/donate-payment.entity';
 import { DonatePaymentController } from 'src/donate-payment/donate-payment.controller';
 import { DonatePaymentService } from 'src/donate-payment/donate-payment.service';
+import { SubscriptionEntity } from 'src/subscriptions/entities/subscription.entity';
+import { SubscriptionPaymentService } from './subscription-payment.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature(
     [
-      DonatePaymentEntity,
+      SubscriptionPaymentEntity,
       User,
       MemberEntity,
-      DonateEntity
+      DonateEntity,
+      SubscriptionEntity
     ]),LogActivitiesModule,UserModule,PaymentModule],
-  controllers: [DonatePaymentController],
-  providers: [DonatePaymentService],
-  exports: [DonatePaymentService]
+  controllers: [SubscriptionPaymentController],
+  providers: [SubscriptionPaymentService],
+  exports: [SubscriptionPaymentService]
 })
-export class DonatePaymentModule {}
+export class SubscriptionPaymentModule {}

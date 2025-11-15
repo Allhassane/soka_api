@@ -13,6 +13,11 @@ import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 import { LogActivitiesService } from 'src/log-activities/log-activities.service';
 import { User } from 'src/users/entities/user.entity';
 import { CinetPayService } from './cinetpay.service';
+import { StructureEntity } from 'src/structure/entities/structure.entity';
+import { StructureService } from 'src/structure/structure.service';
+import { DonatePaymentEntity } from 'src/donate-payment/entities/donate-payment.entity';
+import { SubscriptionPaymentEntity } from 'src/subscription-payment/entities/subscription-payment.entity';
+import { TransactionWithDetails } from './types/transaction-with-details.type';
 
 @Injectable()
 export class PaymentService {
@@ -29,8 +34,20 @@ export class PaymentService {
     @InjectRepository(DonateEntity)
     private donationRepo: Repository<DonateEntity>,
 
+    @InjectRepository(DonatePaymentEntity)
+    private donatePaymentRepo: Repository<DonatePaymentEntity>,
+
+    @InjectRepository(SubscriptionPaymentEntity)
+    private subscriptionPaymentRepo: Repository<SubscriptionPaymentEntity>,
+
+
+
+
     @InjectRepository(User)
     private userRepo: Repository<User>,
+
+    private structureService: StructureService,
+
 
     private readonly logService: LogActivitiesService,
     private readonly cinetPayService:CinetPayService
@@ -315,6 +332,172 @@ export class PaymentService {
 
     return await this.paymentRepo.save(payment);
   }
+
+
+  async findTransactionsForSubGroups(
+    rootStructureUuid: string,
+    source_uuid: string,
+    admin_uuid: string,
+    page = 1,
+    limit = 50,
+  ) {
+
+
+    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+    if (!admin) {
+      throw new NotFoundException("Identifiant de l'auteur introuvable");
+    }
+
+
+    const sousGroups = await this.structureService.findByAllChildrens(rootStructureUuid);
+
+    if (!sousGroups.length) {
+      return {
+        total: 0,
+        page,
+        limit,
+        sous_groups: [],
+        total_campaign_amount: 0,
+        data: [],
+      };
+    }
+
+    // 3) Query principale (paiements)
+    const qb = this.paymentRepo
+      .createQueryBuilder('p')
+      .leftJoinAndSelect('p.actor', 'actor')
+      .leftJoinAndSelect('actor.structure', 'actorStructure')
+      .leftJoinAndSelect('p.beneficiary', 'beneficiary')
+      .leftJoinAndSelect('beneficiary.structure', 'beneficiaryStructure')
+      .where('p.source_uuid = :source_uuid', { source_uuid })
+      .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups })
+      .orderBy('p.created_at', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [payments, total] = await qb.getManyAndCount();
+
+    let total_campaign_amount = 0;
+
+    const samplePayment = await this.paymentRepo.findOne({
+      where: { source_uuid },
+    });
+
+    if (samplePayment) {
+      if (samplePayment.source === PaymentSource.DONATION) {
+        const donationSum = await this.donatePaymentRepo
+          .createQueryBuilder('d')
+          .select('SUM(d.amount)', 'sum')
+          .where('d.donate_uuid = :id', { id: source_uuid })
+          .andWhere('d.status = :status', { status: GlobalStatus.SUCCESS })
+          .getRawOne();
+
+        total_campaign_amount = Number(donationSum?.sum ?? 0);
+      }
+
+      if (samplePayment.source === PaymentSource.SUBSCRIPTION) {
+        const subscriptionSum = await this.subscriptionPaymentRepo
+          .createQueryBuilder('s')
+          .select('SUM(s.amount)', 'sum')
+          .where('s.subscription_uuid = :id', { id: source_uuid })
+          .andWhere('s.status = :status', { status: GlobalStatus.SUCCESS })
+          .getRawOne();
+
+        total_campaign_amount = Number(subscriptionSum?.sum ?? 0);
+      }
+    }
+
+
+    const result: TransactionWithDetails[] = [];
+
+    for (const p of payments) {
+      let donation: DonatePaymentEntity | null = null;
+      let subscription: SubscriptionPaymentEntity | null = null;
+
+      if (p.source === PaymentSource.DONATION) {
+        donation = await this.donatePaymentRepo.findOne({
+          where: { payment_uuid: p.uuid },
+        });
+      }
+
+      if (p.source === PaymentSource.SUBSCRIPTION) {
+        subscription = await this.subscriptionPaymentRepo.findOne({
+          where: { payment_uuid: p.uuid },
+        });
+      }
+
+      result.push({
+        payment_uuid: p.uuid,
+        source: p.source,
+        source_uuid: p.source_uuid,
+        transaction_id: p.transaction_id,
+        payment_status: p.payment_status,
+        status: p.status,
+        created_at: p.created_at,
+
+        amount_unit: p.amount,
+        quantity: p.quantity,
+        total_amount: p.total_amount,
+
+        actor: p.actor
+          ? {
+              uuid: p.actor.uuid,
+              firstname: p.actor.firstname,
+              lastname: p.actor.lastname,
+              phone: p.actor.phone,
+              structure: p.actor.structure
+                ? { uuid: p.actor.structure.uuid, name: p.actor.structure.name }
+                : null,
+            }
+          : null,
+
+        beneficiary: p.beneficiary
+          ? {
+              uuid: p.beneficiary.uuid,
+              firstname: p.beneficiary.firstname,
+              lastname: p.beneficiary.lastname,
+              phone: p.beneficiary.phone,
+              structure: p.beneficiary.structure
+                ? {
+                    uuid: p.beneficiary.structure.uuid,
+                    name: p.beneficiary.structure.name,
+                  }
+                : null,
+            }
+          : null,
+
+        donation: donation
+          ? {
+              uuid: donation.uuid,
+              amount: donation.amount,
+              status: donation.status,
+              quantity: donation.quantity,
+            }
+          : null,
+
+        subscription: subscription
+          ? {
+              uuid: subscription.uuid,
+              amount: subscription.amount,
+              status: subscription.status,
+              quantity: subscription.quantity,
+            }
+          : null,
+      });
+    }
+
+    return {
+      total,
+      total_campaign_amount,
+      page,
+      limit,
+      root_structure_uuid: rootStructureUuid,
+      sous_groups: sousGroups,
+      source_uuid,
+      data: result,
+    };
+  }
+
 
 
 }
