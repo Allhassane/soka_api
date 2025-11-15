@@ -403,6 +403,7 @@ export class MemberService {
 
         // Collections
         'member_accessories',
+        'member_accessories.accessory',
         'member_responsibilities',
         'member_responsibilities.responsibility',
         'member_responsibilities.responsibility.level'

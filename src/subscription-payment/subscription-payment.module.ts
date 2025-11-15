@@ -8,6 +8,8 @@ import { User } from 'src/users/entities/user.entity';
 import { MemberEntity } from 'src/members/entities/member.entity';
 import { PaymentModule } from 'src/payments/payment.module';
 import { DonateEntity } from 'src/donate/entities/donate.entity';
+import { SubscriptionEntity } from 'src/subscriptions/entities/subscription.entity';
+import { SubscriptionPaymentService } from './subscription-payment.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature(
@@ -15,9 +17,11 @@ import { DonateEntity } from 'src/donate/entities/donate.entity';
       SubscriptionPaymentEntity,
       User,
       MemberEntity,
-      DonateEntity
+      DonateEntity,
+      SubscriptionEntity
     ]),LogActivitiesModule,UserModule,PaymentModule],
   controllers: [SubscriptionPaymentController],
-  providers: [SubscriptionPaymentEntity],
+  providers: [SubscriptionPaymentService],
+  exports: [SubscriptionPaymentService]
 })
 export class SubscriptionPaymentModule {}

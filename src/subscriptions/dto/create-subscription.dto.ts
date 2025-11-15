@@ -46,14 +46,14 @@ export class CreateSubscriptionDto {
   @IsNotEmpty({ message: 'La date de fin est requise' })
   stops_at: Date;
 
-    @ApiProperty({
-      description: "Nombre maximum de paiements par bénéficiaire. Null = illimité.",
-      example: 3,
-    })
-    @IsOptional()
-    @IsInt()
-    @Min(1)
-    max_payments_per_beneficiary?: number | null;
+  @ApiProperty({
+    description: "Nombre maximum de paiements par bénéficiaire. Null = illimité.",
+    example: 3,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  max_payments_per_beneficiary?: number | null;
 
   @ApiPropertyOptional({
     description: 'Statut de la campagne',

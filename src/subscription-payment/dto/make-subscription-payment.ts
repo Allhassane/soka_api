@@ -33,15 +33,6 @@ export class MakeSubscriptionPaymentDto {
   actor_uuid: string;
 
   @ApiPropertyOptional({
-    description: "Montant du don (utilisé uniquement pour les dons libres)",
-    example: 5000,
-  })
-  @IsNumber({}, { message: "Le montant doit être un nombre valide." })
-  @Min(1, { message: "Le montant minimum est 1." })
-  @IsOptional()
-  amount?: number;
-
-  @ApiPropertyOptional({
     description: "Quantité du paiement (généralement 1 pour un don)",
     example: 1,
   })
