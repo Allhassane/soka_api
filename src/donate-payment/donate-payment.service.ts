@@ -45,9 +45,10 @@ export class DonatePaymentService {
 
   async makeDonation(dto: MakeDonationPaymentDto, admin_uuid: string) {
 
+
   const admin = await this.checkAdmin(admin_uuid);
   const beneficiary = await this.findMember(dto.beneficiary_uuid);
-  const actor = await this.findMember(dto.actor_uuid);
+  const actor = await this.findMember(admin.member_uuid);
   const donate = await this.findCampaign(dto.donation_uuid);
 
   // -----------------------------------------

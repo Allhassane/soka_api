@@ -44,7 +44,7 @@ export class SubscriptionPaymentService {
   async makeSubscription(dto: MakeSubscriptionPaymentDto, admin_uuid: string) {
     const admin = await this.checkAdmin(admin_uuid);
     const beneficiary = await this.findMember(dto.beneficiary_uuid);
-    const actor = await this.findMember(dto.actor_uuid);
+    const actor = await this.findMember(admin.member_uuid);
     const subscription = await this.findSubscription(dto.subscription_uuid);
 
     // -----------------------------------------
