@@ -154,9 +154,6 @@ export class MemberService {
       });
     }
 
-    // --------------------------------------------------------------
-    //  🔥🔥 CORRECTION FK : organisation_city_uuid 🔥🔥
-    // --------------------------------------------------------------
     if (dto.organisation_city_uuid) {
       const orgCity = await this.organisationCityRepo.findOne({
         where: { uuid: dto.organisation_city_uuid },

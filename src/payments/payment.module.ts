@@ -10,6 +10,9 @@ import { MemberEntity } from 'src/members/entities/member.entity';
 import { SubscriptionEntity } from 'src/subscriptions/entities/subscription.entity';
 import { DonateEntity } from 'src/donate/entities/donate.entity';
 import { CinetPayService } from './cinetpay.service';
+import { DonatePaymentEntity } from 'src/donate-payment/entities/donate-payment.entity';
+import { SubscriptionPaymentEntity } from 'src/subscription-payment/entities/subscription-payment.entity';
+import { StructureModule } from 'src/structure/structure.module';
 
 @Module({
   imports: [TypeOrmModule.forFeature([
@@ -17,8 +20,10 @@ import { CinetPayService } from './cinetpay.service';
       User,
       MemberEntity,
       SubscriptionEntity,
-      DonateEntity
-  ]),LogActivitiesModule,UserModule],
+      DonateEntity,
+      DonatePaymentEntity,
+      SubscriptionPaymentEntity,
+  ]),LogActivitiesModule,UserModule,StructureModule],
   controllers: [PaymentController],
   providers: [
     PaymentService,
