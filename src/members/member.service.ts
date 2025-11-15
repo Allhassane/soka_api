@@ -367,4 +367,6 @@ if (existingMember) {
       `Suppression logique du membre ${member.firstname} ${member.lastname}`,
     );
   }
+
+
 }
