@@ -15,7 +15,7 @@ export class MigrationController {
     @ApiOperation({ summary: 'Migration des données' })
     @ApiResponse({ status: 200, description: 'Données migrées avec succès.' })
     @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
-    @ApiParam({ name: 'option', type: 'enum', enum: ['departments', 'divisions', 'civilities', 'accessories', 'members'], description: 'Option de migration', required: true })
+    @ApiParam({ name: 'option', type: 'enum', enum: ['departments', 'divisions', 'civilities', 'accessories', 'structures', 'members'], description: 'Option de migration', required: true })
     migrate(@Param('option') option: string, @Request() req: any ) {
         return this.migrationService.migrate(option, req.user.uuid);
     }

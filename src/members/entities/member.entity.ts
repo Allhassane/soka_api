@@ -22,6 +22,8 @@ import { DepartmentEntity } from 'src/departments/entities/department.entity';
 import { DivisionEntity } from 'src/divisions/entities/division.entity';
 import { StructureEntity } from 'src/structure/entities/structure.entity';
 import { MemberResponsibilityEntity } from 'src/⁠member-responsibility/entities/member-responsibility.entity';
+import { MemberTravelEntity } from 'src/member-travel/entities/member-travel.entity';
+import { v4 as uuid } from 'uuid';
 
 function slugify(s: string) {
   return s
@@ -42,8 +44,8 @@ export class MemberEntity extends DateTimeEntity {
   uuid: string;
 
   @BeforeInsert()
-  setUuid() {
-    this.uuid = crypto.randomUUID();
+  ensureUuid() {
+    this.uuid = this.uuid ?? uuid();
   }
 
 
@@ -208,4 +210,7 @@ export class MemberEntity extends DateTimeEntity {
 
   @OneToMany(() => MemberResponsibilityEntity, (mr) => mr.member)
   member_responsibilities: MemberResponsibilityEntity[];
+
+  @OneToMany(() => MemberTravelEntity, (mt) => mt.member)
+  member_travels: MemberTravelEntity[];
 }

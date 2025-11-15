@@ -36,10 +36,10 @@ import { OrganisationCityModule } from './organisation_cities/organisation_city.
 //import { PermissionsModule } from './permissions/permission.module';
 import { DonateModule } from './donate/donate.module';
 import { SubscriptionModule } from './subscriptions/subscription.module';
-import { PaymentEntity } from './payments/entities/payment.entity';
 import { PaymentModule } from './payments/payment.module';
 import { MigrationModule } from './migration/migration.module';
 import { DonatePaymentModule } from './donate-payment/donate-payment.module';
+import { MemberTravelModule } from './member-travel/member-travel.module';
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
@@ -104,7 +104,10 @@ import { DonatePaymentModule } from './donate-payment/donate-payment.module';
     SubscriptionModule,
     PaymentModule,
     MigrationModule,
-    DonatePaymentModule
-],
+    DonatePaymentModule,
+    MemberTravelModule,
+  ],
+  controllers: [AppController, RolePermissionController],
+  providers: [AppService, RolePermissionService],
 })
 export class AppModule {}

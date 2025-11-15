@@ -1,7 +1,12 @@
-import { IsNotEmpty, IsString, IsInt } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsInt } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateLevelDto {
+  @ApiProperty({ example: 'uuid', description: 'uuid du niveau' })
+  @IsOptional()
+  @IsString()
+  uuid?: string;
+
   @ApiProperty({ example: 'Region', description: 'Nom du niveau' })
   @IsNotEmpty()
   @IsString()

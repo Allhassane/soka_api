@@ -10,6 +10,7 @@ import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { CreateStructureDto } from './dto/create-structure.dto';
 import { UpdateStructureDto } from './dto/update-structure.dto';
 import { LevelService } from 'src/level/level.service';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class StructureService {
@@ -40,6 +41,7 @@ export class StructureService {
     }
 
     const newStructure = this.structureRepo.create({
+      uuid: createStructureDto.uuid ?? uuidv4(),
       name: createStructureDto.name,
       ...(admin_uuid ? { admin_uuid } : {}),
       ...(createStructureDto.parent_uuid
