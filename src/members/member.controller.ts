@@ -71,6 +71,15 @@ export class MemberController {
     return this.membreService.verifyPhoneNumber(payload);
   }
 
+  // @Post('/verify/email')
+  // @ApiOperation({ summary: 'Verifier si le numero de telephone est disponible ' })
+  // @ApiResponse({ status: 200, description: 'Numero de telephone disponible.' })
+  // @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
+  // @ApiBody({ type: VerifyPhoneNumberDto })
+  // verifyEmail(@Body() payload: VerifyEmailDto) {
+  //   return this.membreService.verifyPhoneNumber(payload);
+  // }
+
   
 
   @Get('by-structure/:uuid')

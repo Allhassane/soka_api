@@ -588,6 +588,9 @@ export class MemberService {
   async findAllBeneficiaryByUserConnected(
     admin_uuid: string,
   ): Promise<any> {
+    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+    if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
+
     const sous_groupes = await this.prepareMemberList(admin_uuid);
 
     const members = await this.memberRepo.find({
@@ -602,6 +605,7 @@ export class MemberService {
         firstname: member.firstname,
         lastname: member.lastname,
         phone_number: member.phone,
+        selected: admin.member_uuid == member.uuid ? true: false,
       }))
     }
   }
