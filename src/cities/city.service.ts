@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { CityEntity } from './entities/city.entity';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class CityService {
@@ -42,6 +43,7 @@ export class CityService {
     }
 
     const newJob = this.cityRepo.create({
+      uuid: payload.uuid ?? uuidv4(),
       name: payload.name,
       admin_uuid: admin_uuid ?? null,
     });
@@ -80,6 +82,18 @@ export class CityService {
       admin.id,
       'Recupérer une localité'
     );
+
+    return city;
+  }
+
+  async findOneByName(name: string) {
+    const city = await this.cityRepo.findOne({ where: { name } });
+
+    return city;
+  }
+
+  async findOneBySlug(slug: string) {
+    const city = await this.cityRepo.findOne({ where: { slug } });
 
     return city;
   }

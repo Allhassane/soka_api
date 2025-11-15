@@ -12,6 +12,11 @@ import {
 
 export class CreateMemberDto {
 
+  @ApiPropertyOptional({ description: "UUID du membre" })
+  @IsOptional()
+  @IsString()
+  uuid?: string;
+
   @ApiPropertyOptional({ description: "URL ou chemin de la photo du membre" })
   @IsOptional()
   @IsString()

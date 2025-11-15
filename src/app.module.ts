@@ -38,6 +38,7 @@ import { DonateModule } from './donate/donate.module';
 import { SubscriptionModule } from './subscriptions/subscription.module';
 import { PaymentEntity } from './payments/entities/payment.entity';
 import { PaymentModule } from './payments/payment.module';
+import { MigrationModule } from './migration/migration.module';
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
@@ -100,9 +101,8 @@ import { PaymentModule } from './payments/payment.module';
     DonateModule,
     OrganisationCityModule,
     SubscriptionModule,
-    PaymentModule
-  ],
-  controllers: [AppController, RolePermissionController],
-  providers: [AppService, RolePermissionService],
+    PaymentModule,
+    MigrationModule,
+],
 })
 export class AppModule {}

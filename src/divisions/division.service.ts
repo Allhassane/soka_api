@@ -5,6 +5,7 @@ import { DivisionEntity } from './entities/division.entity';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
 import { DepartmentEntity } from 'src/departments/entities/department.entity';
+import { v4 as uuid } from 'uuid';
 
 @Injectable()
 export class DivisionService {
@@ -59,10 +60,12 @@ export class DivisionService {
     }
 
     const newDivision = this.divisionRepo.create({
+      uuid: payload.uuid ?? uuid(),
       name: payload.name,
       description: payload.description ?? null,
       department_uuid: department.uuid,
       department_id: department.id,
+      gender: payload.gender ?? "mixte",
       admin_uuid,
       status: 'enable',
     });
@@ -96,6 +99,12 @@ export class DivisionService {
       admin.id,
       'Recupérer un division',
     );
+
+    return division;
+  }
+
+  async findOneByName(name: string) {
+    const division = await this.divisionRepo.findOne({ where: { name } });
 
     return division;
   }

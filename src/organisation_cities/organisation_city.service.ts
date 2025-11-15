@@ -83,6 +83,17 @@ export class OrganisationCityService {
 
     return city;
   }
+  async findOneByName(name: string) {
+    const city = await this.organisationCityRepo.findOne({ where: { name } });
+
+    return city;
+  }
+
+  async findOneBySlug(slug: string) {
+    const city = await this.organisationCityRepo.findOne({ where: { slug } });
+
+    return city;
+  }
 
   async update(uuid: string,payload: any,admin_uuid: string) {
     const { name, gender } = payload;

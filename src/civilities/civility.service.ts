@@ -91,6 +91,16 @@ export class CivilityService {
     return civility;
   }
 
+  async findOneByName(name: string) {
+    const civility = await this.civilitiesRepo.findOne({ where: { name } });
+    return civility;
+  }
+
+  async findOneByGender(gender: "homme" | "femme" | "mixte") {
+    const civility = await this.civilitiesRepo.findOne({ where: { gender } });
+    return civility;
+  }
+
   async update(uuid: string, payload: any, admin_uuid: string) {
     const { name, gender } = payload;
 
