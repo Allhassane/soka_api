@@ -79,103 +79,100 @@ export class PaymentService {
   // ----------------------------------------------------------
   // CRÉER UN PAIEMENT
   // ----------------------------------------------------------
-async store(dto: CreatePaymentDto, admin_uuid: string): Promise<any> {
+  async store(dto: CreatePaymentDto, admin_uuid: string): Promise<any> {
 
-  const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-  if (!admin) {
-    throw new NotFoundException("Identifiant de l'auteur introuvable");
+    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+    if (!admin) {
+      throw new NotFoundException("Identifiant de l'auteur introuvable");
+    }
+
+    // --- Vérifier si le bénéficiaire existe ---
+    const beneficiary = await this.memberRepo.findOne({ where: { uuid: dto.beneficiary_uuid } });
+    if (!beneficiary)
+      throw new NotFoundException('Bénéficiaire introuvable.');
+
+    // --- Vérifier l'acteur ---
+    const actor = await this.memberRepo.findOne({ where: { uuid: dto.actor_uuid } });
+    if (!actor)
+      throw new NotFoundException('Acteur introuvable.');
+
+    let unitAmount = dto.amount ?? 0;
+
+    // ------------------------------------------------------
+    //  SOURCE : DONATION
+    // ------------------------------------------------------
+    if (dto.source === PaymentSource.DONATION) {
+      const campaign = await this.donationRepo.findOne({ where: { uuid: dto.source_uuid } });
+
+      if (!campaign)
+        throw new NotFoundException("Campagne de don introuvable.");
+
+      if (!dto.amount)
+        throw new BadRequestException("Le montant du don est requis.");
+    }
+
+    // ------------------------------------------------------
+    //  SOURCE : SUBSCRIPTION
+    // ------------------------------------------------------
+    if (dto.source === PaymentSource.SUBSCRIPTION) {
+      const subscription = await this.subscriptionRepo.findOne({ where: { uuid: dto.source_uuid } });
+
+      if (!subscription)
+        throw new NotFoundException("Abonnement introuvable.");
+
+      unitAmount = subscription.amount;
+    }
+
+    // ------------------------------------------------------
+    //  CALCUL TOTAL
+    // ------------------------------------------------------
+    const quantity = dto.quantity ?? 1;
+    const total = unitAmount * quantity;
+
+    // ------------------------------------------------------
+    //  INTÉGRATION CINETPAY
+    // ------------------------------------------------------
+
+    // Transaction unique
+    const transactionId = `TRX-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
+
+    // Description lisible dans le dashboard CinetPay
+    const description = `Paiement ${dto.source} par ${dto.actor_name}`;
+
+    // Appel API CinetPay
+    const cinetResponse = await this.cinetPayService.initPayment(
+      total,
+      description,
+      transactionId,
+    );
+
+    // ------------------------------------------------------
+    //  SAUVEGARDE DU PAIEMENT
+    // ------------------------------------------------------
+    const payment = this.paymentRepo.create({
+      ...dto,
+      total_amount: total,
+      transaction_id: transactionId,
+      payment_url: cinetResponse.payment_url,
+    });
+
+    const saved = await this.paymentRepo.save(payment);
+
+    await this.logService.logAction(
+      'payments-store',
+      admin.id,
+      `Paiement initialisé (${saved.uuid})`,
+    );
+
+    // FRONT doit rediriger l'utilisateur vers cette URL
+    return {
+      message: "Paiement initié avec succès.",
+      payment_uuid: saved.uuid,
+      transaction_id: transactionId,
+      amount: total,
+      payment_url: cinetResponse.payment_url,
+    };
   }
-
-  // --- Vérifier si le bénéficiaire existe ---
-  const beneficiary = await this.memberRepo.findOne({ where: { uuid: dto.beneficiary_uuid } });
-  if (!beneficiary)
-    throw new NotFoundException('Bénéficiaire introuvable.');
-
-  // --- Vérifier l'acteur ---
-  const actor = await this.memberRepo.findOne({ where: { uuid: dto.actor_uuid } });
-  if (!actor)
-    throw new NotFoundException('Acteur introuvable.');
-
-  let unitAmount = dto.amount ?? 0;
-
-  // ------------------------------------------------------
-  //  SOURCE : DONATION
-  // ------------------------------------------------------
-  if (dto.source === PaymentSource.DONATION) {
-    const campaign = await this.donationRepo.findOne({ where: { uuid: dto.source_uuid } });
-
-    if (!campaign)
-      throw new NotFoundException("Campagne de don introuvable.");
-
-    if (!dto.amount)
-      throw new BadRequestException("Le montant du don est requis.");
-  }
-
-  // ------------------------------------------------------
-  //  SOURCE : SUBSCRIPTION
-  // ------------------------------------------------------
-  if (dto.source === PaymentSource.SUBSCRIPTION) {
-    const subscription = await this.subscriptionRepo.findOne({ where: { uuid: dto.source_uuid } });
-
-    if (!subscription)
-      throw new NotFoundException("Abonnement introuvable.");
-
-    unitAmount = subscription.amount;
-  }
-
-
-
-  // ------------------------------------------------------
-  //  CALCUL TOTAL
-  // ------------------------------------------------------
-  const quantity = dto.quantity ?? 1;
-  const total = unitAmount * quantity;
-
-  // ------------------------------------------------------
-  //  INTÉGRATION CINETPAY
-  // ------------------------------------------------------
-
-  // Transaction unique
-  const transactionId = `TRX-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
-
-  // Description lisible dans le dashboard CinetPay
-  const description = `Paiement ${dto.source} par ${dto.actor_name}`;
-
-  // Appel API CinetPay
-  const cinetResponse = await this.cinetPayService.initPayment(
-    total,
-    description,
-    transactionId,
-  );
-
-  // ------------------------------------------------------
-  //  SAUVEGARDE DU PAIEMENT
-  // ------------------------------------------------------
-  const payment = this.paymentRepo.create({
-    ...dto,
-    total_amount: total,
-    transaction_id: transactionId,
-    payment_url: cinetResponse.payment_url,
-    payment_status: GlobalStatus.PENDING,
-  });
-
-  const saved = await this.paymentRepo.save(payment);
-
-  await this.logService.logAction(
-    'payments-store',
-    admin.id,
-    `Paiement initialisé (${saved.uuid})`,
-  );
-
-  // FRONT doit rediriger l'utilisateur vers cette URL
-  return {
-    message: "Paiement initié avec succès.",
-    payment_uuid: saved.uuid,
-    transaction_id: transactionId,
-    amount: total,
-    payment_url: cinetResponse.payment_url,
-  };
-}
 
 
   // ----------------------------------------------------------

@@ -7,6 +7,7 @@ import {
   OneToMany,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { MemberAccessoryEntity } from 'src/member-accessories/entities/member-accessories.entity';
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
@@ -37,6 +38,7 @@ export class MemberEntity extends DateTimeEntity {
   id: number;
 
   @Column({ type: 'char', length: 36 })
+  @Index()
   uuid: string;
 
   @BeforeInsert()
