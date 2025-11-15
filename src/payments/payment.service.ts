@@ -389,6 +389,7 @@ export class PaymentService {
           .createQueryBuilder('d')
           .select('SUM(d.amount)', 'sum')
           .where('d.donate_uuid = :id', { id: source_uuid })
+          .andWhere('d.status = :status', { status: GlobalStatus.SUCCESS })
           .getRawOne();
 
         total_campaign_amount = Number(donationSum?.sum ?? 0);
@@ -399,6 +400,7 @@ export class PaymentService {
           .createQueryBuilder('s')
           .select('SUM(s.amount)', 'sum')
           .where('s.subscription_uuid = :id', { id: source_uuid })
+          .andWhere('s.status = :status', { status: GlobalStatus.SUCCESS })
           .getRawOne();
 
         total_campaign_amount = Number(subscriptionSum?.sum ?? 0);
