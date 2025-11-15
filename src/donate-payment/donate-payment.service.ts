@@ -40,7 +40,7 @@ export class DonatePaymentService {
   ) {}
 
   // ============================================================
-  //  1. INITIER UN DON + PAIEMENT
+  //   INITIER UN DON + PAIEMENT
   // ============================================================
 
   async makeDonation(dto: MakeDonationPaymentDto, admin_uuid: string) {
@@ -310,7 +310,6 @@ export class DonatePaymentService {
       );
     }
   }
-
 
 
   async delete(uuid: string, admin_uuid: string) {
