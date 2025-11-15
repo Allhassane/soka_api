@@ -45,7 +45,7 @@ export class MemberResponsibilityEntity extends DateTimeEntity {
   @JoinColumn({ name: 'responsibility_id', referencedColumnName: 'id' })
   responsibility?: ResponsibilityEntity | null;
 
-  @Column({ type: 'varchar', length: 36, nullable: false })
+  @Column({ type: 'varchar', length: 36, nullable: false, default:'high' })
   @IsNotEmpty()
   priority: string;
 

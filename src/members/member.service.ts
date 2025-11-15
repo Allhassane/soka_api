@@ -299,6 +299,7 @@ export class MemberService {
           member: updated,
           responsibility_uuid: dto.responsibility_uuid,
           responsibility,
+          priority:'high'
         });
         await this.memberResponsibilityRepo.save(memberResponsibility);
       }

@@ -26,6 +26,11 @@ export class DonateEntity extends DateTimeEntity {
   @Column({ nullable: true, default: 0, type: 'double' })
   amount: number;
 
+  @Column({ type: 'int', nullable: true })
+  max_payments_per_beneficiary: number | null;
+
+
+
   @Column({ nullable: true, type: 'text' })
   history: string;
 
