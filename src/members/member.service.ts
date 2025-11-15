@@ -30,6 +30,7 @@ import { VerifyPhoneNumberDto } from './dto/verify-phone.dto';
 import { v4 as uuidv4 } from 'uuid';
 import { StructureService } from 'src/structure/structure.service';
 import { MemberList } from 'src/shared/interfaces/member.interface';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 
 @Injectable()
 export class MemberService {
@@ -624,6 +625,20 @@ export class MemberService {
 
     return {
       message: member ? 'Le numero de telephone est deja utilise.' : 'Le numero de telephone est disponible.',
+      is_available: !member,
+    }
+  }
+
+  async verifyEmail(payload: VerifyEmailDto) {
+
+    let member;
+    if(payload.email) {
+      member = await this.memberRepo.findOne({ where: { email: payload.email } });
+    }
+
+    //if (member) throw new BadRequestException('Le numero de telephone est deja utilise.');
+    return {
+      message: member ? 'L\'email est deja utilise.' : 'L\'email est disponible.',
       is_available: !member,
     }
   }

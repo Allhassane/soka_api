@@ -339,6 +339,13 @@ export class MigrationService {
                         member_phone = verifyPhoneQuery.is_available ? member.contact : undefined;
                     }
 
+                    const verifyEmailQuery = await this.memberService.verifyEmail({email: member.email});
+                    
+                    let member_email = undefined;
+                    if(member.email){
+                        member_email = verifyEmailQuery.is_available ? member.email : undefined;
+                    }
+
                     const prepareSaveMember: CreateMemberDto = {
                         picture: member.picture,
                         matricule: member.matricule,
@@ -359,7 +366,7 @@ export class MigrationService {
                         job_uuid: jobUuid,
                         phone: member_phone,
                         phone_whatsapp: member.whatsapp ?? null,
-                        email: member.email ?? null,
+                        email: member_email,
                         tutor_name: member.contact_urgence_nom ?? null,
                         tutor_phone: member.contact_urgence_numero ?? null,
                         organisation_city_uuid: organisationUuid,
@@ -386,11 +393,11 @@ export class MigrationService {
                     console.log('member ................... OK');
                     
                     // creation du compte utilisateur lié au membre
-                    if(member_phone != undefined){
+                    if(member_phone != undefined && verifyPhoneQuery.is_available){
 
                         const prepareUser : CreateUserDto = {
                             phone_number: member_phone,
-                            email: member.user_email,
+                            email: member_email,
                             firstname: saveMember.firstname,
                             lastname: saveMember.lastname,
                             password: member.user_password_no_hashed,
