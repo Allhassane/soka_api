@@ -15,12 +15,18 @@ import { PaymentSource } from 'src/payments/dto/create-payment.dto';
 import { PaymentService } from 'src/payments/payment.service';
 import axios from 'axios';
 import { PaymentStatus } from 'src/payments/entities/payment.entity';
+import { DonateEntity } from 'src/donate/entities/donate.entity';
+import { DonateCategory } from 'src/shared/enums/donate.enum';
 
 @Injectable()
 export class DonatePaymentService {
   constructor(
     @InjectRepository(DonatePaymentEntity)
     private readonly donateRepo: Repository<DonatePaymentEntity>,
+
+    @InjectRepository(DonateEntity)
+    private readonly donateCampaignRepo: Repository<DonateEntity>,
+
 
     private readonly logService: LogActivitiesService,
 
@@ -36,62 +42,140 @@ export class DonatePaymentService {
   // ============================================================
   //  1. INITIER UN DON + PAIEMENT
   // ============================================================
+
   async makeDonation(dto: MakeDonationPaymentDto, admin_uuid: string) {
-    const admin = await this.checkAdmin(admin_uuid);
 
-    const beneficiary = await this.findMember(dto.beneficiary_uuid);
-    const actor = await this.findMember(dto.actor_uuid);
-    const donate = await this.findCampaign(dto.donation_uuid);
+  const admin = await this.checkAdmin(admin_uuid);
+  const beneficiary = await this.findMember(dto.beneficiary_uuid);
+  const actor = await this.findMember(dto.actor_uuid);
+  const donate = await this.findCampaign(dto.donation_uuid);
 
-    if (!dto.amount || dto.amount <= 0)
-      throw new BadRequestException('Le montant du don doit être positif.');
+  // -----------------------------------------
+  // Vérification période de validité du don
+  // -----------------------------------------
+    const now = new Date();
+    const start = new Date(donate.starts_at);
+    const stop = new Date(donate.stops_at);
 
-    const description = `Paiement donation par ${actor.firstname} ${actor.lastname}`;
+    if (now < start) {
+      throw new BadRequestException(
+        `Cette campagne de don n'est pas encore ouverte. Elle démarre le ${start.toLocaleDateString()}.`
+      );
+    }
 
-    // -------------------------------
-    // Paiement via PaymentService
-    // -------------------------------
-    const paymentResult = await this.paymentService.store(
-      {
-        source: PaymentSource.DONATION,
-        source_uuid: donate.uuid,
+    if (now > stop) {
+      throw new BadRequestException(
+        `Cette campagne de don est déjà clôturée depuis le ${stop.toLocaleDateString()}.`
+      );
+    }
 
+  // -------------------------------
+  //  Vérifier le quota de paiements
+  // -------------------------------
+  // On suppose un champ : donate.max_payments_per_beneficiary (number | null)
+  if (
+    donate.max_payments_per_beneficiary &&
+    donate.max_payments_per_beneficiary > 0
+  ) {
+    const existingCount = await this.donateRepo.count({
+      where: {
+        donate_uuid: donate.uuid,
         beneficiary_uuid: beneficiary.uuid,
-        beneficiary_name: `${beneficiary.firstname} ${beneficiary.lastname}`,
-
-        actor_uuid: actor.uuid,
-        actor_name: `${actor.firstname} ${actor.lastname}`,
-
-        amount: dto.amount,
-        quantity: 1,
       },
-      admin_uuid,
-    );
-
-    // -------------------------------
-    // Sauvegarde du DON
-    // -------------------------------
-    const donation = this.donateRepo.create({
-      amount: dto.amount,
-      beneficiary_uuid: beneficiary.uuid,
-      beneficiary_name: `${beneficiary.firstname} ${beneficiary.lastname}`,
-      actor_uuid: actor.uuid,
-      actor_name: `${actor.firstname} ${actor.lastname}`,
-      donate_uuid: donate.uuid,
-      payment_uuid: paymentResult.uuid,
-     // status: GlobalStatus.PENDING,
     });
 
-    const saved = await this.donateRepo.save(donation);
-
-    return {
-      message: 'Don initié avec succès',
-      donation_uuid: saved.uuid,
-      payment_uuid: paymentResult.uuid,
-      payment_url: paymentResult.payment_url,
-      transaction_id: paymentResult.transactionId,
-    };
+    if (existingCount >= donate.max_payments_per_beneficiary) {
+      throw new BadRequestException(
+        `Ce bénéficiaire a déjà atteint le nombre maximum de paiements autorisés pour cette campagne.`,
+      );
+    }
   }
+
+  let unitAmount: number;
+  let quantity: number;
+
+  // Toujours s’assurer que la quantité est un entier >= 1
+  const rawQuantity = dto.quantity ?? 1;
+  if (!Number.isInteger(rawQuantity) || rawQuantity < 1) {
+    throw new BadRequestException(
+      'La quantité doit être un entier supérieur ou égal à 1.',
+    );
+  }
+  quantity = rawQuantity;
+
+  if (donate.category === DonateCategory.FIXIED_AMOUNT) {
+    // Montant imposé par la campagne
+    if (!donate.amount || donate.amount <= 0) {
+      throw new BadRequestException(
+        "Le montant fixe configuré pour cette campagne est invalide.",
+      );
+    }
+
+    unitAmount = donate.amount;
+    // On ignore dto.amount même s’il est envoyé par le frontend
+  } else {
+    // FREE_AMOUNT
+    if (!dto.amount || dto.amount <= 0) {
+      throw new BadRequestException(
+        'Le montant du don est obligatoire et doit être positif pour une campagne à montant libre.',
+      );
+    }
+
+    unitAmount = dto.amount;
+  }
+
+  const total = unitAmount * quantity;
+
+  const description = `Paiement donation par ${actor.firstname} ${actor.lastname}`;
+
+  // -------------------------------
+  // Appel PaymentService (CinetPay inclus)
+  // -------------------------------
+  const paymentResult = await this.paymentService.store(
+    {
+      source: PaymentSource.DONATION,
+      source_uuid: donate.uuid,
+
+      beneficiary_uuid: beneficiary.uuid,
+      beneficiary_name: `${beneficiary.firstname} ${beneficiary.lastname}`,
+
+      actor_uuid: actor.uuid,
+      actor_name: `${actor.firstname} ${actor.lastname}`,
+
+      amount: unitAmount, // montant unitaire
+      quantity,           // quantité validée
+    },
+    admin_uuid,
+  );
+
+  console.log('Paiement via PaymentService :', paymentResult);
+
+  // -------------------------------
+  // 7. Sauvegarde du DON (paiement de don)
+  // -------------------------------
+  const donation = this.donateRepo.create({
+    amount: total, // montant total effectivement payé
+    quantity,
+    beneficiary_uuid: beneficiary.uuid,
+    beneficiary_name: `${beneficiary.firstname} ${beneficiary.lastname}`,
+    actor_uuid: actor.uuid,
+    actor_name: `${actor.firstname} ${actor.lastname}`,
+    donate_uuid: donate.uuid,
+    payment_uuid: paymentResult.payment_uuid,
+    status: GlobalStatus.PENDING,
+  });
+
+  const saved = await this.donateRepo.save(donation);
+
+  return {
+    message: 'Don initié avec succès',
+    donation_uuid: saved.uuid,
+    payment_uuid: paymentResult.payment_uuid,
+    transaction_id: paymentResult.transaction_id,
+    amount: total,
+    payment_url: paymentResult.payment_url,
+  };
+}
 
   async findAll(page = 1, limit = 20, admin_uuid: string) {
     await this.checkAdmin(admin_uuid);
@@ -261,7 +345,7 @@ export class DonatePaymentService {
   }
 
   private async findCampaign(uuid: string) {
-    const campaign = await this.donateRepo.findOne({ where: { uuid } });
+    const campaign = await this.donateCampaignRepo.findOne({ where: { uuid } });
     if (!campaign) throw new NotFoundException('Campagne de dons introuvable');
     return campaign;
   }

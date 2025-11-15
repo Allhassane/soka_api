@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsOptional, IsString, MaxLength, IsEnum, IsNumber, IsDate, IsInt } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MaxLength, IsEnum, IsNumber, IsDate, IsInt, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -45,6 +45,15 @@ export class CreateSubscriptionDto {
   @IsDate({ message: 'La date de fin doit être une date valide' })
   @IsNotEmpty({ message: 'La date de fin est requise' })
   stops_at: Date;
+
+    @ApiProperty({
+      description: "Nombre maximum de paiements par bénéficiaire. Null = illimité.",
+      example: 3,
+    })
+    @IsOptional()
+    @IsInt()
+    @Min(1)
+    max_payments_per_beneficiary?: number | null;
 
   @ApiPropertyOptional({
     description: 'Statut de la campagne',

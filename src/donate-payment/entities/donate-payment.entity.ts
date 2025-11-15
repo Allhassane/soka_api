@@ -32,8 +32,12 @@ export class DonatePaymentEntity extends DateTimeEntity {
 
   @Column({ type: 'char', length: 36 })
   donate_uuid: string;
+
   @Column({ type: 'char', length: 36 })
   payment_uuid: string;
+
+  @Column({ type: 'int', default: 1 })
+  quantity: number;
 
   @Column({
     type: 'enum',

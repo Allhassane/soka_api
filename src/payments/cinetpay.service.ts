@@ -93,7 +93,7 @@ export class CinetPayService {
         }
       };
 
-      console.log('Payload envoyé à CinetPay :', payload);
+      //console.log('Payload envoyé à CinetPay :', payload);
 
       const response = await axios.post(
         'https://api-checkout.cinetpay.com/v2/payment',
@@ -101,7 +101,7 @@ export class CinetPayService {
         { headers: { 'Content-Type': 'application/json' } }
       );
 
-      console.log('Réponse CinetPay :', response.data);
+    //  console.log('Réponse CinetPay :', response.data);
 
       if (response.data.code !== '201') {
         throw new InternalServerErrorException(
