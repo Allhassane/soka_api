@@ -7,6 +7,7 @@ import {
   OneToMany,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { MemberAccessoryEntity } from 'src/member-accessories/entities/member-accessories.entity';
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
@@ -21,6 +22,8 @@ import { DepartmentEntity } from 'src/departments/entities/department.entity';
 import { DivisionEntity } from 'src/divisions/entities/division.entity';
 import { StructureEntity } from 'src/structure/entities/structure.entity';
 import { MemberResponsibilityEntity } from 'src/⁠member-responsibility/entities/member-responsibility.entity';
+import { MemberTravelEntity } from 'src/member-travel/entities/member-travel.entity';
+import { v4 as uuid } from 'uuid';
 
 function slugify(s: string) {
   return s
@@ -32,16 +35,17 @@ function slugify(s: string) {
 }
 
 @Entity({ name: 'members' })
+@Index('uniq_members_uuid', ['uuid'], { unique: true })
 export class MemberEntity extends DateTimeEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'char', length: 36 })
+  @Column({ type: 'char', length: 36, unique: true })
   uuid: string;
 
   @BeforeInsert()
-  setUuid() {
-    this.uuid = crypto.randomUUID();
+  ensureUuid() {
+    this.uuid = this.uuid ?? uuid();
   }
 
 
@@ -206,4 +210,7 @@ export class MemberEntity extends DateTimeEntity {
 
   @OneToMany(() => MemberResponsibilityEntity, (mr) => mr.member)
   member_responsibilities: MemberResponsibilityEntity[];
+
+  @OneToMany(() => MemberTravelEntity, (mt) => mt.member)
+  member_travels: MemberTravelEntity[];
 }

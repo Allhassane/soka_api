@@ -27,7 +27,7 @@ export class LevelService {
 
     const level = this.levelRepo.create({
       ...dto,
-      uuid: uuidv4(),
+      uuid: dto.uuid ?? uuidv4(),
     });
 
     return this.levelRepo.save(level);

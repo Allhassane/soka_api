@@ -24,6 +24,9 @@ import { MemberAccessoryService } from 'src/member-accessories/member-accessorie
 import { MemberResponsibilityService } from 'src/⁠member-responsibility/⁠member-responsibility.service';
 import { CreateMemberResponsibilityDto } from 'src/⁠member-responsibility/dto/create-member-responsibility.dto';
 import { slugify } from 'src/shared/functions/slug';
+import { CreateLevelDto } from 'src/level/dto/create-level.dto';
+import { CreateStructureDto } from 'src/structure/dto/create-structure.dto';
+import { MIGRATION_URL } from 'src/shared/constants/constants';
 
 @Injectable()
 export class MigrationService {
@@ -48,7 +51,7 @@ export class MigrationService {
 
     async migrate(option: string, admin_uuid: string) {
         
-        const query = await fetch('http://127.0.0.1:8000/api/v1/migration?option=' + option);
+        const query = await fetch(MIGRATION_URL + '/migration?option=' + option);
         const response = await query.json();
 
         const data = response.data;
@@ -118,6 +121,43 @@ export class MigrationService {
                     await this.accessoryService.store(prepare, admin_uuid);
                 }
             }
+        }else if(option == "structures"){
+
+            const {levels, structures} = data;
+            
+            for(const item of levels){
+                const prepare: CreateLevelDto = {
+                    uuid: item.id,
+                    name: item.name,
+                    order: item.order+1,
+                    category: "level",
+                }
+
+                let level = await this.levelService.findOneByName(item.name);
+                if(!level){
+                    level = await this.levelService.create(prepare);
+                }
+
+                const queryStructs = await fetch(MIGRATION_URL +'/migration/find-structure-by-level?level_id=' + level.uuid);
+                const results = await queryStructs.json();
+
+                const structs = results.data;
+
+                for(const struct of structs){
+                    let parent;
+                    if(struct.parent_id){
+                        parent = await this.structureService.findOne(struct.parent_id);
+                    }
+                    const prepareStruct: CreateStructureDto = {
+                        uuid: struct.id,
+                        name: struct.name,
+                        parent_uuid: parent ? parent.uuid : null,
+                    }
+                    await this.structureService.create(prepareStruct);
+                }
+
+            }
+
         }else if(option == 'members'){
             
             let x = 0;

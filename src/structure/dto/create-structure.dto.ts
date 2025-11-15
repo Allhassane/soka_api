@@ -3,6 +3,15 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateStructureDto {
   @ApiProperty({
+    description: 'uuid de la structure',
+    example: '',
+  })
+  @IsString()
+  @IsOptional()
+  @MaxLength(150)
+  uuid?: string;
+
+  @ApiProperty({
     description: 'Nom de la structure',
     example: 'Structure Lorem',
   })

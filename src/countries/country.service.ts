@@ -301,6 +301,12 @@ export class CountryService {
     return country;
   }
 
+  async findByUuid(uuid: string) {
+    const country = await this.countryRepo.findOne({ where: { uuid } });
+
+    return country;
+  }
+
   async findOneByName(name: string) {
     const country = await this.countryRepo.findOne({ where: { name } });
 
