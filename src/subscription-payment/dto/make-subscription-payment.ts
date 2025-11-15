@@ -24,13 +24,6 @@ export class MakeSubscriptionPaymentDto {
   @IsNotEmpty({ message: "Le bénéficiaire est requis." })
   beneficiary_uuid: string;
 
-  @ApiProperty({
-    description: "UUID de l'acteur qui initie le paiement",
-    example: "d77b6f19-9c72-4db7-921d-ecf2c934dfa1",
-  })
-  @IsUUID()
-  @IsNotEmpty({ message: "L'acteur du paiement est requis." })
-  actor_uuid: string;
 
   @ApiPropertyOptional({
     description: "Quantité du paiement (généralement 1 pour un don)",
