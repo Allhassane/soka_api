@@ -16,6 +16,8 @@ import { ResponsibilityService } from 'src/responsibilities/reponsibility.servic
 import { AccessoryService } from 'src/accessories/accessory.service';
 import { MemberAccessoryEntity } from 'src/member-accessories/entities/member-accessories.entity';
 import { UserService } from 'src/users/user.service';
+import { ResponsibilityEntity } from 'src/responsibilities/entities/responsibility.entity';
+import { StructureEntity } from 'src/structure/entities/structure.entity';
 
 @Injectable()
 export class MemberService {
@@ -35,10 +37,17 @@ export class MemberService {
 
     @InjectRepository(MemberAccessoryEntity)
     private readonly memberAccessoryRepo: Repository<MemberAccessoryEntity>,
-            
+    
+    //@InjectRepository(ResponsibilityEntity)
     private readonly responsibilityService: ResponsibilityService,
 
-    private readonly accessoryService: AccessoryService,
+    private readonly accessoryService: AccessoryService, 
+
+    @InjectRepository(ResponsibilityEntity)
+    private readonly responsibilityRepo: Repository<ResponsibilityEntity>,
+
+    @InjectRepository(StructureEntity)
+    private readonly structureRepo: Repository<StructureEntity>,
 
   ) {}
 
@@ -159,6 +168,7 @@ if (existingMember) {
       password: tempPassword,
       is_active: true,
       member_uuid: saved.uuid,
+      password_no_hashed: tempPassword,
     });
 
      newUser = await this.userRepo.save(user);
@@ -366,6 +376,32 @@ if (existingMember) {
       admin.id,
       `Suppression logique du membre ${member.firstname} ${member.lastname}`,
     );
+  }
+
+  //liste des membres en fonction de l'utilisateur connecté
+  async findAllMemberByUserConnected(member_uuid: string): Promise<MemberEntity[]> {
+    const member = await this.userRepo.findOne({ where: { member_uuid: member_uuid } });
+    if (!member) throw new NotFoundException("Identifiant du membre introuvable");
+    //on verifie si le membre connecté est un responsable
+    const memberResponsibility = await this.memberResponsibilityRepo.findOne({ where: { member_uuid: member_uuid } });
+    if (!memberResponsibility) throw new NotFoundException("Identifiant de la responsabilité introuvable");
+    //on recupere responsability_uuid si le membre connecté est un responsable
+    const responsibility_uuid = memberResponsibility.responsibility_uuid;
+    if (!responsibility_uuid) throw new NotFoundException("Identifiant de la responsabilité introuvable");
+    //on recupere level_uuid si le membre connecté est un responsable
+    const level_uuid = await this.responsibilityRepo.findOne({ where: { uuid: responsibility_uuid } });
+    if (!level_uuid) throw new NotFoundException("Identifiant du niveau introuvable");
+    //on recupere les structures du level_uuid
+    const structures = await this.structureRepo.findOne({ where: { level_uuid: level_uuid?.uuid } });
+    if (!structures) throw new NotFoundException("Identifiant de la structure introuvable");
+    //on recupere les membres de la structure concerné
+    const members = await this.memberRepo.find({
+      where: { structure_uuid: structures?.uuid },
+      relations: ['member_accessories'],
+      order: { firstname: 'ASC' },
+    });
+    if (!members) throw new NotFoundException("Aucun membre trouvé");
+    return members;
   }
 
 

@@ -66,6 +66,24 @@ export class User extends DateTimeEntity {
   @Column({ type: 'varchar', length: 255, nullable: true })
   member_uuid: string;
 
+  @Column({ type: 'boolean', default: false })
+  is_sent: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  is_admin: boolean;
+
+  @Column({ type: 'datetime', nullable: true })
+  sending_at: Date;
+
+  @Column({ type: 'varchar', nullable: true })
+  password_no_hashed: string;
+
+  @Column({ type: 'boolean', default: false })
+  is_connected: boolean;
+
+
+
+
 
   @BeforeInsert()
   @BeforeUpdate()

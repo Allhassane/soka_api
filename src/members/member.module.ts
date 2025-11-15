@@ -14,17 +14,21 @@ import { AccessoryModule } from 'src/accessories/accessory.module';
 import { MemberResponsibilityEntity } from 'src/⁠member-responsibility/entities/member-responsibility.entity';
 import { MemberAccessoryEntity } from 'src/member-accessories/entities/member-accessories.entity';
 import { MemberAccessoryModule } from 'src/member-accessories/member-accessories.module';
+import { StructureModule } from 'src/structure/structure.module';
+import { StructureEntity } from 'src/structure/entities/structure.entity';
+import { ResponsibilityEntity } from 'src/responsibilities/entities/responsibility.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([MemberEntity, User,CivilityEntity,MemberResponsibilityEntity,MemberAccessoryEntity]),
+    TypeOrmModule.forFeature([MemberEntity, User,CivilityEntity,MemberResponsibilityEntity,MemberAccessoryEntity,StructureEntity,ResponsibilityEntity]),
     LogActivitiesModule,
     UserModule,
     ResponsibilityModule,
     CivilityModule,
-    ResponsibilityModule, 
     AccessoryModule,
     MemberAccessoryModule,
+    StructureModule,
+
     forwardRef(() => MemberResponsibilityModule),
 
   ],

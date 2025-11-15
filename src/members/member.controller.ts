@@ -20,6 +20,16 @@ export class MemberController {
     return this.membreService.findAll(admin_uuid);
   }
 
+
+  @Get(':member_uuid')
+  @ApiOperation({ summary: 'Récupérer tous les membres en fonction du user connecté par son UUID' })  
+  @ApiResponse({ status: 200, description: 'Liste des membres récupérée avec succès.' })
+  @ApiResponse({ status: 400, description: 'Liste des membres non trouvée.' })
+  findAllByUser(@Param('member_uuid') member_uuid: string, @Request() req) {
+    const user_connected_uuid = req.user.member_uuid as string;
+    return this.membreService.findAllMemberByUserConnected(user_connected_uuid);
+  }
+
   @Post()
   @ApiOperation({ summary: 'Créer un membre ' })
   @ApiResponse({ status: 200, description: 'Membre créé avec succès.' })
