@@ -7,6 +7,8 @@ import { User } from 'src/users/entities/user.entity';
 import { LogActivitiesService } from 'src/log-activities/log-activities.service';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 import { UpdateDonateDto } from './dto/update-donate.dto';
+import { PaymentService } from 'src/payments/payment.service';
+import { MemberEntity } from 'src/members/entities/member.entity';
 
 @Injectable()
 export class DonateService {
@@ -17,6 +19,7 @@ export class DonateService {
 
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+
   ) { }
 
   async findAll(admin_uuid: string) {

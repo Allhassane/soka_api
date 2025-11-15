@@ -338,85 +338,87 @@ export class MemberService {
     return updated;
   }
 
-async findAll(
-  admin_uuid: string,
-  page: number = 1,
-  limit: number = 15,
-): Promise<any> {
-  const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-  if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
+  async findAll(
+    admin_uuid: string,
+    page: number = 1,
+    limit: number = 15,
+  ): Promise<any> {
+    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+    if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
 
-  const skip = (page - 1) * limit;
+    const skip = (page - 1) * limit;
 
-  const [results, total] = await this.memberRepo.findAndCount({
-    relations: ['member_accessories'],
-    order: { firstname: 'ASC' },
-    skip,
-    take: limit,
-  });
+    const [results, total] = await this.memberRepo.findAndCount({
+      relations: ['member_accessories'],
+      order: { firstname: 'ASC' },
+      skip,
+      take: limit,
+    });
 
-  await this.logService.logAction(
-    'members-findAll',
-    admin.id,
-    `Récupération des membres (page ${page}, limit ${limit})`,
-  );
+    await this.logService.logAction(
+      'members-findAll',
+      admin.id,
+      `Récupération des membres (page ${page}, limit ${limit})`,
+    );
 
-  return {
-    success: true,
-    message: 'Liste paginée récupérée avec succès',
-    meta: {
-      current_page: page,
-      limit,
-      total_items: total,
-      total_pages: Math.ceil(total / limit),
-      has_next: page * limit < total,
-      has_prev: page > 1,
-    },
-    data: results,
-  };
-}
-
-
-  /** Trouver un membre par UUID */
-async findOne(uuid: string, admin_uuid: string): Promise<MemberEntity> {
-  const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-  if (!admin) {
-    throw new NotFoundException("Identifiant de l'auteur introuvable");
+    return {
+      success: true,
+      message: 'Liste paginée récupérée avec succès',
+      meta: {
+        current_page: page,
+        limit,
+        total_items: total,
+        total_pages: Math.ceil(total / limit),
+        has_next: page * limit < total,
+        has_prev: page > 1,
+      },
+      data: results,
+    };
   }
 
-  const member = await this.memberRepo.findOne({
-    where: { uuid },
-    relations: [
-      // Relations simples
-      'civility',
-      'marital_status',
-      'country',
-      'city',
-      'formation',
-      'job',
-      'organisation_city',
-      'department',
-      'division',
-      'structure',
 
-      // Collections
-      'member_accessories',
-      'member_responsibilities',
-    ],
-  });
+    /** Trouver un membre par UUID */
+  async findOne(uuid: string, admin_uuid: string): Promise<MemberEntity> {
+    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+    if (!admin) {
+      throw new NotFoundException("Identifiant de l'auteur introuvable");
+    }
 
-  if (!member) {
-    throw new NotFoundException('Aucun membre trouvé avec cet identifiant.');
+    const member = await this.memberRepo.findOne({
+      where: { uuid },
+      relations: [
+        // Relations simples
+        'civility',
+        'marital_status',
+        'country',
+        'city',
+        'formation',
+        'job',
+        'organisation_city',
+        'department',
+        'division',
+        'structure',
+
+        // Collections
+        'member_accessories',
+        'member_responsibilities',
+        'member_responsibilities.responsibility',
+        'member_responsibilities.responsibility.level'
+      ],
+    });
+
+    if (!member) {
+      throw new NotFoundException('Aucun membre trouvé avec cet identifiant.');
+    }
+
+    await this.logService.logAction(
+      'members-findOne',
+      admin.id,
+      `Consultation du membre ${member.firstname} ${member.lastname}`,
+    );
+
+    return member;
   }
-
-  await this.logService.logAction(
-    'members-findOne',
-    admin.id,
-    `Consultation du membre ${member.firstname} ${member.lastname}`,
-  );
-
-  return member;
-}
 
   async findOneByUuid(uuid: string){
     const member = await this.memberRepo.findOne({

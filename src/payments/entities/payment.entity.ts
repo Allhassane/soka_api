@@ -11,10 +11,10 @@ import { MemberEntity } from 'src/members/entities/member.entity';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 
 export enum PaymentStatus {
-  PENDING = 'PENDING',
-  PAID = 'PAID',
-  FAILED = 'FAILED',
-  CANCELLED = 'CANCELLED',
+  PENDING = 'pending',
+  PAID = 'paid',
+  FAILED = 'failed',
+  CANCELLED = 'cancelled',
 }
 
 @Entity({ name: 'payments' })

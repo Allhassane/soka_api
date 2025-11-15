@@ -139,12 +139,21 @@ export class PaymentService {
     // Description lisible dans le dashboard CinetPay
     const description = `Paiement ${dto.source} par ${dto.actor_name}`;
 
-    // Appel API CinetPay
+
+   // Appel API CinetPay
     const cinetResponse = await this.cinetPayService.initPayment(
       total,
       description,
       transactionId,
+      {
+        id: beneficiary.uuid,
+        name: beneficiary.firstname,
+        surname: beneficiary.lastname,
+        email: beneficiary.email ?? '',
+        phone: beneficiary.phone ?? '',
+      }
     );
+
 
     // ------------------------------------------------------
     //  SAUVEGARDE DU PAIEMENT
@@ -267,4 +276,45 @@ export class PaymentService {
 
     return await qb.getRawOne();
   }
+
+  async findByTransactionIdOrFail(transaction_id: string, admin_uuid: string) {
+    const payment = await this.paymentRepo.findOne({
+      where: { transaction_id },
+    });
+
+    if (!payment) {
+      throw new NotFoundException(
+        `Aucun paiement trouvé pour transaction_id = ${transaction_id}`,
+      );
+    }
+
+    return payment;
+  }
+
+  async updatePayment(uuid: string, data: Partial<PaymentEntity>) {
+    const payment = await this.paymentRepo.findOne({ where: { uuid } });
+    if (!payment) {
+      throw new NotFoundException(`Paiement introuvable pour uuid=${uuid}`);
+    }
+
+    // Liste des champs autorisés
+    const allowedFields = [
+      'status',
+      'payment_status',
+      'payment_url',
+      'transaction_id',
+      'amount',
+      'total_amount',
+    ];
+
+    for (const key of Object.keys(data)) {
+      if (allowedFields.includes(key)) {
+        (payment as any)[key] = (data as any)[key];
+      }
+    }
+
+    return await this.paymentRepo.save(payment);
+  }
+
+
 }
