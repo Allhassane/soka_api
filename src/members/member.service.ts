@@ -240,29 +240,26 @@ export class MemberService {
     return saved;
   }
 
-
   async update(uuid: string, dto: UpdateMemberDto, admin_uuid: string): Promise<MemberEntity> {
-    // Vérification de l'administrateur
+
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
     if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
 
-    // Vérification du membre existant
     const existingMember = await this.memberRepo.findOne({ where: { uuid } });
     if (!existingMember) throw new NotFoundException('Membre introuvable.');
 
-    // Si la civilité change → mettre à jour le genre
+
     if (dto.civility_uuid) {
       const civility = await this.civilityRepo.findOne({
         where: { uuid: dto.civility_uuid },
       });
-      if (!civility) {
-        throw new NotFoundException('Civilité introuvable.');
-      }
+
+      if (!civility) throw new NotFoundException('Civilité introuvable.');
+
       existingMember.gender = civility.gender;
       existingMember.civility_uuid = dto.civility_uuid;
     }
 
-    // Mise à jour des champs simples
     Object.assign(existingMember, {
       ...dto,
       admin_uuid,
@@ -271,65 +268,68 @@ export class MemberService {
 
     const updated = await this.memberRepo.save(existingMember);
 
-    // Mise à jour de la responsabilité (si fournie)
-    if (dto.responsibility_uuid) {
-      // Vérifie si la responsabilité existe
-      const responsibility = await this.responsibilityService.findOne(
-        dto.responsibility_uuid,
-        admin_uuid,
-      );
-      if (!responsibility) {
-        throw new NotFoundException('Responsabilité introuvable.');
-      }
 
-      // Vérifie s’il existe déjà une responsabilité liée
+    if (dto.hasOwnProperty('responsibility_uuid')) {
+
       const existingResp = await this.memberResponsibilityRepo.findOne({
         where: { member_uuid: updated.uuid },
       });
 
-      if (existingResp) {
-        // Mise à jour
-        existingResp.responsibility_uuid = dto.responsibility_uuid;
-        existingResp.responsibility = responsibility;
-        await this.memberResponsibilityRepo.save(existingResp);
-      } else {
-        // Création
-        const memberResponsibility = this.memberResponsibilityRepo.create({
-          member_uuid: updated.uuid,
-          member: updated,
-          responsibility_uuid: dto.responsibility_uuid,
-          responsibility,
-          priority:'high'
-        });
-        await this.memberResponsibilityRepo.save(memberResponsibility);
+
+      if (!dto.responsibility_uuid) {
+        if (existingResp) {
+          await this.memberResponsibilityRepo.delete({ member_uuid: updated.uuid });
+        }
       }
-    }
 
-    //  Mise à jour des accessoires (si présents)
-    if (dto.accessories && Array.isArray(dto.accessories)) {
-      // Supprime les anciens accessoires du membre
-      await this.memberAccessoryRepo.delete({ member_uuid: updated.uuid });
-
-      // Ajoute les nouveaux
-      for (const accessoryUuid of dto.accessories) {
-        const accessory = await this.accessoryService.findOne(
-          accessoryUuid,
+      else {
+        const responsibility = await this.responsibilityService.findOne(
+          dto.responsibility_uuid,
           admin_uuid,
         );
 
-        if (accessory) {
-          const memberAccessory = this.memberAccessoryRepo.create({
+        if (!responsibility) {
+          throw new NotFoundException('Responsabilité introuvable.');
+        }
+
+        if (existingResp) {
+          existingResp.responsibility_uuid = dto.responsibility_uuid;
+          existingResp.responsibility = responsibility;
+          await this.memberResponsibilityRepo.save(existingResp);
+        } else {
+          const newResp = this.memberResponsibilityRepo.create({
             member_uuid: updated.uuid,
             member: updated,
-            accessory_uuid: accessoryUuid,
-            accessory,
+            responsibility_uuid: dto.responsibility_uuid,
+            responsibility,
+            priority: 'high',
           });
-          await this.memberAccessoryRepo.save(memberAccessory);
+          await this.memberResponsibilityRepo.save(newResp);
         }
       }
     }
 
-    // Journalisation
+
+    if (dto.accessories && Array.isArray(dto.accessories)) {
+      await this.memberAccessoryRepo.delete({ member_uuid: updated.uuid });
+
+      for (const accessoryUuid of dto.accessories) {
+        const accessory = await this.accessoryService.findOne(accessoryUuid, admin_uuid);
+
+        if (accessory) {
+          await this.memberAccessoryRepo.save(
+            this.memberAccessoryRepo.create({
+              member_uuid: updated.uuid,
+              member: updated,
+              accessory_uuid: accessoryUuid,
+              accessory,
+            }),
+          );
+        }
+      }
+    }
+
+
     await this.logService.logAction(
       'members-update',
       admin.id,
@@ -338,6 +338,7 @@ export class MemberService {
 
     return updated;
   }
+
 
   async findAll(
     admin_uuid: string,
