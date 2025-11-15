@@ -332,10 +332,11 @@ export class MigrationService {
                     }
                     console.log('responsability ................... ' + responsibilityUuid);
 
-                    const verifyPhone = await this.memberService.verifyPhoneNumber({phone: member.contact, category: 'principal'});
+                    const verifyPhoneQuery = await this.memberService.verifyPhoneNumber({phone: member.contact, category: 'principal'});
+                    
                     let member_phone = undefined;
-                    if(member.phone){
-                        member_phone = verifyPhone.is_available ? undefined : member.contact;
+                    if(member.contact){
+                        member_phone = verifyPhoneQuery.is_available ? member.contact : undefined;
                     }
 
                     const prepareSaveMember: CreateMemberDto = {
