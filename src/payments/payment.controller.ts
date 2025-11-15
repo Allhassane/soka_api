@@ -33,9 +33,8 @@ import { PaymentSource } from './dto/create-payment.dto';
 export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
 
-  // ---------------------------------------------------------------------
-  // LISTER LES PAIEMENTS
-  // ---------------------------------------------------------------------
+
+
   @Get()
   @ApiOperation({ summary: 'Lister tous les paiements' })
   @ApiQuery({
@@ -49,9 +48,7 @@ export class PaymentController {
     return this.paymentService.findAll(req.user.uuid, source);
   }
 
-  // ---------------------------------------------------------------------
-  // CRÉER UN PAIEMENT
-  // ---------------------------------------------------------------------
+
   @Post()
   @ApiOperation({ summary: 'Créer un paiement (don, abonnement, boutique)' })
   @ApiResponse({ status: 201, description: 'Paiement enregistré avec succès.' })
@@ -60,9 +57,8 @@ export class PaymentController {
     return this.paymentService.store(payload, req.user.uuid);
   }
 
-  // ---------------------------------------------------------------------
-  // LIRE UN PAIEMENT PRÉCIS
-  // ---------------------------------------------------------------------
+
+
   @Get(':uuid')
   @ApiOperation({ summary: 'Récupérer un paiement par UUID' })
   @ApiResponse({ status: 200, description: 'Paiement trouvé.' })
@@ -71,9 +67,8 @@ export class PaymentController {
     return this.paymentService.findOne(uuid, req.user.uuid);
   }
 
-  // ---------------------------------------------------------------------
-  // METTRE À JOUR UN PAIEMENT
-  // ---------------------------------------------------------------------
+
+
   @Put(':uuid')
   @ApiOperation({ summary: 'Modifier un paiement' })
   @ApiResponse({ status: 200, description: 'Paiement modifié avec succès.' })
@@ -86,9 +81,7 @@ export class PaymentController {
     return this.paymentService.update(uuid, payload, req.user.uuid);
   }
 
-  // ---------------------------------------------------------------------
-  // CHANGER LE STATUT D’UN PAIEMENT
-  // ---------------------------------------------------------------------
+
   @Put(':uuid/status')
   @ApiOperation({ summary: 'Modifier le statut d’un paiement' })
   @ApiParam({ name: 'uuid', description: 'UUID du paiement' })
@@ -112,9 +105,6 @@ export class PaymentController {
     return this.paymentService.changeStatus(uuid, status, req.user.uuid);
   }
 
-  // ---------------------------------------------------------------------
-  //  RÉCUPÉRER TOUS LES PAIEMENTS D’UN MEMBRE
-  // ---------------------------------------------------------------------
   @Get('member/:member_uuid')
   @ApiOperation({ summary: 'Lister les paiements effectués pour un membre' })
   @ApiParam({ name: 'member_uuid', description: 'UUID du membre' })
@@ -122,12 +112,43 @@ export class PaymentController {
     return this.paymentService.findByMember(member_uuid, req.user.uuid);
   }
 
-  // ---------------------------------------------------------------------
-  // STATISTIQUES (optionnel mais très utile)
-  // ---------------------------------------------------------------------
   @Get('stats/global')
   @ApiOperation({ summary: 'Statistiques globales des paiements' })
   getStats(@Request() req) {
     return this.paymentService.getStats(req.user.uuid);
+  }
+
+
+  @Get('subgroups/:root_structure_uuid')
+  @ApiOperation({
+    summary:
+      'Récupérer les transactions d’un groupe et de tous ses sous-groupes (donations + abonnements)',
+  })
+  @ApiParam({
+    name: 'root_structure_uuid',
+    description: 'UUID du groupe racine',
+  })
+  @ApiQuery({
+    name: 'source_uuid',
+    required: true,
+    example: 'e4bb675f-21c7-4af7-bd8e-c1d934c89e2e',
+    description: "UUID de la campagne (donation ou abonnement)",
+  })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 50 })
+  async findTransactionsForSubGroups(
+    @Param('root_structure_uuid') root_structure_uuid: string,
+    @Query('source_uuid') source_uuid: string,
+    @Query('page') page = 1,
+    @Query('limit') limit = 50,
+    @Request() req,
+  ) {
+    return this.paymentService.findTransactionsForSubGroups(
+      root_structure_uuid,
+      source_uuid,
+      req.user.uuid, // admin uuid
+      +page,
+      +limit,
+    );
   }
 }
