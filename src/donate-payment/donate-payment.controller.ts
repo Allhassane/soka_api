@@ -81,13 +81,19 @@ export class DonatePaymentController {
   }
 
 
-  @Post('cinetpay/callback')
-  @ApiOperation({ summary: 'Callback CinetPay pour confirmer un paiement' })
-  @ApiResponse({ status: 200, description: 'Paiement confirmé' })
-  async cinetPayCallback(@Body() body: any,@Request() req) {
-    const { payment_uuid, status } = body;
 
-    return this.donatePaymentService.confirmPayment(payment_uuid, req.user.uuid);
+  @Post('cinetpay/check/status/:transaction_id')
+  @ApiOperation({ summary: 'Vérifier le statut d’un paiement CinetPay' })
+  @ApiResponse({ status: 200, description: 'Statut du paiement vérifié' })
+  async cinetPayCheckStatus(
+    @Param('transaction_id') transaction_id: string,
+    @Request() req,
+  ) {
+    // On passe un payload minimal au service
+    return this.donatePaymentService.confirmPayment(
+      { transaction_id },
+      req.user.uuid, // si ta route est protégée et que confirmPayment attend encore admin_uuid
+    );
   }
 
 

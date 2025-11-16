@@ -9,6 +9,7 @@ export enum GlobalStatus {
   PENDING = 'pending',
   INIT = 'init',
   SUCCESS = 'success',
+  ACCEPTED = 'accepted',
   FAILED = 'fail',
 }
 
