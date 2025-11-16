@@ -31,6 +31,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { StructureService } from 'src/structure/structure.service';
 import { MemberList } from 'src/shared/interfaces/member.interface';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { ok } from 'assert';
 
 @Injectable()
 export class MemberService {
@@ -585,7 +586,6 @@ export class MemberService {
     }
   }
 
-
   async findAllBeneficiaryByUserConnected(
     admin_uuid: string,
   ): Promise<any> {
@@ -695,4 +695,95 @@ export class MemberService {
       data: members
     }*/
   }
+
+
+    async statsMemberList(admin_uuid: string) {
+    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+    if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
+
+    const memberResponsibility = await this.memberResponsibilityRepo.findOne({ where: { member_uuid: admin.member_uuid, priority: 'high' }, relations: ['member'] });
+    if (!memberResponsibility) throw new NotFoundException("Identifiant de la responsabilité introuvable");
+
+    const responsibility_uuid = memberResponsibility.responsibility_uuid;
+    
+    const responsibility = await this.responsibilityRepo.findOne({ relations: ['level'], where: { uuid: responsibility_uuid } });
+    if (!responsibility) throw new NotFoundException("Identifiant de la responsabilité introuvable");
+    if (!memberResponsibility.member) throw new NotFoundException("Identifiant du membre introuvable");
+    
+    const sous_groupes = await this.structureService.findByAllChildrens(memberResponsibility.member.structure_uuid);
+    return sous_groupes;
+  }
+
+  //stats des membres en fonction de l'utilisateur connecté
+  async getAllMemberStatsByUserConnected(
+    admin_uuid: string
+  ): Promise<any> {
+    const sous_groupes = await this.statsMemberList(admin_uuid);
+    const members = await this.memberRepo.find({
+      where: { structure_uuid: In(sous_groupes) },
+    });
+    if (!members) throw new NotFoundException("Aucun membre trouvé");
+
+    const total = await this.memberRepo.count({
+      where: { structure_uuid: In(sous_groupes) },
+    });
+
+    // Total hommes
+  const total_hommes = await this.memberRepo.count({
+    where: { 
+      structure_uuid: In(sous_groupes),
+      department: { name: 'HOMME' }
+    },
+    relations: ['department'],
+  });
+
+    // Total femmes
+  const total_femmes = await this.memberRepo.count({
+    where: { 
+      structure_uuid: In(sous_groupes),
+      department: { name: 'FEMME' }
+    },
+    relations: ['department'],
+  });
+
+  // Total JEUNE
+  const total_jeunes = await this.memberRepo.count({
+    where: { 
+      structure_uuid: In(sous_groupes),
+      department: { name: 'JEUNESSE' }
+    },
+    relations: ['department'],
+  });
+
+  // Total jh
+  const total_jeune_hommes = await this.memberRepo.count({
+    where: { 
+      structure_uuid: In(sous_groupes),
+      division: { name: 'JEUNES_HOMMES' }
+    },
+    relations: ['division'],
+  });
+
+  // Total jf
+  const total_jeune_femmes = await this.memberRepo.count({
+    where: { 
+      structure_uuid: In(sous_groupes),
+      division: { name: 'JEUNES_FEMMES' }
+    },
+    relations: ['division'],
+  });
+
+  // Total avenir
+  const total_avenir = await this.memberRepo.count({
+    where: { 
+      structure_uuid: In(sous_groupes),
+      division: { name: 'AVENIR' }
+    },
+    relations: ['division'],
+  });
+
+    return {total, total_hommes, total_femmes, total_jeunes, total_jeune_hommes, total_jeune_femmes, total_avenir}
+  }
+
+
 }

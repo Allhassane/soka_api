@@ -132,4 +132,14 @@ export class MemberController {
     const admin_uuid = req.user.uuid as string;
     return this.membreService.delete(uuid,admin_uuid);
   }
+
+  @Get('stats/global')
+  @ApiOperation({ summary: 'Récupérer les stats globales des membres' })
+  @ApiResponse({ status: 200, description: 'Stats globales des membres récupérées.' })
+  @ApiResponse({ status: 400, description: 'Stats globales des membres non trouvées.' })
+  getAllMemberStatsByUserConnected(@Request() req) {
+    const admin_uuid = req.user.uuid as string;
+    return this.membreService.getAllMemberStatsByUserConnected(admin_uuid);
+  }
+
 }
