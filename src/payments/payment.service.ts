@@ -336,7 +336,6 @@ export class PaymentService {
 
 
   async findTransactionsForSubGroups(
-    rootStructureUuid: string,
     source_uuid: string,
     admin_uuid: string,
     page = 1,
@@ -348,9 +347,12 @@ export class PaymentService {
     if (!admin) {
       throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
+    const member = await this.memberRepo.findOne({ where: { uuid: admin.member_uuid } });
 
-
-    const sousGroups = await this.structureService.findByAllChildrens(rootStructureUuid);
+    if (!member) {
+      throw new NotFoundException("Identifiant du membre introuvable");
+    }
+    const sousGroups = await this.structureService.findByAllChildrens(member?.structure_uuid);
 
     if (!sousGroups.length) {
       return {
@@ -492,7 +494,7 @@ export class PaymentService {
       total_campaign_amount,
       page,
       limit,
-      root_structure_uuid: rootStructureUuid,
+      root_structure_uuid: member.structure_uuid,
       sous_groups: sousGroups,
       source_uuid,
       data: result,
