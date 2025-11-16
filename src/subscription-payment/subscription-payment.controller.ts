@@ -32,9 +32,6 @@ export class SubscriptionPaymentController {
     private readonly subscriptionPaymentService: SubscriptionPaymentService,
   ) {}
 
-  // ============================================================
-  // INITIER UN PAIEMENT D’ABONNEMENT
-  // ============================================================
   @Post()
   @ApiOperation({ summary: 'Initier un paiement d’abonnement (CinetPay)' })
   @ApiResponse({ status: 201, description: 'Paiement créé avec succès' })
@@ -49,9 +46,6 @@ export class SubscriptionPaymentController {
     );
   }
 
-  // ============================================================
-  // LISTE PAGINÉE
-  // ============================================================
   @Get()
   @ApiOperation({ summary: 'Liste paginée des paiements d’abonnements' })
   @ApiQuery({ name: 'page', required: false, example: 1 })
@@ -68,9 +62,6 @@ export class SubscriptionPaymentController {
     );
   }
 
-  // ============================================================
-  // RÉCUPÉRER UN PAIEMENT
-  // ============================================================
   @Get(':uuid')
   @ApiOperation({ summary: 'Détail d’un paiement d’abonnement' })
   @ApiParam({ name: 'uuid' })
@@ -79,10 +70,6 @@ export class SubscriptionPaymentController {
     return this.subscriptionPaymentService.findOne(uuid, req.user.uuid);
   }
 
-
-  // ============================================================
-  // CHANGER STATUT
-  // ============================================================
   @Put(':uuid/status')
   @ApiOperation({ summary: 'Changer le statut du paiement d’abonnement' })
   @ApiParam({ name: 'uuid' })
@@ -99,15 +86,20 @@ export class SubscriptionPaymentController {
     );
   }
 
-  // ============================================================
-  // CALLBACK CINETPAY (⚠️ PUBLIC ROUTE)
-  // ============================================================
-  @Post('cinetpay/callback')
-  @ApiOperation({ summary: 'Callback CinetPay pour confirmer un paiement' })
-  @ApiResponse({ status: 200, description: 'Paiement confirmé' })
-  async cinetPayCallback(@Body() body: any, @Request() req) {
-    // ⚠️ Le callback CinetPay NE DOIT PAS être protégé
-    return this.subscriptionPaymentService.confirmPayment(body, req.user.uuid);
-  }
+  // ========================================
+@Post('cinetpay/check/status/:transaction_id')
+@ApiOperation({ summary: 'Vérifier le statut d’un paiement CinetPay' })
+@ApiResponse({ status: 200, description: 'Statut du paiement vérifié' })
+async cinetPayCheckStatus(
+  @Param('transaction_id') transaction_id: string,
+  @Request() req,
+) {
+  // On passe un payload minimal au service
+  return this.subscriptionPaymentService.confirmPayment(
+    { transaction_id },
+    req.user.uuid, // si ta route est protégée et que confirmPayment attend encore admin_uuid
+  );
+}
+
 
 }

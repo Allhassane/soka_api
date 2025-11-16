@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { PaymentEntity } from './entities/payment.entity';
+import { PaymentEntity, PaymentStatus } from './entities/payment.entity';
 import { CreatePaymentDto, PaymentSource } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 
@@ -18,6 +18,7 @@ import { StructureService } from 'src/structure/structure.service';
 import { DonatePaymentEntity } from 'src/donate-payment/entities/donate-payment.entity';
 import { SubscriptionPaymentEntity } from 'src/subscription-payment/entities/subscription-payment.entity';
 import { TransactionWithDetails } from './types/transaction-with-details.type';
+import axios from 'axios';
 
 @Injectable()
 export class PaymentService {
@@ -335,7 +336,6 @@ export class PaymentService {
 
 
   async findTransactionsForSubGroups(
-    rootStructureUuid: string,
     source_uuid: string,
     admin_uuid: string,
     page = 1,
@@ -347,9 +347,12 @@ export class PaymentService {
     if (!admin) {
       throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
+    const member = await this.memberRepo.findOne({ where: { uuid: admin.member_uuid } });
 
-
-    const sousGroups = await this.structureService.findByAllChildrens(rootStructureUuid);
+    if (!member) {
+      throw new NotFoundException("Identifiant du membre introuvable");
+    }
+    const sousGroups = await this.structureService.findByAllChildrens(member?.structure_uuid);
 
     if (!sousGroups.length) {
       return {
@@ -491,13 +494,116 @@ export class PaymentService {
       total_campaign_amount,
       page,
       limit,
-      root_structure_uuid: rootStructureUuid,
+      root_structure_uuid: member.structure_uuid,
       sous_groups: sousGroups,
       source_uuid,
       data: result,
     };
   }
 
+
+  async confirmCinetPayCallback(payload: any) {
+  const { transaction_id } = payload;
+
+  if (!transaction_id) {
+    throw new BadRequestException('transaction_id manquant.');
+  }
+
+  // Vérification côté CinetPay
+  const check = await axios.post(
+    'https://api-checkout.cinetpay.com/v2/payment/check',
+    {
+      transaction_id,
+      apikey: process.env.CINET_API_KEY,
+      site_id: process.env.CINET_SITE_ID,
+    },
+  );
+
+  const response = check.data;
+
+  if (response.code !== '00') {
+    throw new BadRequestException(
+      `Paiement refusé par CinetPay : ${response.message}`,
+    );
+  }
+
+
+    // data existe
+    if (!response.data) {
+      throw new BadRequestException('Réponse CinetPay invalide : data manquant.');
+    }
+
+
+  // Paiement interne
+      const payment = await this.paymentRepo.findOne({
+        where: { transaction_id },
+      });
+
+      if (!payment) {
+        throw new NotFoundException(
+          `Aucun paiement trouvé pour transaction_id = ${transaction_id}`,
+        );
+    }
+
+      // status = ACCEPTED
+    if (response.data.status !== 'ACCEPTED') {
+        await this.updatePayment(payment.uuid, {
+          status: GlobalStatus.FAILED,
+          payment_status: PaymentStatus.FAILED,
+        });
+
+        // Mise à jour éventuelle d’un don ou abonnement
+        await this.updateLinkedEntities(payment,GlobalStatus.FAILED);
+
+      throw new BadRequestException(
+        `Paiement refusé : statut = ${response.data.status}`,
+      );
+    }else{
+      await this.updatePayment(payment.uuid, {
+        status: GlobalStatus.SUCCESS,
+        payment_status: PaymentStatus.PAID,
+      });
+
+      await this.updateLinkedEntities(payment,GlobalStatus.SUCCESS);
+
+      return payment;
+    }
+
+
+}
+
+
+  private async updateLinkedEntities(payment: PaymentEntity,status) {
+    const donation = await this.donatePaymentRepo.findOne({
+      where: { payment_uuid: payment.uuid },
+    });
+
+    if (donation) {
+      donation.status = status;
+      await this.donatePaymentRepo.save(donation);
+
+      console.log(`Don mis à jour pour paiement ${payment.uuid}`);
+      return { updated: 'donation', uuid: donation.uuid };
+    }
+
+    const subscription = await this.subscriptionPaymentRepo.findOne({
+      where: { payment_uuid: payment.uuid },
+    });
+
+    if (subscription) {
+      subscription.status = status;
+      await this.subscriptionPaymentRepo.save(subscription);
+
+      console.log(`Abonnement mis à jour pour paiement ${payment.uuid}`);
+      return { updated: 'subscription', uuid: subscription.uuid };
+    }
+
+    console.warn(
+      ` Aucun Don ou Abonnement trouvé pour le paiement ${payment.uuid}`,
+    );
+
+    return { updated: null };
+  }
 
 
 }
