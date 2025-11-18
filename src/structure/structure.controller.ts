@@ -241,4 +241,65 @@ export class StructureController {
     return this.structureService.delete(uuid);
   }
 
+  @Get('members/:uuid')
+@ApiOperation({
+  summary: 'Récupérer tous les membres d\'une structure avec statistiques',
+  description: `
+    Retourne tous les membres de la structure et de ses sous-structures avec :
+    - Informations de la structure
+    - Statistiques globales (genre, âge, gohonzon, départements, divisions)
+    - Liste complète des membres avec leurs responsabilités
+  `,
+})
+@ApiParam({
+  name: 'uuid',
+  type: String,
+  description: 'UUID de la structure',
+})
+@ApiResponse({
+  status: 200,
+  description: 'Membres et statistiques de la structure',
+  schema: {
+    type: 'object',
+    properties: {
+      structure: {
+        type: 'object',
+        properties: {
+          uuid: { type: 'string' },
+          name: { type: 'string' },
+          level_uuid: { type: 'string' },
+          level_name: { type: 'string' },
+        },
+      },
+      stats: {
+        type: 'object',
+        properties: {
+          total_members: { type: 'number' },
+          total_hommes: { type: 'number' },
+          total_femmes: { type: 'number' },
+          total_with_gohonzon: { type: 'number' },
+          gohonzon_rate: { type: 'number' },
+          total_responsibles: { type: 'number' },
+          total_sub_structures: { type: 'number' },
+          age_distribution: { type: 'object' },
+          departments: { type: 'array' },
+          divisions: { type: 'array' },
+        },
+      },
+      members: { type: 'array' },
+    },
+  },
+})
+@ApiResponse({
+  status: 404,
+  description: 'Structure non trouvée',
+})
+@ApiResponse({
+  status: 401,
+  description: 'Non autorisé - Authentification requise',
+})
+async getStructureMembersWithStats(@Param('uuid') uuid: string) {
+  return this.structureTreeService.getStructureMembersWithStats(uuid);
+}
+
 }
