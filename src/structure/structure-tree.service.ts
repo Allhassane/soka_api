@@ -151,7 +151,7 @@ export class StructureTreeService {
   async getStructureMembersWithStats(structureUuid: string): Promise<StructureMembersStats> {
     // 1. Récupérer la structure
     const structure = await this.structureRepository.findOne({
-      where: { uuid: structureUuid, deleted_at: null },
+      where: { uuid: structureUuid },
     });
 
     if (!structure) {
