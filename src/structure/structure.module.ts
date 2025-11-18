@@ -6,16 +6,21 @@ import { StructureEntity } from './entities/structure.entity';
 import { LogActivitiesModule } from '../log-activities/log-activities.module';
 import { UserModule } from '../users/user.module';
 import { LevelModule } from 'src/level/level.module';
+import { StructureTreeService } from './structure-tree.service';
+import { MemberEntity } from 'src/members/entities/member.entity';
+import { LevelEntity } from 'src/level/entities/level.entity';
+import { MemberResponsibilityEntity } from 'src/⁠member-responsibility/entities/member-responsibility.entity';
+import { ResponsibilityEntity } from 'src/responsibilities/entities/responsibility.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([StructureEntity]),
+    TypeOrmModule.forFeature([StructureEntity,MemberEntity,LevelEntity,MemberResponsibilityEntity,ResponsibilityEntity]),
     LogActivitiesModule,
     UserModule,
     LevelModule,
   ],
   controllers: [StructureController],
-  providers: [StructureService],
-  exports: [StructureService]
+  providers: [StructureService,StructureTreeService],
+  exports: [StructureService,StructureTreeService]
 })
 export class StructureModule {}

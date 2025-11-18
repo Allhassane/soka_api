@@ -4,10 +4,12 @@ import {
   Body,
   HttpCode,
   BadRequestException,
+  Res,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { PaymentService } from './payment.service';
 import { LogActivitiesService } from 'src/log-activities/log-activities.service';
+import { Response } from 'express';
 
 @ApiTags('CinetPay Callback')
 @Controller('cinetpay')
@@ -40,7 +42,7 @@ export class CinetpayCallbackController {
     status: 200,
     description: 'Callback traité',
   })
-  async cinetpayCallback(@Body() payload: any) {
+  async cinetpayCallback(@Body() payload: any,@Res() res: Response) {
     //console.log(' Callback CinetPay reçu :', payload);
 
     if (!payload?.transaction_id) {
@@ -59,10 +61,13 @@ export class CinetpayCallbackController {
       payload,
     );
 
-    return {
+    const returnUrl = `${process.env.CINET_RETURN_URL}/${payload.transaction_id}`;
+    return res.redirect(302, returnUrl);
+
+   /*  return {
       success: true,
       message: 'Callback CinetPay traité',
       data: result,
-    };
+    }; */
   }
 }
