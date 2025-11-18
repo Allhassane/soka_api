@@ -206,4 +206,13 @@ export class ResponsibilityService {
 
     return await this.responsibilityRepo.softRemove(city);
   }
+
+  async findByRespoUuid(uuid: string, respo_uuid) {
+
+    const responsibility = await this.responsibilityRepo.find({
+      where: { uuid: respo_uuid },
+    });
+
+    return responsibility;
+  }
 }

@@ -133,13 +133,14 @@ export class MemberController {
     return this.membreService.delete(uuid,admin_uuid);
   }
 
-  @Get('stats/global')
-  @ApiOperation({ summary: 'Récupérer les stats globales des membres' })
-  @ApiResponse({ status: 200, description: 'Stats globales des membres récupérées.' })
-  @ApiResponse({ status: 400, description: 'Stats globales des membres non trouvées.' })
-  getAllMemberStatsByUserConnected(@Request() req) {
+  //
+  @Get('stat-by-structure/:uuid')
+  @ApiOperation({ summary: 'Récupérer tous les statistiques des membres d une structure par UUID' })
+  @ApiResponse({ status: 200, description: 'Statistiques sur les membres trouvés.' })
+  @ApiResponse({ status: 400, description: 'Structure non trouvée.' })
+  getStatsByStructure(@Param('uuid') uuid: string, @Request() req) {
     const admin_uuid = req.user.uuid as string;
-    return this.membreService.getAllMemberStatsByUserConnected(admin_uuid);
+    return this.membreService.getStatsByStructure(uuid, admin_uuid);
   }
 
 }
