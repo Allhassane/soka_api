@@ -42,9 +42,9 @@ export class CinetpayCallbackController {
     status: 200,
     description: 'Callback traité',
   })
-  async cinetpayCallback(@Body() payload: any,@Res() res: Response) {
-    //console.log(' Callback CinetPay reçu :', payload);
-
+@Post('callback')
+@HttpCode(200)
+  async cinetpayCallback(@Body() payload: any, @Res({ passthrough: true }) res: Response) {
     if (!payload?.transaction_id) {
       throw new BadRequestException(
         'transaction_id manquant dans le callback CinetPay',
@@ -54,7 +54,7 @@ export class CinetpayCallbackController {
     // Traitement via PaymentService
     const result = await this.paymentService.confirmCinetPayCallback(payload);
 
-    // Log activité (pas d’utilisateur dans un callback)
+    // Log activité
     await this.logService.logAction(
       'cinetpay-callback',
       undefined,
@@ -62,12 +62,15 @@ export class CinetpayCallbackController {
     );
 
     const returnUrl = `${process.env.CINET_RETURN_URL}/${payload.transaction_id}`;
-    return res.redirect(302, returnUrl);
 
-   /*  return {
+    // Retourner les données ET rediriger
+    res.redirect(302, returnUrl);
+
+    return {
       success: true,
       message: 'Callback CinetPay traité',
+      redirect_url: returnUrl,
       data: result,
-    }; */
+    };
   }
 }
