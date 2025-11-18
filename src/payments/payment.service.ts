@@ -354,6 +354,7 @@ export class PaymentService {
     }
     const sousGroups = await this.structureService.findByAllChildrens(member?.structure_uuid);
 
+
     if (!sousGroups.length) {
       return {
         total: 0,
@@ -364,6 +365,7 @@ export class PaymentService {
         data: [],
       };
     }
+
 
     // 3) Query principale (paiements)
     const qb = this.paymentRepo
@@ -568,8 +570,6 @@ export class PaymentService {
 
       return payment;
     }
-
-
 }
 
 

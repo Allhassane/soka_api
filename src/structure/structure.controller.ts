@@ -22,13 +22,51 @@ import {
 } from '@nestjs/swagger';
 import { UpdateStructureDto } from './dto/update-structure.dto';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
+import { StructureTreeService } from './structure-tree.service';
+import { StructureTreeNodeDto } from './dto/tree.dto';
 
 @ApiTags('Structures')
 @Controller('structure')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 export class StructureController {
-  constructor(private readonly structureService: StructureService) {}
+  constructor(private readonly structureService: StructureService,
+    private readonly structureTreeService:StructureTreeService
+  ) {}
+
+
+
+  @Get('tree')
+  @ApiOperation({
+    summary: 'Récupérer l\'arbre des structures avec comptage des membres',
+    description: `
+      Retourne l'arbre hiérarchique complet des structures (NATIONAL → REGION → CENTRE → GROUPE → SOUS-GROUPE)
+      avec pour chaque nœud :
+      - Le nombre de membres directs
+      - Le nombre total de membres (cumulatif incluant tous les sous-groupes)
+      - La liste des UUIDs de tous les sous-groupes
+      - Les enfants imbriqués
+    `,
+  })
+  @ApiQuery({
+    name: 'root_uuid',
+    required: false,
+    type: String,
+    description: 'UUID de la structure racine pour filtrer l\'arbre (optionnel)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Arbre des structures avec comptages',
+    type: [StructureTreeNodeDto],
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Non autorisé - Authentification requise',
+  })
+  async getTree(@Query('root_uuid') rootUuid?: string) {
+
+    return this.structureTreeService.getStructureTreeWithCounts(rootUuid);
+  }
 
   @Get()
   @ApiOperation({
@@ -202,4 +240,5 @@ export class StructureController {
   public delete(@Param('uuid') uuid: string) {
     return this.structureService.delete(uuid);
   }
+
 }
