@@ -7,6 +7,8 @@ import { ResponsibilityEntity } from './entities/responsibility.entity';
 import { LevelService } from 'src/level/level.service';
 import { v4 as uuidv4 } from 'uuid';
 import { slugify } from 'transliteration';
+import { Role } from 'src/roles/entities/role.entity';
+import { RoleService } from 'src/roles/role.service';
 
 @Injectable()
 export class ResponsibilityService {
@@ -15,6 +17,8 @@ export class ResponsibilityService {
     private readonly responsibilityRepo: Repository<ResponsibilityEntity>,
     private readonly logService: LogActivitiesService,
     private readonly levelRepo: LevelService,
+
+        private readonly roleRepo: RoleService,
 
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
@@ -45,10 +49,24 @@ export class ResponsibilityService {
       throw new NotFoundException('Veuillez renseigner tous les champs');
     }
 
-    const level = await this.levelRepo.findOne(payload.level_uuid as string);
+    if (!payload.level_uuid) {
+      throw new NotFoundException('Veuillez renseigner le niveau');
+    }
+
+    if (!payload.role_uuid) {
+      throw new NotFoundException('Veuillez renseigner le rôle');
+    }
+
+    const level = await this.levelRepo.findOne(payload.level_uuid);
 
     if (!level) {
       throw new NotFoundException('Niveau introuvable');
+    }
+
+    const role = await this.roleRepo.findOneByUuid(payload.role_uuid as string);
+
+    if (!role) {
+      throw new NotFoundException('Role introuvable');
     }
 
     const newJob = this.responsibilityRepo.create({
@@ -58,6 +76,8 @@ export class ResponsibilityService {
       admin_uuid: admin_uuid ?? null,
       level_uuid: level.uuid,
       level,
+      role_uuid: role.uuid,
+      role,
       gender: payload.gender,
     });
 
@@ -149,6 +169,14 @@ export class ResponsibilityService {
       throw new NotFoundException('Veuillez renseigner tous les champs');
     }
 
+    if (!payload.level_uuid) {
+      throw new NotFoundException('Veuillez renseigner le niveau');
+    }
+
+    if (!payload.role_uuid) {
+      throw new NotFoundException('Veuillez renseigner le rôle');
+    }
+
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
 
     if (!admin) {
@@ -160,21 +188,30 @@ export class ResponsibilityService {
       throw new NotFoundException('Aucune correspondance retrouvée !');
     }
 
-    const level = await this.levelRepo.findOne(payload.level_uuid as string);
+    const level = await this.levelRepo.findOne(payload.level_uuid);
 
     if (!level) {
       throw new NotFoundException('Niveau introuvable');
     }
 
+    const role = await this.roleRepo.findOneByUuid(payload.role_uuid as string);
+
+    if (!role) {
+      throw new NotFoundException('Role introuvable');
+    }
+
     existing.name = name;
+    existing.slug = slugify(name);
     existing.level_uuid = level.uuid;
     existing.level = level;
+    existing.role_uuid = role.uuid;
+    existing.role = role;
     existing.gender = payload.gender;
 
     const updated = await this.responsibilityRepo.save(existing);
 
     await this.logService.logAction(
-      'responsabilities-update',
+      'responsibilities-update',
       admin.id,
       updated,
     );
