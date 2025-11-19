@@ -1,4 +1,3 @@
-// Mettre à jour l'interface StructureMembersStats
 export interface StructureMembersStats {
   structure: {
     uuid: string;
@@ -27,41 +26,16 @@ export interface StructureMembersStats {
       '51-65': number;
       '65+': number;
     };
-    departments: {
-      uuid: string;
-      name: string;
-      total: number;
-      percentage: number;
-    }[];
-    divisions: {
-      uuid: string;
-      name: string;
-      department_uuid: string;
-      department_name: string;
-      total: number;
-      percentage: number;
-    }[];
+    departments: any[];
+    divisions: any[];
   };
-  members: {
-    uuid: string;
-    matricule: string | null;
-    firstname: string;
-    lastname: string;
-    gender: string;
-    birth_date: Date | null;
-    phone: string | null;
-    email: string | null;
-    structure_uuid: string;
-    structure_name: string;
-    department_uuid: string | null;
-    department_name: string | null;
-    division_uuid: string | null;
-    division_name: string | null;
-    has_gohonzon: boolean;
-    membership_date: Date | null;
-    responsibilities: {
-      uuid: string;
-      name: string;
-    }[];
-  }[];
+  members: any[];
+  pagination: {
+    current_page: number;
+    per_page: number;
+    total_items: number;
+    total_pages: number;
+    has_next: boolean;
+    has_previous: boolean;
+  };
 }
