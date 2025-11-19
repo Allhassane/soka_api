@@ -8,6 +8,7 @@ import {
   Param,
   UseGuards,
   Query,
+  Req, 
 } from '@nestjs/common';
 import { CreateStructureDto } from './dto/create-structure.dto';
 import { StructureService } from './structure.service';
@@ -31,10 +32,46 @@ import { StructureTreeNodeDto } from './dto/tree.dto';
 @UseGuards(JwtAuthGuard)
 export class StructureController {
   constructor(private readonly structureService: StructureService,
-    private readonly structureTreeService:StructureTreeService
+    private readonly structureTreeService:StructureTreeService,
   ) {}
 
-
+  @Get('my-stats')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Récupérer les statistiques basées sur la structure du membre connecté',
+  })
+  @ApiQuery({ name: 'region_uuid', required: false, type: String })
+  @ApiQuery({ name: 'centre_uuid', required: false, type: String })
+  @ApiQuery({ name: 'chapitre_uuid', required: false, type: String })
+  @ApiQuery({ name: 'district_uuid', required: false, type: String })
+  @ApiQuery({ name: 'groupe_uuid', required: false, type: String })
+  @ApiQuery({ name: 'department_uuid', required: false, type: String })
+  @ApiQuery({ name: 'division_uuid', required: false, type: String })
+  async getMyStats(
+    @Req() req,
+    @Query('region_uuid') region_uuid?: string,
+    @Query('centre_uuid') centre_uuid?: string,
+    @Query('chapitre_uuid') chapitre_uuid?: string,
+    @Query('district_uuid') district_uuid?: string,
+    @Query('groupe_uuid') groupe_uuid?: string,
+    @Query('department_uuid') department_uuid?: string,
+    @Query('division_uuid') division_uuid?: string,
+  ) {
+    const user = req.user;
+    //console.log(user)
+    return this.structureTreeService.getMemberStatsByConnectedUser(
+      user.member_uuid,
+      {
+        region_uuid,
+        centre_uuid,
+        chapitre_uuid,
+        district_uuid,
+        groupe_uuid,
+        department_uuid,
+        division_uuid,
+      }
+    );
+  }
 
   @Get('tree')
   @ApiOperation({
@@ -281,5 +318,8 @@ export class StructureController {
       division_uuid,
     });
   }
+
+
+
 
 }

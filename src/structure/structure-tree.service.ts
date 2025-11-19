@@ -18,6 +18,50 @@ import { StructureMembersStats } from 'src/shared/interfaces/StructureMembersSta
     division_uuid?: string;
   }
 
+  export interface MemberStatsFilters {
+    region_uuid?: string;
+    centre_uuid?: string;
+    chapitre_uuid?: string;
+    district_uuid?: string;
+    groupe_uuid?: string;
+    department_uuid?: string;
+    division_uuid?: string;
+  }
+
+  export interface MemberStatsResponse {
+    filters_available: {
+      regions: { uuid: string; name: string }[];
+      centres: { uuid: string; name: string }[];
+      chapitres: { uuid: string; name: string }[];
+      districts: { uuid: string; name: string }[];
+      groupes: { uuid: string; name: string }[];
+    };
+    stats: {
+      total_members: number;
+      total_hommes: number;
+      total_femmes: number;
+      departments: {
+        total: number;
+        hommes: number;
+        femmes: number;
+        jeunesse: number;
+      };
+      divisions: {
+        total: number;
+        jeune_homme: number;
+        jeune_femme: number;
+        avenir: number;
+      };
+    };
+    breadcrumb: {
+      region?: { uuid: string; name: string };
+      centre?: { uuid: string; name: string };
+      chapitre?: { uuid: string; name: string };
+      district?: { uuid: string; name: string };
+      groupe?: { uuid: string; name: string };
+    };
+  }
+
 @Injectable()
 export class StructureTreeService {
   constructor(
@@ -683,5 +727,262 @@ async getStructureMembersWithStats(
         ? Math.round((parseInt(div.total) / totalMembers) * 100)
         : 0,
     }));
+  }
+
+
+
+  async getMemberStatsByConnectedUser(
+    memberUuid: string | null,  // Maintenant c'est le member_uuid
+    filters?: MemberStatsFilters
+  ): Promise<MemberStatsResponse> {
+    
+    // Vérifier que l'utilisateur a un member_uuid
+    if (!memberUuid) {
+      throw new NotFoundException('Utilisateur non associé à un membre');
+    }
+    
+    // Récupérer le membre
+    const member = await this.memberRepository.findOne({
+      where: { uuid: memberUuid },
+    });
+    
+    if (!member || !member.structure_uuid) {
+      throw new NotFoundException('Structure du membre non trouvée');
+    }
+    
+    const memberStructureUuid = member.structure_uuid;
+
+    // 1. Déterminer la structure de base selon les filtres
+    let targetStructureUuid = memberStructureUuid;
+    
+    if (filters?.groupe_uuid) {
+      targetStructureUuid = filters.groupe_uuid;
+    } else if (filters?.district_uuid) {
+      targetStructureUuid = filters.district_uuid;
+    } else if (filters?.chapitre_uuid) {
+      targetStructureUuid = filters.chapitre_uuid;
+    } else if (filters?.centre_uuid) {
+      targetStructureUuid = filters.centre_uuid;
+    } else if (filters?.region_uuid) {
+      targetStructureUuid = filters.region_uuid;
+    }
+
+    // 2. Récupérer toutes les structures accessibles par l'utilisateur
+    const allStructureUuids = await this.getAllSubStructureUuids(memberStructureUuid);
+
+    // 3. Vérifier que la structure cible est accessible
+    if (!allStructureUuids.includes(targetStructureUuid)) {
+      throw new NotFoundException('Structure non accessible');
+    }
+
+    // ... reste du code identique ...
+    
+    // 4. Récupérer les sous-structures de la cible
+    const targetSubStructures = await this.getAllSubStructureUuids(targetStructureUuid);
+
+    // 5. Construire le breadcrumb (chemin hiérarchique)
+    const breadcrumb = await this.buildBreadcrumb(targetStructureUuid);
+
+    // 6. Récupérer les filtres disponibles
+    const filtersAvailable = await this.getAvailableFilters(memberStructureUuid, filters);
+
+    // 7. Construire la requête pour les membres
+    let membersQuery = this.memberRepository
+      .createQueryBuilder('m')
+      .leftJoin('departments', 'd', 'd.uuid = m.department_uuid')
+      .leftJoin('divisions', 'div', 'div.uuid = m.division_uuid')
+      .where('m.structure_uuid IN (:...uuids)', { uuids: targetSubStructures })
+      .andWhere('m.deleted_at IS NULL');
+
+    // Appliquer les filtres département/division
+    if (filters?.department_uuid) {
+      membersQuery = membersQuery.andWhere('m.department_uuid = :deptUuid', {
+        deptUuid: filters.department_uuid,
+      });
+    }
+
+    if (filters?.division_uuid) {
+      membersQuery = membersQuery.andWhere('m.division_uuid = :divUuid', {
+        divUuid: filters.division_uuid,
+      });
+    }
+
+    // 8. Récupérer les membres
+    const members = await membersQuery
+      .select([
+        'm.uuid AS uuid',
+        'm.gender AS gender',
+        'm.department_uuid AS department_uuid',
+        'd.name AS department_name',
+        'm.division_uuid AS division_uuid',
+        'div.name AS division_name',
+      ])
+      .getRawMany();
+
+    // 9. Calculer les statistiques
+    const totalMembers = members.length;
+    const totalHommes = members.filter(m => m.gender === 'homme').length;
+    const totalFemmes = members.filter(m => m.gender === 'femme').length;
+
+    // Stats par département
+    const deptHommes = members.filter(m => 
+      m.department_name?.toLowerCase().includes('homme') && 
+      !m.department_name?.toLowerCase().includes('jeune')
+    ).length;
+    
+    const deptFemmes = members.filter(m => 
+      m.department_name?.toLowerCase().includes('femme') && 
+      !m.department_name?.toLowerCase().includes('jeune')
+    ).length;
+    
+    const deptJeunesse = members.filter(m => 
+      m.department_name?.toLowerCase().includes('jeune') || 
+      m.department_name?.toLowerCase().includes('jeunesse')
+    ).length;
+
+    // Stats par division
+    const divJeuneHomme = members.filter(m => 
+      m.division_name?.toLowerCase().includes('jeune') && 
+      m.division_name?.toLowerCase().includes('homme')
+    ).length;
+    
+    const divJeuneFemme = members.filter(m => 
+      m.division_name?.toLowerCase().includes('jeune') && 
+      m.division_name?.toLowerCase().includes('femme')
+    ).length;
+    
+    const divAvenir = members.filter(m => 
+      m.division_name?.toLowerCase().includes('avenir')
+    ).length;
+
+    // 10. Retourner le résultat
+    return {
+      filters_available: filtersAvailable,
+      stats: {
+        total_members: totalMembers,
+        total_hommes: totalHommes,
+        total_femmes: totalFemmes,
+        departments: {
+          total: deptHommes + deptFemmes + deptJeunesse,
+          hommes: deptHommes,
+          femmes: deptFemmes,
+          jeunesse: deptJeunesse,
+        },
+        divisions: {
+          total: divJeuneHomme + divJeuneFemme + divAvenir,
+          jeune_homme: divJeuneHomme,
+          jeune_femme: divJeuneFemme,
+          avenir: divAvenir,
+        },
+      },
+      breadcrumb,
+    };
+  }
+
+/**
+ * Construit le breadcrumb (chemin hiérarchique) d'une structure
+ */
+private async buildBreadcrumb(structureUuid: string): Promise<any> {
+  const breadcrumb: any = {};
+  
+  // Récupérer la structure et remonter jusqu'à la racine
+  let currentUuid: string | null = structureUuid;
+  
+  while (currentUuid) {
+    const structure = await this.structureRepository.findOne({
+      where: { uuid: currentUuid },
+    });
+    
+    if (!structure) break;
+    
+     let level: LevelEntity | null = null;
+    if (structure.level_uuid) {
+      level = await this.levelRepository.findOne({
+        where: { uuid: structure.level_uuid },
+      });
+    }
+    
+    const levelName = level?.name?.toUpperCase();
+    
+    if (levelName === 'REGION') {
+      breadcrumb.region = { uuid: structure.uuid, name: structure.name };
+    } else if (levelName === 'CENTRE') {
+      breadcrumb.centre = { uuid: structure.uuid, name: structure.name };
+    } else if (levelName === 'CHAPITRE') {
+      breadcrumb.chapitre = { uuid: structure.uuid, name: structure.name };
+    } else if (levelName === 'DISTRICT') {
+      breadcrumb.district = { uuid: structure.uuid, name: structure.name };
+    } else if (levelName === 'GROUPE') {
+      breadcrumb.groupe = { uuid: structure.uuid, name: structure.name };
+    }
+      
+    currentUuid = structure.parent_uuid ?? null;  
+  }
+  
+  return breadcrumb;
+}
+
+  /**
+   * Récupère les filtres disponibles basés sur la structure du membre
+   */
+  private async getAvailableFilters(
+    memberStructureUuid: string,
+    currentFilters?: MemberStatsFilters
+  ): Promise<any> {
+    const allStructureUuids = await this.getAllSubStructureUuids(memberStructureUuid);
+    
+    // Récupérer toutes les structures accessibles avec leur niveau
+    const structures = await this.structureRepository
+      .createQueryBuilder('s')
+      .leftJoin('levels', 'l', 'l.uuid = s.level_uuid')
+      .select([
+        's.uuid AS uuid',
+        's.name AS name',
+        's.parent_uuid AS parent_uuid',
+        'l.name AS level_name',
+      ])
+      .where('s.uuid IN (:...uuids)', { uuids: allStructureUuids })
+      .andWhere('s.deleted_at IS NULL')
+      .orderBy('s.name', 'ASC')
+      .getRawMany();
+
+    const filters = {
+      regions: [] as { uuid: string; name: string }[],
+      centres: [] as { uuid: string; name: string }[],
+      chapitres: [] as { uuid: string; name: string }[],
+      districts: [] as { uuid: string; name: string }[],
+      groupes: [] as { uuid: string; name: string }[],
+    };
+
+    for (const s of structures) {
+      const levelName = s.level_name?.toUpperCase();
+      const item = { uuid: s.uuid, name: s.name };
+      
+      if (levelName === 'REGION') {
+        filters.regions.push(item);
+      } else if (levelName === 'CENTRE') {
+        // Filtrer par région si sélectionnée
+        if (!currentFilters?.region_uuid || s.parent_uuid === currentFilters.region_uuid) {
+          filters.centres.push(item);
+        }
+      } else if (levelName === 'CHAPITRE') {
+        // Filtrer par centre si sélectionné
+        if (!currentFilters?.centre_uuid || s.parent_uuid === currentFilters.centre_uuid) {
+          filters.chapitres.push(item);
+        }
+      } else if (levelName === 'DISTRICT') {
+        // Filtrer par chapitre si sélectionné
+        if (!currentFilters?.chapitre_uuid || s.parent_uuid === currentFilters.chapitre_uuid) {
+          filters.districts.push(item);
+        }
+      } else if (levelName === 'GROUPE') {
+        // Filtrer par district si sélectionné
+        if (!currentFilters?.district_uuid || s.parent_uuid === currentFilters.district_uuid) {
+          filters.groupes.push(item);
+        }
+      }
+    }
+
+    return filters;
   }
 }
