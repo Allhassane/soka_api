@@ -48,51 +48,12 @@ export class AuthService {
     return userWithoutPassword as Omit<User, 'password'>;
   }
 
-/*
-    async login_old(user: User) {
-  const payload: JwtPayload = {
-    sub: user.id,
-    uuid: user.uuid,
-    ...(user.email ? { email: user.email } : {}),
-    ...(user.phone_number ? { phone_number: user.phone_number } : {}),
-  };
-
-  const token = this.jwtService.sign(payload);
-  const decoded = this.jwtService.decode(token) as null | { exp?: number };
-
-  // Récupération des rôles de l'utilisateur
-  const roles = await this.userService.findUserRoles(user.uuid);
-
-  // Récupération des permissions globales liées au rôle
-  let globalPermissions: any[] = [];
-  if (roles && roles.length > 0) {
-    const firstRole = roles[0]; // Si multi-rôles, on prend le 1er
-    const rolePermData =
-      await this.roleService.findGlobalPermissions(firstRole.role_uuid);
-
-    globalPermissions = rolePermData.permissions || [];
-  }
-
-  return {
-    user: {
-      id: user.id,
-      uuid: user.uuid,
-      email: user.email ?? null,
-      phone_number: user.phone_number,
-      roles,
-      global_permissions: globalPermissions, // Permissions depuis le rôle (allPermissions)
-    },
-    access_token: token,
-    expires_in: typeof decoded?.exp === 'number' ? decoded.exp : null,
-  };
-}
-*/
 
   async login(user: User) {
     const payload: JwtPayload = {
       sub: user.id,
       uuid: user.uuid,
-      member_uuid: user.member_uuid ?? null,  
+      member_uuid: user.member_uuid ?? null,
       ...(user.email ? { email: user.email } : {}),
       ...(user.phone_number ? { phone_number: user.phone_number } : {}),
     };
@@ -214,18 +175,18 @@ export class AuthService {
         // Fonction pour trouver une structure par son level_uuid dans l'arbre
         const findStructureByLevelUuid = (tree: any, levelUuid: string): { uuid: string; name: string } | null => {
           if (!tree) return null;
-          
+
           if (tree.level_uuid === levelUuid) {
             return { uuid: tree.uuid, name: tree.name };
           }
-          
+
           if (tree.children && tree.children.length > 0) {
             for (const child of tree.children) {
               const found = findStructureByLevelUuid(child, levelUuid);
               if (found) return found;
             }
           }
-          
+
           return null;
         };
 
