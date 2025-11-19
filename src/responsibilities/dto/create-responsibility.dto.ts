@@ -19,6 +19,13 @@ export class CreateResponsibilityDto {
   level_uuid: string;
 
   @ApiPropertyOptional({
+    description: 'Identifiant du role',
+  })
+  @IsString()
+  @IsNotEmpty({ message: 'le role est requis' })
+  role_uuid: string;
+
+  @ApiPropertyOptional({
     description: 'Genre',
     example: 'homme',
   })

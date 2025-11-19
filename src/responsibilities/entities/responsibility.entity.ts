@@ -1,5 +1,6 @@
 import { IsNotEmpty, IsOptional } from 'class-validator';
 import { LevelEntity } from 'src/level/entities/level.entity';
+import { Role } from 'src/roles/entities/role.entity';
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
 import {
   Entity,
@@ -47,12 +48,25 @@ export class ResponsibilityEntity extends DateTimeEntity {
   @IsNotEmpty()
   level_uuid?: string;
 
+
+
   @ManyToOne(() => LevelEntity, (level) => level.id, {
     nullable: true,
     onDelete: 'SET NULL',
   })
   @JoinColumn({ name: 'level_id', referencedColumnName: 'id' })
   level?: LevelEntity;
+
+
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  @IsNotEmpty()
+  role_uuid?: string;
+  @ManyToOne(() => Role, (role) => role.id, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'role_id', referencedColumnName: 'id' })
+  role?: Role;
 
   @BeforeInsert()
   @BeforeUpdate()
