@@ -242,64 +242,44 @@ export class StructureController {
   }
 
   @Get('members/:uuid')
-@ApiOperation({
-  summary: 'Récupérer tous les membres d\'une structure avec statistiques',
-  description: `
-    Retourne tous les membres de la structure et de ses sous-structures avec :
-    - Informations de la structure
-    - Statistiques globales (genre, âge, gohonzon, départements, divisions)
-    - Liste complète des membres avec leurs responsabilités
-  `,
-})
-@ApiParam({
-  name: 'uuid',
-  type: String,
-  description: 'UUID de la structure',
-})
-@ApiResponse({
-  status: 200,
-  description: 'Membres et statistiques de la structure',
-  schema: {
-    type: 'object',
-    properties: {
-      structure: {
-        type: 'object',
-        properties: {
-          uuid: { type: 'string' },
-          name: { type: 'string' },
-          level_uuid: { type: 'string' },
-          level_name: { type: 'string' },
-        },
-      },
-      stats: {
-        type: 'object',
-        properties: {
-          total_members: { type: 'number' },
-          total_hommes: { type: 'number' },
-          total_femmes: { type: 'number' },
-          total_with_gohonzon: { type: 'number' },
-          gohonzon_rate: { type: 'number' },
-          total_responsibles: { type: 'number' },
-          total_sub_structures: { type: 'number' },
-          age_distribution: { type: 'object' },
-          departments: { type: 'array' },
-          divisions: { type: 'array' },
-        },
-      },
-      members: { type: 'array' },
-    },
-  },
-})
-@ApiResponse({
-  status: 404,
-  description: 'Structure non trouvée',
-})
-@ApiResponse({
-  status: 401,
-  description: 'Non autorisé - Authentification requise',
-})
-async getStructureMembersWithStats(@Param('uuid') uuid: string) {
-  return this.structureTreeService.getStructureMembersWithStats(uuid);
-}
+  @ApiOperation({
+    summary: 'Récupérer tous les membres d\'une structure avec statistiques et pagination',
+  })
+  @ApiParam({
+    name: 'uuid',
+    type: String,
+    description: 'UUID de la structure',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Numéro de page', example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Nombre d\'éléments par page', example: 50 })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Recherche par nom, matricule, téléphone ou email' })
+  @ApiQuery({ name: 'gender', required: false, enum: ['homme', 'femme'], description: 'Filtrer par genre' })
+  @ApiQuery({ name: 'has_gohonzon', required: false, type: Boolean, description: 'Filtrer par possession de gohonzon' })
+  @ApiQuery({ name: 'department_uuid', required: false, type: String, description: 'Filtrer par département' })
+  @ApiQuery({ name: 'division_uuid', required: false, type: String, description: 'Filtrer par division' })
+  @ApiResponse({
+    status: 200,
+    description: 'Membres et statistiques de la structure',
+  })
+  async getStructureMembersWithStats(
+    @Param('uuid') uuid: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('search') search?: string,
+    @Query('gender') gender?: 'homme' | 'femme',
+    @Query('has_gohonzon') has_gohonzon?: boolean,
+    @Query('department_uuid') department_uuid?: string,
+    @Query('division_uuid') division_uuid?: string,
+  ) {
+    return this.structureTreeService.getStructureMembersWithStats(uuid, {
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+      search,
+      gender,
+      has_gohonzon,
+      department_uuid,
+      division_uuid,
+    });
+  }
 
 }
