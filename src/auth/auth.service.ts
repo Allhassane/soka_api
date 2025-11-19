@@ -94,6 +94,7 @@ export class AuthService {
   const payload: JwtPayload = {
     sub: user.id,
     uuid: user.uuid,
+    member_uuid: user.member_uuid ?? null,  
     ...(user.email ? { email: user.email } : {}),
     ...(user.phone_number ? { phone_number: user.phone_number } : {}),
   };
@@ -185,15 +186,15 @@ export class AuthService {
         if (sortedResponsibilities.length > 0) {
           const highestResponsibility = sortedResponsibilities[0];
 
-          console.log('=== Debug Permissions ===');
-          console.log('Highest responsibility:', highestResponsibility);
-          console.log('Role UUID:', highestResponsibility.role_uuid);
+          //console.log('=== Debug Permissions ===');
+          //console.log('Highest responsibility:', highestResponsibility);
+          //console.log('Role UUID:', highestResponsibility.role_uuid);
 
           const rolePermData = await this.roleService.findGlobalPermissions(
             highestResponsibility.role_uuid
           );
 
-          console.log('Role permissions data:', rolePermData);
+          //console.log('Role permissions data:', rolePermData);
 
           globalPermissions = rolePermData.permissions || [];
 
