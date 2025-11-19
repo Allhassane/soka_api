@@ -162,9 +162,6 @@ export class SubscriptionPaymentService {
     };
   }
 
-  // ============================================================
-  // 2. CONFIRMATION DE PAIEMENT (CINETPAY → CALLBACK PUBLIC)
-  // ============================================================
 
   async confirmPayment(payload: any,admin_uuid:string) {
     const { transaction_id } = payload;
@@ -229,9 +226,7 @@ export class SubscriptionPaymentService {
     };
   }
 
-  // ============================================================
-// RÉCUPÉRER UN PAIEMENT D’ABONNEMENT
-// ============================================================
+
 async findOne(uuid: string, admin_uuid: string) {
   // Vérifier l’admin
   await this.checkAdmin(admin_uuid);
@@ -248,9 +243,6 @@ async findOne(uuid: string, admin_uuid: string) {
 }
 
 
-// ============================================================
-// CHANGER LE STATUT DU PAIEMENT D’ABONNEMENT
-// ============================================================
 async changeStatus(uuid: string, status: GlobalStatus, admin_uuid: string) {
   // Vérifier l’admin
   await this.checkAdmin(admin_uuid);
@@ -277,9 +269,6 @@ async changeStatus(uuid: string, status: GlobalStatus, admin_uuid: string) {
 }
 
 
-// ============================================================
-// LISTE PAGINÉE DES PAIEMENTS D’ABONNEMENT
-// ============================================================
 async findAll(page = 1, limit = 20, admin_uuid: string) {
   // Vérification de l’admin
   await this.checkAdmin(admin_uuid);

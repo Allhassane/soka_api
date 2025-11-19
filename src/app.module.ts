@@ -41,6 +41,8 @@ import { MigrationModule } from './migration/migration.module';
 import { DonatePaymentModule } from './donate-payment/donate-payment.module';
 import { MemberTravelModule } from './member-travel/member-travel.module';
 import { SubscriptionPaymentModule } from './subscription-payment/subscription-payment.module';
+import { CinetpayCallbackController } from './payments/cinetpay.controller';
+import { StatistiqueModule } from './statistique/statistique.module';
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
@@ -107,9 +109,10 @@ import { SubscriptionPaymentModule } from './subscription-payment/subscription-p
     MigrationModule,
     DonatePaymentModule,
     MemberTravelModule,
-    SubscriptionPaymentModule
+    SubscriptionPaymentModule,
+    StatistiqueModule
   ],
-  controllers: [AppController, RolePermissionController],
+  controllers: [AppController, RolePermissionController,CinetpayCallbackController],
   providers: [AppService, RolePermissionService],
 })
 export class AppModule {}

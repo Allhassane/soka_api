@@ -8,6 +8,7 @@ import {
   Param,
   UseGuards,
   Query,
+  Req, 
 } from '@nestjs/common';
 import { CreateStructureDto } from './dto/create-structure.dto';
 import { StructureService } from './structure.service';
@@ -22,13 +23,87 @@ import {
 } from '@nestjs/swagger';
 import { UpdateStructureDto } from './dto/update-structure.dto';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
+import { StructureTreeService } from './structure-tree.service';
+import { StructureTreeNodeDto } from './dto/tree.dto';
 
 @ApiTags('Structures')
 @Controller('structure')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 export class StructureController {
-  constructor(private readonly structureService: StructureService) {}
+  constructor(private readonly structureService: StructureService,
+    private readonly structureTreeService:StructureTreeService,
+  ) {}
+
+  @Get('my-stats')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Récupérer les statistiques basées sur la structure du membre connecté',
+  })
+  @ApiQuery({ name: 'region_uuid', required: false, type: String })
+  @ApiQuery({ name: 'centre_uuid', required: false, type: String })
+  @ApiQuery({ name: 'chapitre_uuid', required: false, type: String })
+  @ApiQuery({ name: 'district_uuid', required: false, type: String })
+  @ApiQuery({ name: 'groupe_uuid', required: false, type: String })
+  @ApiQuery({ name: 'department_uuid', required: false, type: String })
+  @ApiQuery({ name: 'division_uuid', required: false, type: String })
+  async getMyStats(
+    @Req() req,
+    @Query('region_uuid') region_uuid?: string,
+    @Query('centre_uuid') centre_uuid?: string,
+    @Query('chapitre_uuid') chapitre_uuid?: string,
+    @Query('district_uuid') district_uuid?: string,
+    @Query('groupe_uuid') groupe_uuid?: string,
+    @Query('department_uuid') department_uuid?: string,
+    @Query('division_uuid') division_uuid?: string,
+  ) {
+    const user = req.user;
+    //console.log(user)
+    return this.structureTreeService.getMemberStatsByConnectedUser(
+      user.member_uuid,
+      {
+        region_uuid,
+        centre_uuid,
+        chapitre_uuid,
+        district_uuid,
+        groupe_uuid,
+        department_uuid,
+        division_uuid,
+      }
+    );
+  }
+
+  @Get('tree')
+  @ApiOperation({
+    summary: 'Récupérer l\'arbre des structures avec comptage des membres',
+    description: `
+      Retourne l'arbre hiérarchique complet des structures (NATIONAL → REGION → CENTRE → GROUPE → SOUS-GROUPE)
+      avec pour chaque nœud :
+      - Le nombre de membres directs
+      - Le nombre total de membres (cumulatif incluant tous les sous-groupes)
+      - La liste des UUIDs de tous les sous-groupes
+      - Les enfants imbriqués
+    `,
+  })
+  @ApiQuery({
+    name: 'root_uuid',
+    required: false,
+    type: String,
+    description: 'UUID de la structure racine pour filtrer l\'arbre (optionnel)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Arbre des structures avec comptages',
+    type: [StructureTreeNodeDto],
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Non autorisé - Authentification requise',
+  })
+  async getTree(@Query('root_uuid') rootUuid?: string) {
+
+    return this.structureTreeService.getStructureTreeWithCounts(rootUuid);
+  }
 
   @Get()
   @ApiOperation({
@@ -202,4 +277,49 @@ export class StructureController {
   public delete(@Param('uuid') uuid: string) {
     return this.structureService.delete(uuid);
   }
+
+  @Get('members/:uuid')
+  @ApiOperation({
+    summary: 'Récupérer tous les membres d\'une structure avec statistiques et pagination',
+  })
+  @ApiParam({
+    name: 'uuid',
+    type: String,
+    description: 'UUID de la structure',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Numéro de page', example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Nombre d\'éléments par page', example: 50 })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Recherche par nom, matricule, téléphone ou email' })
+  @ApiQuery({ name: 'gender', required: false, enum: ['homme', 'femme'], description: 'Filtrer par genre' })
+  @ApiQuery({ name: 'has_gohonzon', required: false, type: Boolean, description: 'Filtrer par possession de gohonzon' })
+  @ApiQuery({ name: 'department_uuid', required: false, type: String, description: 'Filtrer par département' })
+  @ApiQuery({ name: 'division_uuid', required: false, type: String, description: 'Filtrer par division' })
+  @ApiResponse({
+    status: 200,
+    description: 'Membres et statistiques de la structure',
+  })
+  async getStructureMembersWithStats(
+    @Param('uuid') uuid: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('search') search?: string,
+    @Query('gender') gender?: 'homme' | 'femme',
+    @Query('has_gohonzon') has_gohonzon?: boolean,
+    @Query('department_uuid') department_uuid?: string,
+    @Query('division_uuid') division_uuid?: string,
+  ) {
+    return this.structureTreeService.getStructureMembersWithStats(uuid, {
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+      search,
+      gender,
+      has_gohonzon,
+      department_uuid,
+      division_uuid,
+    });
+  }
+
+
+
+
 }

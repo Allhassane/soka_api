@@ -120,14 +120,6 @@ export class PaymentController {
 
 
   @Get('subgroups/:root_structure_uuid')
-  @ApiOperation({
-    summary:
-      'Récupérer les transactions d’un groupe et de tous ses sous-groupes (donations + abonnements)',
-  })
-  @ApiParam({
-    name: 'root_structure_uuid',
-    description: 'UUID du groupe racine',
-  })
   @ApiQuery({
     name: 'source_uuid',
     required: true,
@@ -137,14 +129,12 @@ export class PaymentController {
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 50 })
   async findTransactionsForSubGroups(
-    @Param('root_structure_uuid') root_structure_uuid: string,
     @Query('source_uuid') source_uuid: string,
     @Query('page') page = 1,
     @Query('limit') limit = 50,
     @Request() req,
   ) {
     return this.paymentService.findTransactionsForSubGroups(
-      root_structure_uuid,
       source_uuid,
       req.user.uuid, // admin uuid
       +page,

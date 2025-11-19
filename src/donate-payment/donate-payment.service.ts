@@ -236,9 +236,6 @@ export class DonatePaymentService {
         throw new BadRequestException('transaction_id manquant dans le callback CinetPay');
       }
 
-      // ============================================================
-      // 1. Vérification CinetPay
-      // ============================================================
       const verification = await axios.post(
         'https://api-checkout.cinetpay.com/v2/payment/check',
         {
@@ -264,9 +261,6 @@ export class DonatePaymentService {
         );
       }
 
-      // ============================================================
-      // 2. Récupérer le paiement local
-      // ============================================================
       const payment = await this.paymentService.findByTransactionIdOrFail(transaction_id,admin_uuid);
 
       if (!payment) {
@@ -275,19 +269,12 @@ export class DonatePaymentService {
         );
       }
 
-      // ============================================================
-      // 3. Mettre à jour le paiement
-      // ============================================================
-
       await this.paymentService.updatePayment(payment.uuid, {
         status: GlobalStatus.SUCCESS,
         payment_status:PaymentStatus.PAID,
       });
 
 
-      // ============================================================
-      // 4. Mettre à jour le don associé
-      // ============================================================
       const donation = await this.donateRepo.findOne({
         where: { payment_uuid: payment.uuid },
       });
