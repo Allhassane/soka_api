@@ -462,26 +462,26 @@ async getStructureMembersWithStats(
   }
 
   if (paginationParams?.gender) {
-    membersQuery = membersQuery.andWhere('m.gender = :gender', { 
-      gender: paginationParams.gender 
+    membersQuery = membersQuery.andWhere('m.gender = :gender', {
+      gender: paginationParams.gender
     });
   }
 
   if (paginationParams?.has_gohonzon !== undefined) {
-    membersQuery = membersQuery.andWhere('m.has_gohonzon = :hasGohonzon', { 
-      hasGohonzon: paginationParams.has_gohonzon 
+    membersQuery = membersQuery.andWhere('m.has_gohonzon = :hasGohonzon', {
+      hasGohonzon: paginationParams.has_gohonzon
     });
   }
 
   if (paginationParams?.department_uuid) {
-    membersQuery = membersQuery.andWhere('m.department_uuid = :deptUuid', { 
-      deptUuid: paginationParams.department_uuid 
+    membersQuery = membersQuery.andWhere('m.department_uuid = :deptUuid', {
+      deptUuid: paginationParams.department_uuid
     });
   }
 
   if (paginationParams?.division_uuid) {
-    membersQuery = membersQuery.andWhere('m.division_uuid = :divUuid', { 
-      divUuid: paginationParams.division_uuid 
+    membersQuery = membersQuery.andWhere('m.division_uuid = :divUuid', {
+      divUuid: paginationParams.division_uuid
     });
   }
 
@@ -506,7 +506,7 @@ async getStructureMembersWithStats(
   // 9. Récupérer les responsabilités des membres paginés
   const memberUuids = members.map(m => m.uuid);
   let memberResponsibilities: any[] = [];
-  
+
   if (memberUuids.length > 0) {
     memberResponsibilities = await this.memberRepository
       .createQueryBuilder('m')
@@ -731,179 +731,208 @@ async getStructureMembersWithStats(
 
 
 
-  async getMemberStatsByConnectedUser(
-    memberUuid: string | null,  // Maintenant c'est le member_uuid
-    filters?: MemberStatsFilters
-  ): Promise<MemberStatsResponse> {
-    
-    // Vérifier que l'utilisateur a un member_uuid
-    if (!memberUuid) {
-      throw new NotFoundException('Utilisateur non associé à un membre');
-    }
-    
-    // Récupérer le membre
-    const member = await this.memberRepository.findOne({
-      where: { uuid: memberUuid },
-    });
-    
-    if (!member || !member.structure_uuid) {
-      throw new NotFoundException('Structure du membre non trouvée');
-    }
-    
-    const memberStructureUuid = member.structure_uuid;
+async getMemberStatsByConnectedUser(
+  memberUuid: string | null,
+  filters?: MemberStatsFilters
+): Promise<MemberStatsResponse> {
 
-    // 1. Déterminer la structure de base selon les filtres
-    let targetStructureUuid = memberStructureUuid;
-    
-    if (filters?.groupe_uuid) {
-      targetStructureUuid = filters.groupe_uuid;
-    } else if (filters?.district_uuid) {
-      targetStructureUuid = filters.district_uuid;
-    } else if (filters?.chapitre_uuid) {
-      targetStructureUuid = filters.chapitre_uuid;
-    } else if (filters?.centre_uuid) {
-      targetStructureUuid = filters.centre_uuid;
-    } else if (filters?.region_uuid) {
-      targetStructureUuid = filters.region_uuid;
-    }
-
-    // 2. Récupérer toutes les structures accessibles par l'utilisateur
-    const allStructureUuids = await this.getAllSubStructureUuids(memberStructureUuid);
-
-    // 3. Vérifier que la structure cible est accessible
-    if (!allStructureUuids.includes(targetStructureUuid)) {
-      throw new NotFoundException('Structure non accessible');
-    }
-
-    // ... reste du code identique ...
-    
-    // 4. Récupérer les sous-structures de la cible
-    const targetSubStructures = await this.getAllSubStructureUuids(targetStructureUuid);
-
-    // 5. Construire le breadcrumb (chemin hiérarchique)
-    const breadcrumb = await this.buildBreadcrumb(targetStructureUuid);
-
-    // 6. Récupérer les filtres disponibles
-    const filtersAvailable = await this.getAvailableFilters(memberStructureUuid, filters);
-
-    // 7. Construire la requête pour les membres
-    let membersQuery = this.memberRepository
-      .createQueryBuilder('m')
-      .leftJoin('departments', 'd', 'd.uuid = m.department_uuid')
-      .leftJoin('divisions', 'div', 'div.uuid = m.division_uuid')
-      .where('m.structure_uuid IN (:...uuids)', { uuids: targetSubStructures })
-      .andWhere('m.deleted_at IS NULL');
-
-    // Appliquer les filtres département/division
-    if (filters?.department_uuid) {
-      membersQuery = membersQuery.andWhere('m.department_uuid = :deptUuid', {
-        deptUuid: filters.department_uuid,
-      });
-    }
-
-    if (filters?.division_uuid) {
-      membersQuery = membersQuery.andWhere('m.division_uuid = :divUuid', {
-        divUuid: filters.division_uuid,
-      });
-    }
-
-    // 8. Récupérer les membres
-    const members = await membersQuery
-      .select([
-        'm.uuid AS uuid',
-        'm.gender AS gender',
-        'm.department_uuid AS department_uuid',
-        'd.name AS department_name',
-        'm.division_uuid AS division_uuid',
-        'div.name AS division_name',
-      ])
-      .getRawMany();
-
-    // 9. Calculer les statistiques
-    const totalMembers = members.length;
-    const totalHommes = members.filter(m => m.gender === 'homme').length;
-    const totalFemmes = members.filter(m => m.gender === 'femme').length;
-
-    // Stats par département
-    const deptHommes = members.filter(m => 
-      m.department_name?.toLowerCase().includes('homme') && 
-      !m.department_name?.toLowerCase().includes('jeune')
-    ).length;
-    
-    const deptFemmes = members.filter(m => 
-      m.department_name?.toLowerCase().includes('femme') && 
-      !m.department_name?.toLowerCase().includes('jeune')
-    ).length;
-    
-    const deptJeunesse = members.filter(m => 
-      m.department_name?.toLowerCase().includes('jeune') || 
-      m.department_name?.toLowerCase().includes('jeunesse')
-    ).length;
-
-    // Stats par division
-    const divJeuneHomme = members.filter(m => 
-      m.division_name?.toLowerCase().includes('jeune') && 
-      m.division_name?.toLowerCase().includes('homme')
-    ).length;
-    
-    const divJeuneFemme = members.filter(m => 
-      m.division_name?.toLowerCase().includes('jeune') && 
-      m.division_name?.toLowerCase().includes('femme')
-    ).length;
-    
-    const divAvenir = members.filter(m => 
-      m.division_name?.toLowerCase().includes('avenir')
-    ).length;
-
-    // 10. Retourner le résultat
-    return {
-      filters_available: filtersAvailable,
-      stats: {
-        total_members: totalMembers,
-        total_hommes: totalHommes,
-        total_femmes: totalFemmes,
-        departments: {
-          total: deptHommes + deptFemmes + deptJeunesse,
-          hommes: deptHommes,
-          femmes: deptFemmes,
-          jeunesse: deptJeunesse,
-        },
-        divisions: {
-          total: divJeuneHomme + divJeuneFemme + divAvenir,
-          jeune_homme: divJeuneHomme,
-          jeune_femme: divJeuneFemme,
-          avenir: divAvenir,
-        },
-      },
-      breadcrumb,
-    };
+  // Vérifier que l'utilisateur a un member_uuid
+  if (!memberUuid) {
+    throw new NotFoundException('Utilisateur non associé à un membre');
   }
+
+  // Récupérer le membre
+  const member = await this.memberRepository.findOne({
+    where: { uuid: memberUuid },
+  });
+
+  if (!member || !member.structure_uuid) {
+    throw new NotFoundException('Structure du membre non trouvée');
+  }
+
+  const memberStructureUuid = member.structure_uuid;
+
+  // 1. Déterminer la structure de base selon les filtres
+  let targetStructureUuid = memberStructureUuid;
+
+  if (filters?.groupe_uuid) {
+    targetStructureUuid = filters.groupe_uuid;
+  } else if (filters?.district_uuid) {
+    targetStructureUuid = filters.district_uuid;
+  } else if (filters?.chapitre_uuid) {
+    targetStructureUuid = filters.chapitre_uuid;
+  } else if (filters?.centre_uuid) {
+    targetStructureUuid = filters.centre_uuid;
+  } else if (filters?.region_uuid) {
+    targetStructureUuid = filters.region_uuid;
+  }
+
+  // 2. Vérifier que la structure cible existe
+  const targetStructure = await this.structureRepository.findOne({
+    where: { uuid: targetStructureUuid },
+  });
+
+  if (!targetStructure) {
+    throw new NotFoundException('Structure non trouvée');
+  }
+
+  // 3. Récupérer les sous-structures de la cible
+  const targetSubStructures = await this.getAllSubStructureUuids(targetStructureUuid);
+
+  // 4. Construire le breadcrumb (chemin hiérarchique)
+  const breadcrumb = await this.buildBreadcrumb(targetStructureUuid);
+
+  // 5. Récupérer les filtres disponibles (basés sur la structure du membre)
+  const filtersAvailable = await this.getAvailableFilters(memberStructureUuid, filters);
+
+  // 6. Construire la requête pour les membres
+  let membersQuery = this.memberRepository
+    .createQueryBuilder('m')
+    .leftJoin('departments', 'd', 'd.uuid = m.department_uuid')
+    .leftJoin('divisions', 'div', 'div.uuid = m.division_uuid')
+    .where('m.structure_uuid IN (:...uuids)', { uuids: targetSubStructures })
+    .andWhere('m.deleted_at IS NULL');
+
+  // Appliquer les filtres département/division
+  if (filters?.department_uuid) {
+    membersQuery = membersQuery.andWhere('m.department_uuid = :deptUuid', {
+      deptUuid: filters.department_uuid,
+    });
+  }
+
+  if (filters?.division_uuid) {
+    membersQuery = membersQuery.andWhere('m.division_uuid = :divUuid', {
+      divUuid: filters.division_uuid,
+    });
+  }
+
+  // 7. Récupérer les membres
+  const members = await membersQuery
+    .select([
+      'm.uuid AS uuid',
+      'm.gender AS gender',
+      'm.department_uuid AS department_uuid',
+      'd.name AS department_name',
+      'm.division_uuid AS division_uuid',
+      'div.name AS division_name',
+    ])
+    .getRawMany();
+
+  // 8. Calculer les statistiques
+  const totalMembers = members.length;
+  const totalHommes = members.filter(m => m.gender === 'homme').length;
+  const totalFemmes = members.filter(m => m.gender === 'femme').length;
+
+  // Stats par département
+  const deptHommes = members.filter(m =>
+    m.department_name?.toLowerCase().includes('homme') &&
+    !m.department_name?.toLowerCase().includes('jeune')
+  ).length;
+
+  const deptFemmes = members.filter(m =>
+    m.department_name?.toLowerCase().includes('femme') &&
+    !m.department_name?.toLowerCase().includes('jeune')
+  ).length;
+
+  const deptJeunesse = members.filter(m =>
+    m.department_name?.toLowerCase().includes('jeune') ||
+    m.department_name?.toLowerCase().includes('jeunesse')
+  ).length;
+
+  // Stats par division
+  const divJeuneHomme = members.filter(m =>
+    m.division_name?.toLowerCase().includes('jeune') &&
+    m.division_name?.toLowerCase().includes('homme')
+  ).length;
+
+  const divJeuneFemme = members.filter(m =>
+    m.division_name?.toLowerCase().includes('jeune') &&
+    m.division_name?.toLowerCase().includes('femme')
+  ).length;
+
+  const divAvenir = members.filter(m =>
+    m.division_name?.toLowerCase().includes('avenir')
+  ).length;
+
+  // 9. Retourner le résultat
+  return {
+    filters_available: filtersAvailable,
+    stats: {
+      total_members: totalMembers,
+      total_hommes: totalHommes,
+      total_femmes: totalFemmes,
+      departments: {
+        total: deptHommes + deptFemmes + deptJeunesse,
+        hommes: deptHommes,
+        femmes: deptFemmes,
+        jeunesse: deptJeunesse,
+      },
+      divisions: {
+        total: divJeuneHomme + divJeuneFemme + divAvenir,
+        jeune_homme: divJeuneHomme,
+        jeune_femme: divJeuneFemme,
+        avenir: divAvenir,
+      },
+    },
+    breadcrumb,
+  };
+}
+/**
+ * Récupère toutes les structures accessibles (parents + enfants)
+ */
+private async getAllAccessibleStructures(structureUuid: string): Promise<string[]> {
+  const result: string[] = [];
+
+  // Récupérer tous les parents (remonter jusqu'à la racine)
+  let currentUuid: string | null = structureUuid;
+
+  while (currentUuid) {
+    result.push(currentUuid);
+    const structure = await this.structureRepository.findOne({
+      where: { uuid: currentUuid },
+    });
+    currentUuid = structure?.parent_uuid ?? null;
+  }
+
+  // Récupérer tous les enfants (descendre récursivement)
+  const children = await this.getAllSubStructureUuids(structureUuid);
+
+  // Fusionner sans doublons
+  for (const child of children) {
+    if (!result.includes(child)) {
+      result.push(child);
+    }
+  }
+
+  return result;
+}
+
 
 /**
  * Construit le breadcrumb (chemin hiérarchique) d'une structure
  */
 private async buildBreadcrumb(structureUuid: string): Promise<any> {
   const breadcrumb: any = {};
-  
+
   // Récupérer la structure et remonter jusqu'à la racine
   let currentUuid: string | null = structureUuid;
-  
+
   while (currentUuid) {
     const structure = await this.structureRepository.findOne({
       where: { uuid: currentUuid },
     });
-    
+
     if (!structure) break;
-    
+
      let level: LevelEntity | null = null;
     if (structure.level_uuid) {
       level = await this.levelRepository.findOne({
         where: { uuid: structure.level_uuid },
       });
     }
-    
+
     const levelName = level?.name?.toUpperCase();
-    
+
     if (levelName === 'REGION') {
       breadcrumb.region = { uuid: structure.uuid, name: structure.name };
     } else if (levelName === 'CENTRE') {
@@ -915,10 +944,10 @@ private async buildBreadcrumb(structureUuid: string): Promise<any> {
     } else if (levelName === 'GROUPE') {
       breadcrumb.groupe = { uuid: structure.uuid, name: structure.name };
     }
-      
-    currentUuid = structure.parent_uuid ?? null;  
+
+    currentUuid = structure.parent_uuid ?? null;
   }
-  
+
   return breadcrumb;
 }
 
@@ -930,7 +959,7 @@ private async buildBreadcrumb(structureUuid: string): Promise<any> {
     currentFilters?: MemberStatsFilters
   ): Promise<any> {
     const allStructureUuids = await this.getAllSubStructureUuids(memberStructureUuid);
-    
+
     // Récupérer toutes les structures accessibles avec leur niveau
     const structures = await this.structureRepository
       .createQueryBuilder('s')
@@ -957,7 +986,7 @@ private async buildBreadcrumb(structureUuid: string): Promise<any> {
     for (const s of structures) {
       const levelName = s.level_name?.toUpperCase();
       const item = { uuid: s.uuid, name: s.name };
-      
+
       if (levelName === 'REGION') {
         filters.regions.push(item);
       } else if (levelName === 'CENTRE') {
