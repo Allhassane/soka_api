@@ -5,6 +5,16 @@ export interface AuthCredentialsDto {
   email?: string | null;
   phone_number?: string;
   member_uuid?: string | null;
+  responsibilities?: {
+    uuid: string;
+    name: string;
+    level_uuid: string;
+    level_name: string;
+    structure: {
+      uuid: string;
+      name: string;
+    } | null;
+  }[];
   roles?: Role[];
 }
 

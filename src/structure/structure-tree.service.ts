@@ -6,6 +6,7 @@ import { MemberEntity } from '../members/entities/member.entity';
 import { LevelEntity } from '../level/entities/level.entity';
 import { ResponsibleInfo, StructureNode } from 'src/shared/interfaces/structure-node.interface';
 import { StructureMembersStats } from 'src/shared/interfaces/StructureMembersStats';
+import { AuthService } from 'src/auth/auth.service';
 
 
   export interface PaginationMemberParams {
@@ -380,53 +381,521 @@ export class StructureTreeService {
   }
   */
 
+  async getStructureMembersWithStats(
+    structureUuid: string,
+    paginationParams?: PaginationMemberParams
+  ): Promise<StructureMembersStats> {
+    // Paramètres de pagination par défaut
+    const page = paginationParams?.page || 1;
+    const limit = paginationParams?.limit || 20;
+    const offset = (page - 1) * limit;
+
+    // 1. Récupérer la structure
+    const structure = await this.structureRepository.findOne({
+      where: { uuid: structureUuid },
+    });
+
+    if (!structure) {
+      throw new NotFoundException('Structure non trouvée');
+    }
+
+    // 2. Récupérer le niveau
+    let level: LevelEntity | null = null;
+    if (structure.level_uuid) {
+      level = await this.levelRepository.findOne({
+        where: { uuid: structure.level_uuid },
+      });
+    }
+
+    // 3. Récupérer les responsables de cette structure spécifique
+    const structureResponsibles = await this.memberRepository
+      .createQueryBuilder('m')
+      .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
+      .innerJoin('responsibilities', 'r', 'r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL')
+      .select([
+        'm.uuid AS member_uuid',
+        "CONCAT(m.firstname, ' ', m.lastname) AS member_name",
+        'r.uuid AS responsibility_uuid',
+        'r.name AS responsibility_name',
+      ])
+      .where('m.structure_uuid = :structureUuid', { structureUuid })
+      .andWhere('m.deleted_at IS NULL')
+      .getRawMany();
+
+    // 4. Récupérer toutes les sous-structures (récursivement)
+    const allStructureUuids = await this.getAllSubStructureUuids(structureUuid);
+
+    // 5. Construire la requête de base pour les membres
+    let membersQuery = this.memberRepository
+      .createQueryBuilder('m')
+      .leftJoin('structures', 's', 's.uuid = m.structure_uuid')
+      .leftJoin('departments', 'd', 'd.uuid = m.department_uuid')
+      .leftJoin('divisions', 'div', 'div.uuid = m.division_uuid')
+      .select([
+        'm.uuid AS uuid',
+        'm.matricule AS matricule',
+        'm.firstname AS firstname',
+        'm.lastname AS lastname',
+        'm.gender AS gender',
+        'm.birth_date AS birth_date',
+        'm.phone AS phone',
+        'm.email AS email',
+        'm.structure_uuid AS structure_uuid',
+        's.name AS structure_name',
+        'm.department_uuid AS department_uuid',
+        'd.name AS department_name',
+        'm.division_uuid AS division_uuid',
+        'div.name AS division_name',
+        'm.has_gohonzon AS has_gohonzon',
+        'm.membership_date AS membership_date',
+      ])
+      .where('m.structure_uuid IN (:...uuids)', { uuids: allStructureUuids })
+      .andWhere('m.deleted_at IS NULL');
+
+    // Appliquer les filtres optionnels
+    if (paginationParams?.search) {
+      membersQuery = membersQuery.andWhere(
+        "(m.firstname LIKE :search OR m.lastname LIKE :search OR m.matricule LIKE :search OR m.phone LIKE :search OR m.email LIKE :search)",
+        { search: `%${paginationParams.search}%` }
+      );
+    }
+
+    if (paginationParams?.gender) {
+      membersQuery = membersQuery.andWhere('m.gender = :gender', {
+        gender: paginationParams.gender
+      });
+    }
+
+    if (paginationParams?.has_gohonzon !== undefined) {
+      membersQuery = membersQuery.andWhere('m.has_gohonzon = :hasGohonzon', {
+        hasGohonzon: paginationParams.has_gohonzon
+      });
+    }
+
+    if (paginationParams?.department_uuid) {
+      membersQuery = membersQuery.andWhere('m.department_uuid = :deptUuid', {
+        deptUuid: paginationParams.department_uuid
+      });
+    }
+
+    if (paginationParams?.division_uuid) {
+      membersQuery = membersQuery.andWhere('m.division_uuid = :divUuid', {
+        divUuid: paginationParams.division_uuid
+      });
+    }
+
+    // 6. Compter le total pour la pagination
+    const totalCount = await membersQuery.getCount();
+
+    // 7. Récupérer les membres paginés
+    const members = await membersQuery
+      .orderBy('m.firstname', 'ASC')
+      .addOrderBy('m.lastname', 'ASC')
+      .offset(offset)
+      .limit(limit)
+      .getRawMany();
+
+    // 8. Récupérer tous les membres pour les stats (sans pagination)
+    const allMembersForStats = await this.memberRepository
+      .createQueryBuilder('m')
+      .where('m.structure_uuid IN (:...uuids)', { uuids: allStructureUuids })
+      .andWhere('m.deleted_at IS NULL')
+      .getMany();
+
+    // 9. Récupérer les responsabilités des membres paginés
+    const memberUuids = members.map(m => m.uuid);
+    let memberResponsibilities: any[] = [];
+
+    if (memberUuids.length > 0) {
+      memberResponsibilities = await this.memberRepository
+        .createQueryBuilder('m')
+        .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
+        .innerJoin('responsibilities', 'r', 'r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL')
+        .leftJoin('levels', 'l', 'l.uuid = r.level_uuid')
+        .select([
+          'm.uuid AS member_uuid',
+          'r.uuid AS responsibility_uuid',
+          'r.name AS responsibility_name',
+          'r.level_uuid AS level_uuid',
+          'l.name AS level_name',
+          'l.order AS level_order',
+        ])
+        .where('m.uuid IN (:...uuids)', { uuids: memberUuids })
+        .andWhere('m.deleted_at IS NULL')
+        .getRawMany();
+    }
+
+    // Grouper les responsabilités par membre
+    const responsibilitiesMap = new Map<string, any[]>();
+    for (const mr of memberResponsibilities) {
+      if (!responsibilitiesMap.has(mr.member_uuid)) {
+        responsibilitiesMap.set(mr.member_uuid, []);
+      }
+      responsibilitiesMap.get(mr.member_uuid)!.push({
+        uuid: mr.responsibility_uuid,
+        name: mr.responsibility_name,
+        level_uuid: mr.level_uuid,
+        level_name: mr.level_name,
+        level_order: mr.level_order,
+      });
+    }
+
+    // 10. Construire les structure_tree pour chaque membre
+    const memberStructureTreeMap = new Map<string, any>();
+
+    for (const member of members) {
+      if (!member.structure_uuid) continue;
+
+      const memberResponsibilitiesList = responsibilitiesMap.get(member.uuid) || [];
+
+      // Si le membre a des responsabilités, utiliser le niveau le plus haut
+      if (memberResponsibilitiesList.length > 0) {
+        const validResponsibilities = memberResponsibilitiesList.filter(r => r.level_order !== null);
+
+        if (validResponsibilities.length > 0) {
+          const highestLevelOrder = Math.min(
+            ...validResponsibilities.map(r => parseInt(r.level_order))
+          );
+
+          const tree = await this.getStructureTreeForResponsible(
+            member.structure_uuid,
+            highestLevelOrder
+          );
+
+          memberStructureTreeMap.set(member.uuid, tree);
+        } else {
+          // Pas de level_order valide, utiliser l'arbre complet
+          const tree = await this.getStructureTreeForResponsible(
+            member.structure_uuid,
+            999  // Ordre très élevé pour tout afficher
+          );
+          memberStructureTreeMap.set(member.uuid, tree);
+        }
+      } else {
+        // Pas de responsabilité, afficher l'arbre complet depuis sa structure
+        const tree = await this.getStructureTreeForResponsible(
+          member.structure_uuid,
+          999  // Ordre très élevé pour tout afficher
+        );
+        memberStructureTreeMap.set(member.uuid, tree);
+      }
+    }
+
+    // 11. Calculer les statistiques (sur tous les membres, pas seulement les paginés)
+    const totalMembers = allMembersForStats.length;
+    const hommes = allMembersForStats.filter(m => m.gender === 'homme').length;
+    const femmes = allMembersForStats.filter(m => m.gender === 'femme').length;
+    const withGohonzon = allMembersForStats.filter(m => m.has_gohonzon).length;
+
+    // Répartition par âge
+    const now = new Date();
+    const ageGroups = { '0-18': 0, '19-35': 0, '36-50': 0, '51-65': 0, '65+': 0 };
+    for (const m of allMembersForStats) {
+      if (m.birth_date) {
+        const age = Math.floor(
+          (now.getTime() - new Date(m.birth_date).getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+        );
+        if (age <= 18) ageGroups['0-18']++;
+        else if (age <= 35) ageGroups['19-35']++;
+        else if (age <= 50) ageGroups['36-50']++;
+        else if (age <= 65) ageGroups['51-65']++;
+        else ageGroups['65+']++;
+      }
+    }
+
+    // Stats par département
+    const departmentStats = await this.getDepartmentsSummary(allStructureUuids, totalMembers);
+
+    // Stats par division
+    const divisionStats = await this.getDivisionsSummary(allStructureUuids, totalMembers);
+
+    // Compter les responsables
+    const allResponsibilities = await this.memberRepository
+      .createQueryBuilder('m')
+      .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
+      .select('m.uuid', 'member_uuid')
+      .where('m.structure_uuid IN (:...uuids)', { uuids: allStructureUuids })
+      .andWhere('m.deleted_at IS NULL')
+      .getRawMany();
+
+    const totalResponsibles = new Set(allResponsibilities.map(r => r.member_uuid)).size;
+
+    // 12. Formater les membres paginés avec leurs responsabilités et structure_tree
+    const formattedMembers = members.map(m => ({
+      uuid: m.uuid,
+      matricule: m.matricule,
+      firstname: m.firstname,
+      lastname: m.lastname,
+      gender: m.gender,
+      birth_date: m.birth_date,
+      phone: m.phone,
+      email: m.email,
+      structure_uuid: m.structure_uuid,
+      structure_name: m.structure_name,
+      department_uuid: m.department_uuid,
+      department_name: m.department_name,
+      division_uuid: m.division_uuid,
+      division_name: m.division_name,
+      has_gohonzon: m.has_gohonzon,
+      membership_date: m.membership_date,
+      responsibilities: responsibilitiesMap.get(m.uuid) || [],
+      structure_tree: memberStructureTreeMap.get(m.uuid) || null,  // ✅ Ajout du structure_tree
+    }));
+
+    // 13. Calculer les infos de pagination
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // 14. Retourner le résultat
+    return {
+      structure: {
+        uuid: structure.uuid,
+        name: structure.name,
+        level_uuid: structure.level_uuid ?? null,
+        level_name: level?.name || 'Inconnu',
+        responsibles: structureResponsibles.map(r => ({
+          member_uuid: r.member_uuid,
+          member_name: r.member_name,
+          responsibility_uuid: r.responsibility_uuid,
+          responsibility_name: r.responsibility_name,
+        })),
+      },
+      stats: {
+        total_members: totalMembers,
+        total_hommes: hommes,
+        total_femmes: femmes,
+        total_with_gohonzon: withGohonzon,
+        gohonzon_rate: totalMembers > 0
+          ? Math.round((withGohonzon / totalMembers) * 100)
+          : 0,
+        total_responsibles: totalResponsibles,
+        total_sub_structures: allStructureUuids.length - 1,
+        age_distribution: ageGroups,
+        departments: departmentStats,
+        divisions: divisionStats,
+      },
+      members: formattedMembers,
+      pagination: {
+        current_page: page,
+        per_page: limit,
+        total_items: totalCount,
+        total_pages: totalPages,
+        has_next: page < totalPages,
+        has_previous: page > 1,
+      },
+    };
+  }
+
+  public async getStructureTreeForResponsible(
+    structureUuid: string,
+    responsibleLevelOrder: number
+  ): Promise<any> {
+    // Récupérer toutes les structures
+    const structures = await this.structureRepository
+      .createQueryBuilder('s')
+      .where('s.deleted_at IS NULL')
+      .getMany();
+
+    if (structures.length === 0) return null;
+
+    // Récupérer tous les niveaux
+    const levels = await this.levelRepository.find();
+    const levelsMap = new Map(levels.map(l => [l.uuid, { name: l.name, order: l.order }]));
+
+    // Compter les membres directs par structure
+    const memberCounts = await this.memberRepository
+      .createQueryBuilder('m')
+      .select('m.structure_uuid', 'structure_uuid')
+      .addSelect('COUNT(*)', 'count')
+      .where('m.deleted_at IS NULL')
+      .groupBy('m.structure_uuid')
+      .getRawMany();
+
+    const memberCountMap = new Map(
+      memberCounts.map(mc => [mc.structure_uuid, parseInt(mc.count)])
+    );
+
+    // Récupérer les responsables par structure
+    const responsibles = await this.memberRepository
+      .createQueryBuilder('m')
+      .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
+      .innerJoin('responsibilities', 'r', 'r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL')
+      .select([
+        'm.structure_uuid AS structure_uuid',
+        'm.uuid AS member_uuid',
+        "CONCAT(m.firstname, ' ', m.lastname) AS member_name",
+        'r.uuid AS responsibility_uuid',
+        'r.name AS responsibility_name',
+      ])
+      .where('m.deleted_at IS NULL')
+      .getRawMany();
+
+    // Grouper les responsables par structure
+    const responsiblesMap = new Map<string, any[]>();
+    for (const resp of responsibles) {
+      if (!resp.structure_uuid) continue;
+      if (!responsiblesMap.has(resp.structure_uuid)) {
+        responsiblesMap.set(resp.structure_uuid, []);
+      }
+      responsiblesMap.get(resp.structure_uuid)!.push({
+        member_uuid: resp.member_uuid,
+        member_name: resp.member_name,
+        responsibility_uuid: resp.responsibility_uuid,
+        responsibility_name: resp.responsibility_name,
+      });
+    }
+
+    // Construire la map des structures
+    const structureMap = new Map<string, any>();
+
+    for (const structure of structures) {
+      const levelUuid = structure.level_uuid ?? null;
+      const levelInfo = levelUuid ? levelsMap.get(levelUuid) : null;
+      const parentUuid = structure.parent_uuid && structure.parent_uuid.trim() !== ''
+        ? structure.parent_uuid
+        : null;
+
+      structureMap.set(structure.uuid, {
+        uuid: structure.uuid,
+        name: structure.name,
+        level_uuid: levelUuid,
+        level_name: levelInfo?.name || 'Inconnu',
+        level_order: levelInfo?.order ?? 999,
+        parent_uuid: parentUuid,
+        direct_members_count: memberCountMap.get(structure.uuid) ?? 0,
+        total_members_count: 0,
+        sub_groups_count: 0,
+        responsibles: responsiblesMap.get(structure.uuid) ?? [],
+        children: [],
+      });
+    }
+
+    // Construire l'arbre complet
+    const rootNodes: any[] = [];
+
+    for (const node of structureMap.values()) {
+      if (node.parent_uuid && structureMap.has(node.parent_uuid)) {
+        const parent = structureMap.get(node.parent_uuid)!;
+        parent.children.push(node);
+      } else {
+        rootNodes.push(node);
+      }
+    }
+
+    // Calculer les totaux
+    const calculateTotals = (node: any): number => {
+      let total = node.direct_members_count;
+      let subGroupsCount = 0;
+
+      for (const child of node.children) {
+        total += calculateTotals(child);
+        subGroupsCount += 1 + child.sub_groups_count;
+      }
+
+      node.total_members_count = total;
+      node.sub_groups_count = subGroupsCount;
+
+      return total;
+    };
+
+    for (const root of rootNodes) {
+      calculateTotals(root);
+    }
+
+    // Trouver la structure du responsable
+    const targetStructure = structureMap.get(structureUuid);
+    if (!targetStructure) return null;
+
+    // Remonter jusqu'à la racine pour construire le chemin
+    const pathToRoot: string[] = [];
+    let currentUuid = structureUuid;
+
+    while (currentUuid) {
+      pathToRoot.push(currentUuid);
+      const current = structureMap.get(currentUuid);
+      currentUuid = current?.parent_uuid;
+    }
+
+    // Trouver la racine
+    const rootUuid = pathToRoot[pathToRoot.length - 1];
+    const rootStructure = structureMap.get(rootUuid);
+    if (!rootStructure) return null;
+
+    // Filtrer l'arbre : garder le chemin vers la structure cible et couper au niveau de responsabilité
+    const filterTree = (node: any, pathUuids: string[], targetLevelOrder: number): any => {
+      const { level_order, ...nodeWithoutOrder } = node;
+      const isOnPath = pathUuids.includes(node.uuid);
+      const isTarget = node.uuid === structureUuid;
+
+      // Si c'est la structure cible, couper les enfants (s'arrêter à son niveau)
+      if (isTarget) {
+        return {
+          ...nodeWithoutOrder,
+          children: [],
+        };
+      }
+
+      // Si on est sur le chemin vers la cible, garder seulement l'enfant qui mène à la cible
+      if (isOnPath) {
+        const filteredChildren = node.children
+          .filter((child: any) => pathUuids.includes(child.uuid))
+          .map((child: any) => filterTree(child, pathUuids, targetLevelOrder));
+
+        return {
+          ...nodeWithoutOrder,
+          children: filteredChildren,
+        };
+      }
+
+      // Sinon, ne pas inclure ce nœud
+      return null;
+    };
+
+    return filterTree(rootStructure, pathToRoot, responsibleLevelOrder);
+  }
 
 
-async getStructureMembersWithStats(
-  structureUuid: string,
+  /**
+ * Récupère les membres avec leur structure_tree pour l'utilisateur connecté
+ */
+async getMembersWithTreeByConnectedUser(
+  memberUuid: string | null,
+  structureUuid: string | null,
   paginationParams?: PaginationMemberParams
-): Promise<StructureMembersStats> {
+): Promise<{
+  members: any[];
+  pagination: {
+    current_page: number;
+    per_page: number;
+    total_items: number;
+    total_pages: number;
+    has_next: boolean;
+    has_previous: boolean;
+  };
+}> {
+
+  // Vérifier que l'utilisateur a un member_uuid
+  if (!memberUuid) {
+    throw new NotFoundException('Utilisateur non associé à un membre');
+  }
+
+  // Récupérer le membre
+  const member = await this.memberRepository.findOne({
+    where: { uuid: memberUuid },
+  });
+console.log(structureUuid)
+  if (!member || !structureUuid) {
+    throw new NotFoundException('Structure du membre non trouvée');
+  }
+
   // Paramètres de pagination par défaut
   const page = paginationParams?.page || 1;
-  const limit = paginationParams?.limit || 20;
+  const limit = paginationParams?.limit || 25;
   const offset = (page - 1) * limit;
 
-  // 1. Récupérer la structure
-  const structure = await this.structureRepository.findOne({
-    where: { uuid: structureUuid },
-  });
-
-  if (!structure) {
-    throw new NotFoundException('Structure non trouvée');
-  }
-
-  // 2. Récupérer le niveau
-  let level: LevelEntity | null = null;
-  if (structure.level_uuid) {
-    level = await this.levelRepository.findOne({
-      where: { uuid: structure.level_uuid },
-    });
-  }
-
-  // 3. Récupérer les responsables de cette structure spécifique
-  const structureResponsibles = await this.memberRepository
-    .createQueryBuilder('m')
-    .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
-    .innerJoin('responsibilities', 'r', 'r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL')
-    .select([
-      'm.uuid AS member_uuid',
-      "CONCAT(m.firstname, ' ', m.lastname) AS member_name",
-      'r.uuid AS responsibility_uuid',
-      'r.name AS responsibility_name',
-    ])
-    .where('m.structure_uuid = :structureUuid', { structureUuid })
-    .andWhere('m.deleted_at IS NULL')
-    .getRawMany();
-
-  // 4. Récupérer toutes les sous-structures (récursivement)
+  // Récupérer toutes les sous-structures accessibles
   const allStructureUuids = await this.getAllSubStructureUuids(structureUuid);
 
-  // 5. Construire la requête de base pour les membres
+  // Construire la requête de base pour les membres
   let membersQuery = this.memberRepository
     .createQueryBuilder('m')
     .leftJoin('structures', 's', 's.uuid = m.structure_uuid')
@@ -485,10 +954,10 @@ async getStructureMembersWithStats(
     });
   }
 
-  // 6. Compter le total pour la pagination
+  // Compter le total pour la pagination
   const totalCount = await membersQuery.getCount();
 
-  // 7. Récupérer les membres paginés
+  // Récupérer les membres paginés
   const members = await membersQuery
     .orderBy('m.firstname', 'ASC')
     .addOrderBy('m.lastname', 'ASC')
@@ -496,14 +965,7 @@ async getStructureMembersWithStats(
     .limit(limit)
     .getRawMany();
 
-  // 8. Récupérer tous les membres pour les stats (sans pagination)
-  const allMembersForStats = await this.memberRepository
-    .createQueryBuilder('m')
-    .where('m.structure_uuid IN (:...uuids)', { uuids: allStructureUuids })
-    .andWhere('m.deleted_at IS NULL')
-    .getMany();
-
-  // 9. Récupérer les responsabilités des membres paginés
+  // Récupérer les responsabilités des membres paginés
   const memberUuids = members.map(m => m.uuid);
   let memberResponsibilities: any[] = [];
 
@@ -512,10 +974,14 @@ async getStructureMembersWithStats(
       .createQueryBuilder('m')
       .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
       .innerJoin('responsibilities', 'r', 'r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL')
+      .leftJoin('levels', 'l', 'l.uuid = r.level_uuid')
       .select([
         'm.uuid AS member_uuid',
         'r.uuid AS responsibility_uuid',
         'r.name AS responsibility_name',
+        'r.level_uuid AS level_uuid',
+        'l.name AS level_name',
+        'l.order AS level_order',
       ])
       .where('m.uuid IN (:...uuids)', { uuids: memberUuids })
       .andWhere('m.deleted_at IS NULL')
@@ -523,7 +989,7 @@ async getStructureMembersWithStats(
   }
 
   // Grouper les responsabilités par membre
-  const responsibilitiesMap = new Map<string, { uuid: string; name: string }[]>();
+  const responsibilitiesMap = new Map<string, any[]>();
   for (const mr of memberResponsibilities) {
     if (!responsibilitiesMap.has(mr.member_uuid)) {
       responsibilitiesMap.set(mr.member_uuid, []);
@@ -531,49 +997,54 @@ async getStructureMembersWithStats(
     responsibilitiesMap.get(mr.member_uuid)!.push({
       uuid: mr.responsibility_uuid,
       name: mr.responsibility_name,
+      level_uuid: mr.level_uuid,
+      level_name: mr.level_name,
+      level_order: mr.level_order,
     });
   }
 
-  // 10. Calculer les statistiques (sur tous les membres, pas seulement les paginés)
-  const totalMembers = allMembersForStats.length;
-  const hommes = allMembersForStats.filter(m => m.gender === 'homme').length;
-  const femmes = allMembersForStats.filter(m => m.gender === 'femme').length;
-  const withGohonzon = allMembersForStats.filter(m => m.has_gohonzon).length;
+  // Construire les structure_tree pour chaque membre
+  const memberStructureTreeMap = new Map<string, any>();
 
-  // Répartition par âge
-  const now = new Date();
-  const ageGroups = { '0-18': 0, '19-35': 0, '36-50': 0, '51-65': 0, '65+': 0 };
-  for (const m of allMembersForStats) {
-    if (m.birth_date) {
-      const age = Math.floor(
-        (now.getTime() - new Date(m.birth_date).getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+  for (const m of members) {
+    if (!m.structure_uuid) continue;
+
+    const memberResponsibilitiesList = responsibilitiesMap.get(m.uuid) || [];
+
+    // Si le membre a des responsabilités, utiliser le niveau le plus haut
+    if (memberResponsibilitiesList.length > 0) {
+      const validResponsibilities = memberResponsibilitiesList.filter(r => r.level_order !== null);
+
+      if (validResponsibilities.length > 0) {
+        const highestLevelOrder = Math.min(
+          ...validResponsibilities.map(r => parseInt(r.level_order))
+        );
+
+        const tree = await this.getStructureTreeForResponsible(
+          m.structure_uuid,
+          highestLevelOrder
+        );
+
+        memberStructureTreeMap.set(m.uuid, tree);
+      } else {
+        // Pas de level_order valide, utiliser l'arbre complet
+        const tree = await this.getStructureTreeForResponsible(
+          m.structure_uuid,
+          999
+        );
+        memberStructureTreeMap.set(m.uuid, tree);
+      }
+    } else {
+      // Pas de responsabilité, afficher l'arbre complet depuis sa structure
+      const tree = await this.getStructureTreeForResponsible(
+        m.structure_uuid,
+        999
       );
-      if (age <= 18) ageGroups['0-18']++;
-      else if (age <= 35) ageGroups['19-35']++;
-      else if (age <= 50) ageGroups['36-50']++;
-      else if (age <= 65) ageGroups['51-65']++;
-      else ageGroups['65+']++;
+      memberStructureTreeMap.set(m.uuid, tree);
     }
   }
 
-  // Stats par département
-  const departmentStats = await this.getDepartmentsSummary(allStructureUuids, totalMembers);
-
-  // Stats par division
-  const divisionStats = await this.getDivisionsSummary(allStructureUuids, totalMembers);
-
-  // Compter les responsables
-  const allResponsibilities = await this.memberRepository
-    .createQueryBuilder('m')
-    .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
-    .select('m.uuid', 'member_uuid')
-    .where('m.structure_uuid IN (:...uuids)', { uuids: allStructureUuids })
-    .andWhere('m.deleted_at IS NULL')
-    .getRawMany();
-
-  const totalResponsibles = new Set(allResponsibilities.map(r => r.member_uuid)).size;
-
-  // 11. Formater les membres paginés avec leurs responsabilités
+  // Formater les membres avec leurs responsabilités et structure_tree
   const formattedMembers = members.map(m => ({
     uuid: m.uuid,
     matricule: m.matricule,
@@ -592,39 +1063,13 @@ async getStructureMembersWithStats(
     has_gohonzon: m.has_gohonzon,
     membership_date: m.membership_date,
     responsibilities: responsibilitiesMap.get(m.uuid) || [],
+    structure_tree: memberStructureTreeMap.get(m.uuid) || null,
   }));
 
-  // 12. Calculer les infos de pagination
+  // Calculer les infos de pagination
   const totalPages = Math.ceil(totalCount / limit);
 
-  // 13. Retourner le résultat
   return {
-    structure: {
-      uuid: structure.uuid,
-      name: structure.name,
-      level_uuid: structure.level_uuid ?? null,
-      level_name: level?.name || 'Inconnu',
-      responsibles: structureResponsibles.map(r => ({
-        member_uuid: r.member_uuid,
-        member_name: r.member_name,
-        responsibility_uuid: r.responsibility_uuid,
-        responsibility_name: r.responsibility_name,
-      })),
-    },
-    stats: {
-      total_members: totalMembers,
-      total_hommes: hommes,
-      total_femmes: femmes,
-      total_with_gohonzon: withGohonzon,
-      gohonzon_rate: totalMembers > 0
-        ? Math.round((withGohonzon / totalMembers) * 100)
-        : 0,
-      total_responsibles: totalResponsibles,
-      total_sub_structures: allStructureUuids.length - 1,
-      age_distribution: ageGroups,
-      departments: departmentStats,
-      divisions: divisionStats,
-    },
     members: formattedMembers,
     pagination: {
       current_page: page,
@@ -636,6 +1081,265 @@ async getStructureMembersWithStats(
     },
   };
 }
+
+  /*
+
+  async getStructureMembersWithStats_old(
+    structureUuid: string,
+    paginationParams?: PaginationMemberParams
+  ): Promise<StructureMembersStats> {
+    // Paramètres de pagination par défaut
+    const page = paginationParams?.page || 1;
+    const limit = paginationParams?.limit || 20;
+    const offset = (page - 1) * limit;
+
+    // 1. Récupérer la structure
+    const structure = await this.structureRepository.findOne({
+      where: { uuid: structureUuid },
+    });
+
+    if (!structure) {
+      throw new NotFoundException('Structure non trouvée');
+    }
+
+    // 2. Récupérer le niveau
+    let level: LevelEntity | null = null;
+    if (structure.level_uuid) {
+      level = await this.levelRepository.findOne({
+        where: { uuid: structure.level_uuid },
+      });
+    }
+
+    // 3. Récupérer les responsables de cette structure spécifique
+    const structureResponsibles = await this.memberRepository
+      .createQueryBuilder('m')
+      .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
+      .innerJoin('responsibilities', 'r', 'r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL')
+      .select([
+        'm.uuid AS member_uuid',
+        "CONCAT(m.firstname, ' ', m.lastname) AS member_name",
+        'r.uuid AS responsibility_uuid',
+        'r.name AS responsibility_name',
+      ])
+      .where('m.structure_uuid = :structureUuid', { structureUuid })
+      .andWhere('m.deleted_at IS NULL')
+      .getRawMany();
+
+    // 4. Récupérer toutes les sous-structures (récursivement)
+    const allStructureUuids = await this.getAllSubStructureUuids(structureUuid);
+
+    // 5. Construire la requête de base pour les membres
+    let membersQuery = this.memberRepository
+      .createQueryBuilder('m')
+      .leftJoin('structures', 's', 's.uuid = m.structure_uuid')
+      .leftJoin('departments', 'd', 'd.uuid = m.department_uuid')
+      .leftJoin('divisions', 'div', 'div.uuid = m.division_uuid')
+      .select([
+        'm.uuid AS uuid',
+        'm.matricule AS matricule',
+        'm.firstname AS firstname',
+        'm.lastname AS lastname',
+        'm.gender AS gender',
+        'm.birth_date AS birth_date',
+        'm.phone AS phone',
+        'm.email AS email',
+        'm.structure_uuid AS structure_uuid',
+        's.name AS structure_name',
+        'm.department_uuid AS department_uuid',
+        'd.name AS department_name',
+        'm.division_uuid AS division_uuid',
+        'div.name AS division_name',
+        'm.has_gohonzon AS has_gohonzon',
+        'm.membership_date AS membership_date',
+      ])
+      .where('m.structure_uuid IN (:...uuids)', { uuids: allStructureUuids })
+      .andWhere('m.deleted_at IS NULL');
+
+    // Appliquer les filtres optionnels
+    if (paginationParams?.search) {
+      membersQuery = membersQuery.andWhere(
+        "(m.firstname LIKE :search OR m.lastname LIKE :search OR m.matricule LIKE :search OR m.phone LIKE :search OR m.email LIKE :search)",
+        { search: `%${paginationParams.search}%` }
+      );
+    }
+
+    if (paginationParams?.gender) {
+      membersQuery = membersQuery.andWhere('m.gender = :gender', {
+        gender: paginationParams.gender
+      });
+    }
+
+    if (paginationParams?.has_gohonzon !== undefined) {
+      membersQuery = membersQuery.andWhere('m.has_gohonzon = :hasGohonzon', {
+        hasGohonzon: paginationParams.has_gohonzon
+      });
+    }
+
+    if (paginationParams?.department_uuid) {
+      membersQuery = membersQuery.andWhere('m.department_uuid = :deptUuid', {
+        deptUuid: paginationParams.department_uuid
+      });
+    }
+
+    if (paginationParams?.division_uuid) {
+      membersQuery = membersQuery.andWhere('m.division_uuid = :divUuid', {
+        divUuid: paginationParams.division_uuid
+      });
+    }
+
+    // 6. Compter le total pour la pagination
+    const totalCount = await membersQuery.getCount();
+
+    // 7. Récupérer les membres paginés
+    const members = await membersQuery
+      .orderBy('m.firstname', 'ASC')
+      .addOrderBy('m.lastname', 'ASC')
+      .offset(offset)
+      .limit(limit)
+      .getRawMany();
+
+    // 8. Récupérer tous les membres pour les stats (sans pagination)
+    const allMembersForStats = await this.memberRepository
+      .createQueryBuilder('m')
+      .where('m.structure_uuid IN (:...uuids)', { uuids: allStructureUuids })
+      .andWhere('m.deleted_at IS NULL')
+      .getMany();
+
+    // 9. Récupérer les responsabilités des membres paginés
+    const memberUuids = members.map(m => m.uuid);
+    let memberResponsibilities: any[] = [];
+
+    if (memberUuids.length > 0) {
+      memberResponsibilities = await this.memberRepository
+        .createQueryBuilder('m')
+        .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
+        .innerJoin('responsibilities', 'r', 'r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL')
+        .select([
+          'm.uuid AS member_uuid',
+          'r.uuid AS responsibility_uuid',
+          'r.name AS responsibility_name',
+        ])
+        .where('m.uuid IN (:...uuids)', { uuids: memberUuids })
+        .andWhere('m.deleted_at IS NULL')
+        .getRawMany();
+    }
+
+    // Grouper les responsabilités par membre
+    const responsibilitiesMap = new Map<string, { uuid: string; name: string }[]>();
+    for (const mr of memberResponsibilities) {
+      if (!responsibilitiesMap.has(mr.member_uuid)) {
+        responsibilitiesMap.set(mr.member_uuid, []);
+      }
+      responsibilitiesMap.get(mr.member_uuid)!.push({
+        uuid: mr.responsibility_uuid,
+        name: mr.responsibility_name,
+      });
+    }
+
+    // 10. Calculer les statistiques (sur tous les membres, pas seulement les paginés)
+    const totalMembers = allMembersForStats.length;
+    const hommes = allMembersForStats.filter(m => m.gender === 'homme').length;
+    const femmes = allMembersForStats.filter(m => m.gender === 'femme').length;
+    const withGohonzon = allMembersForStats.filter(m => m.has_gohonzon).length;
+
+    // Répartition par âge
+    const now = new Date();
+    const ageGroups = { '0-18': 0, '19-35': 0, '36-50': 0, '51-65': 0, '65+': 0 };
+    for (const m of allMembersForStats) {
+      if (m.birth_date) {
+        const age = Math.floor(
+          (now.getTime() - new Date(m.birth_date).getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+        );
+        if (age <= 18) ageGroups['0-18']++;
+        else if (age <= 35) ageGroups['19-35']++;
+        else if (age <= 50) ageGroups['36-50']++;
+        else if (age <= 65) ageGroups['51-65']++;
+        else ageGroups['65+']++;
+      }
+    }
+
+    // Stats par département
+    const departmentStats = await this.getDepartmentsSummary(allStructureUuids, totalMembers);
+
+    // Stats par division
+    const divisionStats = await this.getDivisionsSummary(allStructureUuids, totalMembers);
+
+    // Compter les responsables
+    const allResponsibilities = await this.memberRepository
+      .createQueryBuilder('m')
+      .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
+      .select('m.uuid', 'member_uuid')
+      .where('m.structure_uuid IN (:...uuids)', { uuids: allStructureUuids })
+      .andWhere('m.deleted_at IS NULL')
+      .getRawMany();
+
+    const totalResponsibles = new Set(allResponsibilities.map(r => r.member_uuid)).size;
+
+    // 11. Formater les membres paginés avec leurs responsabilités
+    const formattedMembers = members.map(m => ({
+      uuid: m.uuid,
+      matricule: m.matricule,
+      firstname: m.firstname,
+      lastname: m.lastname,
+      gender: m.gender,
+      birth_date: m.birth_date,
+      phone: m.phone,
+      email: m.email,
+      structure_uuid: m.structure_uuid,
+      structure_name: m.structure_name,
+      department_uuid: m.department_uuid,
+      department_name: m.department_name,
+      division_uuid: m.division_uuid,
+      division_name: m.division_name,
+      has_gohonzon: m.has_gohonzon,
+      membership_date: m.membership_date,
+      responsibilities: responsibilitiesMap.get(m.uuid) || [],
+    }));
+
+    // 12. Calculer les infos de pagination
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // 13. Retourner le résultat
+    return {
+      structure: {
+        uuid: structure.uuid,
+        name: structure.name,
+        level_uuid: structure.level_uuid ?? null,
+        level_name: level?.name || 'Inconnu',
+        responsibles: structureResponsibles.map(r => ({
+          member_uuid: r.member_uuid,
+          member_name: r.member_name,
+          responsibility_uuid: r.responsibility_uuid,
+          responsibility_name: r.responsibility_name,
+        })),
+      },
+      stats: {
+        total_members: totalMembers,
+        total_hommes: hommes,
+        total_femmes: femmes,
+        total_with_gohonzon: withGohonzon,
+        gohonzon_rate: totalMembers > 0
+          ? Math.round((withGohonzon / totalMembers) * 100)
+          : 0,
+        total_responsibles: totalResponsibles,
+        total_sub_structures: allStructureUuids.length - 1,
+        age_distribution: ageGroups,
+        departments: departmentStats,
+        divisions: divisionStats,
+      },
+      members: formattedMembers,
+      pagination: {
+        current_page: page,
+        per_page: limit,
+        total_items: totalCount,
+        total_pages: totalPages,
+        has_next: page < totalPages,
+        has_previous: page > 1,
+      },
+    };
+  }
+  */
+
 
   /**
    * Récupère récursivement tous les UUIDs des sous-structures
