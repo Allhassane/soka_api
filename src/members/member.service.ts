@@ -82,7 +82,7 @@ export class MemberService {
 
     private readonly responsibilityService: ResponsibilityService,
 
-    private readonly accessoryService: AccessoryService, 
+    private readonly accessoryService: AccessoryService,
 
     @InjectRepository(ResponsibilityEntity)
     private readonly responsibilityRepo: Repository<ResponsibilityEntity>,
@@ -106,7 +106,7 @@ export class MemberService {
       if (!civility) {
         throw new NotFoundException('Civilité introuvable.');
       }
-      
+
       //  Génération du matricule unique
       const lastMember = await this.memberRepo
         .createQueryBuilder('m')
@@ -270,8 +270,8 @@ export class MemberService {
 
       return saved;
   }
-    
-  
+
+
   async storeFromMigration(dto: CreateMemberDto, admin_uuid: string): Promise<MemberEntity> {
 
     // ---- Sauvegarde du membre principal ----
@@ -312,7 +312,7 @@ export class MemberService {
       * MISE À JOUR AUTO DU COMPTE UTILISATEUR LIÉ
     */
     const linkedUser = await this.userRepo.findOne({
-      where: 
+      where:
         { member_uuid : uuid }
     });
 
@@ -532,11 +532,11 @@ export class MemberService {
 
     const responsibility_uuid = memberResponsibility.responsibility_uuid;
 
-    
+
     const responsibility = await this.responsibilityRepo.findOne({ relations: ['level'], where: { uuid: responsibility_uuid } });
     if (!responsibility) throw new NotFoundException("Identifiant de la responsabilité introuvable");
     if (!memberResponsibility.member) throw new NotFoundException("Identifiant du membre introuvable");
-    
+
     const sous_groupes = await this.structureService.findByAllChildrens(memberResponsibility.member.structure_uuid);
     return sous_groupes;
   }

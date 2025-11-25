@@ -8,7 +8,7 @@ import {
   Param,
   UseGuards,
   Query,
-  Req, 
+  Req,
 } from '@nestjs/common';
 import { CreateStructureDto } from './dto/create-structure.dto';
 import { StructureService } from './structure.service';
@@ -34,6 +34,45 @@ export class StructureController {
   constructor(private readonly structureService: StructureService,
     private readonly structureTreeService:StructureTreeService,
   ) {}
+
+    @Get('my-members')
+    @UseGuards(JwtAuthGuard)
+    @ApiOperation({
+      summary: 'Récupérer les membres accessibles par l\'utilisateur connecté avec leur structure_tree',
+    })
+    @ApiQuery({ name: 'page', required: false, type: Number })
+    @ApiQuery({ name: 'limit', required: false, type: Number })
+    @ApiQuery({ name: 'search', required: false, type: String })
+    @ApiQuery({ name: 'gender', required: false, enum: ['homme', 'femme'] })
+    @ApiQuery({ name: 'has_gohonzon', required: false, type: Boolean })
+    @ApiQuery({ name: 'department_uuid', required: false, type: String })
+    @ApiQuery({ name: 'division_uuid', required: false, type: String })
+    async getMyMembers(
+      @Req() req,
+      @Query('page') page?: number,
+      @Query('limit') limit?: number,
+      @Query('search') search?: string,
+      @Query('gender') gender?: 'homme' | 'femme',
+      @Query('has_gohonzon') has_gohonzon?: boolean,
+      @Query('department_uuid') department_uuid?: string,
+      @Query('division_uuid') division_uuid?: string,
+    ) {
+      const user = req.user;
+      //console.log(user.responsibilities[0].structure)
+      return this.structureTreeService.getMembersWithTreeByConnectedUser(
+        user.member_uuid,
+        user.responsibilities[0]?.structure?.uuid,
+        {
+          page: page ? Number(page) : undefined,
+          limit: limit ? Number(limit) : undefined,
+          search,
+          gender,
+          has_gohonzon,
+          department_uuid,
+          division_uuid,
+        }
+      );
+    }
 
   @Get('my-stats')
   @UseGuards(JwtAuthGuard)
@@ -277,6 +316,8 @@ export class StructureController {
   public delete(@Param('uuid') uuid: string) {
     return this.structureService.delete(uuid);
   }
+
+
 
   @Get('members/:uuid')
   @ApiOperation({
