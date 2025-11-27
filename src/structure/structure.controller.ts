@@ -129,9 +129,11 @@ export class StructureController {
     @Query('division_uuid') division_uuid?: string,
   ) {
     const user = req.user;
+    const responsibility_structure_uuid = user.responsibilities[0]?.structure?.uuid;
     //console.log(user)
     return this.structureTreeService.getMemberStatsByConnectedUser(
       user.member_uuid,
+      responsibility_structure_uuid,
       {
         region_uuid,
         centre_uuid,

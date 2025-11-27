@@ -1634,6 +1634,7 @@ export class StructureTreeService {
 
 async getMemberStatsByConnectedUser(
   memberUuid: string | null,
+  responsibility_structure_uuid: string | null,
   filters?: MemberStatsFilters
 ): Promise<MemberStatsResponse> {
 
@@ -1647,11 +1648,11 @@ async getMemberStatsByConnectedUser(
     where: { uuid: memberUuid },
   });
 
-  if (!member || !member.structure_uuid) {
+  if (!member || !responsibility_structure_uuid) {
     throw new NotFoundException('Structure du membre non trouvée');
   }
 
-  const memberStructureUuid = member.structure_uuid;
+  const memberStructureUuid = responsibility_structure_uuid;
 
   // 1. Déterminer la structure de base selon les filtres
   let targetStructureUuid = memberStructureUuid;
