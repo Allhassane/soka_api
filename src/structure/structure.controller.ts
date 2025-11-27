@@ -74,6 +74,38 @@ export class StructureController {
       );
     }
 
+    @Get('my-beneficiary')
+    @UseGuards(JwtAuthGuard)
+    @ApiOperation({
+      summary: 'Récupérer tous les membres accessibles par l\'utilisateur connecté (bénéficiaires)',
+    })
+    @ApiQuery({ name: 'search', required: false, type: String })
+    @ApiQuery({ name: 'gender', required: false, enum: ['homme', 'femme'] })
+    @ApiQuery({ name: 'has_gohonzon', required: false, type: Boolean })
+    @ApiQuery({ name: 'department_uuid', required: false, type: String })
+    @ApiQuery({ name: 'division_uuid', required: false, type: String })
+    async getMyBeneficiary(
+      @Req() req,
+      @Query('search') search?: string,
+      @Query('gender') gender?: 'homme' | 'femme',
+      @Query('has_gohonzon') has_gohonzon?: boolean,
+      @Query('department_uuid') department_uuid?: string,
+      @Query('division_uuid') division_uuid?: string,
+    ) {
+      const user = req.user;
+      return this.structureTreeService.getBeneficiaryByConnectedUser(
+        user.member_uuid,
+        user.responsibilities[0]?.structure?.uuid,
+        {
+          search,
+          gender,
+          has_gohonzon,
+          department_uuid,
+          division_uuid,
+        }
+      );
+    }
+
   @Get('my-stats')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
