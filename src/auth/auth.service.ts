@@ -128,6 +128,8 @@ export class AuthService {
     uuid: user.uuid,
     member_uuid: user.member_uuid ?? null,
     ...(user.email ? { email: user.email } : {}),
+    ...(user.firstname ? { firstname: user.firstname } : {}),
+    ...(user.lastname ? { lastname: user.lastname } : {}),
     ...(user.phone_number ? { phone_number: user.phone_number } : {}),
     ...(memberResponsibilities.length > 0 ? { responsibilities: memberResponsibilities } : {}),
   };
