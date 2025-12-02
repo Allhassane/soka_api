@@ -1,0 +1,225 @@
+html, body {
+    overflow-x: hidden;
+}
+
+/*pour gerer la hauteur des slider
+/* Forcer toutes les slides à la même hauteur */
+.main-slider .swiper-slide {
+    position: relative;
+    height: 100vh; /* prend toute la hauteur de l’écran */
+    min-height: 600px; /* sécurité pour éviter un slider trop petit */
+}
+
+/* Les backgrounds couvrent bien la zone */
+.main-slider .image-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-size: cover; /* l’image occupe tout */
+    background-position: center;
+    background-repeat: no-repeat;
+    z-index: -1; /* pour rester derrière le contenu */
+}
+
+
+/* --- POLICES LOCALES avec font-display: swap --- */
+@font-face {
+    font-family: 'Font Awesome 5 Free';
+    font-style: normal;
+    font-weight: 900;
+    font-display: swap;
+    src: url("{{ asset('webfonts/fa-solid-900.woff2') }}") format('woff2');
+}
+
+@font-face {
+    font-family: 'Font Awesome 5 Brands';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("{{ asset('webfonts/fa-brands-400.woff2') }}") format('woff2');
+}
+
+@font-face {
+    font-family: 'IcoMoon';
+    font-style: normal;
+    font-weight: normal;
+    font-display: swap;
+    src: url("{{ asset('fonts/icomoon.ttf') }}") format('truetype');
+}
+
+/* --- ANIMATIONS ET STYLES EXISTANTS --- */
+@keyframes clignote {
+    0%   { opacity: 1; }
+    50%  { opacity: 0.4; }
+    100% { opacity: 1; }
+}
+
+@keyframes flash-rapide {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+.flash-rapide {
+    animation: flash-rapide 0.5s infinite;
+}
+
+.clignotant {
+    animation: clignote 1s infinite;
+}
+
+.text_gauche {
+    text-align: left;
+}
+
+.texte_noir a {
+    font-size: 20px;
+    font-weight: bold;
+    font-family: var(--agrion-font);
+    line-height: 28px;
+    padding-bottom: 15px;
+    color: black;
+}
+
+.texte_blanc a {
+    font-size: 18px;
+    font-weight: 400;
+    font-family: var(--agrion-font);
+    line-height: 28px;
+    padding-bottom: 15px;
+    color: white;
+}
+
+.img_personel {
+    width: 250px;
+    height: 250px;
+    padding-left: 5px;
+    padding-right: 5px;
+}
+
+.img_valeur {
+    width: 300px;
+    height: 220px;
+    padding-left: 5px;
+    padding-right: 5px;
+    border-radius: 5px;
+}
+
+.grand {
+    font-size: 40px;
+}
+
+.accrodion-content {
+    display: none;
+    transition: opacity 0.3s ease-in-out;
+}
+
+.espace {
+    padding-top: 10px;
+}
+
+.perso {
+    color: black;
+}
+
+.perso:hover {
+    color: #1f6306;
+}
+
+.noir {
+    color: black;
+}
+
+/* --- SUPPRESSION DES TRAITS DES COMMENTAIRES / ACTUALITÉS --- */
+.comment-one__single {
+    border-bottom: none !important;
+    border-top: none !important;
+    border: none !important;
+    margin-bottom: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+.comment-one__single::after {
+    display: none !important;
+}
+
+.comment-one__content {
+    border: none !important;
+    border-top: none !important;
+    margin-bottom: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+.comment-one__image {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+}
+
+
+/* --- CHATBOT --- */
+#chatbot-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 320px;
+    font-family: Arial, sans-serif;
+    z-index: 9999;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+#chatbot-header {
+    background: #25D366;
+    color: white;
+    padding: 10px;
+    cursor: pointer;
+    border-radius: 10px 10px 0 0;
+}
+
+#chatbot-body {
+    display: none;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 0 0 10px 10px;
+    height: 400px;
+    display: flex;
+    flex-direction: column;
+}
+
+#chatbot-messages {
+    flex: 1;
+    padding: 10px;
+    overflow-y: auto;
+}
+
+#chatbot-messages div {
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    border-radius: 20px;
+    max-width: 80%;
+}
+
+.user-message {
+    background: #DCF8C6;
+    align-self: flex-end;
+}
+
+.bot-message {
+    background: #F1F0F0;
+    align-self: flex-start;
+}
+
+#chatbot-input {
+    padding: 10px;
+    border: none;
+    border-top: 1px solid #ccc;
+    width: calc(100% - 80px);
+}
+
+#chatbot-body button {
+    width: 60px;
+    border: none;
+    background: #25D366;
+    color: white;
+    cursor: pointer;
+}
