@@ -79,7 +79,7 @@ export class CinetPayService {
 
         // --- CALLBACKS ---
         notify_url: this.notifyUrl,
-        return_url: this.returnUrl+'/'+transactionId ,
+        return_url: this.notifyUrl, //this.returnUrl+'/'+transactionId ,
 
         // --- OPTIONS ---
         channels: 'ALL',

@@ -601,14 +601,14 @@ export class PaymentService {
       await this.subscriptionPaymentRepo.save(subscription);
 
       console.log(`Abonnement mis à jour pour paiement ${payment.uuid}`);
-      return { updated: 'subscription', uuid: subscription.uuid };
+      //return { updated: 'subscription', uuid: subscription.uuid };
     }
 
     console.warn(
       ` Aucun Don ou Abonnement trouvé pour le paiement ${payment.uuid}`,
     );
 
-    return { updated: null };
+    //return { updated: null };
   }
 
 
