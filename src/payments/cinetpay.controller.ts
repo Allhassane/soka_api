@@ -45,11 +45,13 @@ export class CinetpayCallbackController {
 @Post('callback')
 @HttpCode(200)
   async cinetpayCallback(@Body() payload: any, @Res({ passthrough: true }) res: Response) {
-    if (!payload?.transaction_id) {
+    //console.log('Callback CinetPay reçu:', payload);
+
+    /* if (!payload?.transaction_id) {
       throw new BadRequestException(
         'transaction_id manquant dans le callback CinetPay',
       );
-    }
+    } */
 
     // Traitement via PaymentService
     const result = await this.paymentService.confirmCinetPayCallback(payload);
