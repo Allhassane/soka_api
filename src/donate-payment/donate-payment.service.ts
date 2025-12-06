@@ -179,42 +179,41 @@ export class DonatePaymentService {
   }
 
 
-async findAll(
-  page = 1,
-  limit = 20,
-  admin_uuid: string,
-  search?: string,
-) {
-  // Vérification de l'admin
-  await this.checkAdmin(admin_uuid);
+  async findAll(
+    page = 1,
+    limit = 20,
+    admin_uuid: string,
+    search?: string,
+  ) {
+    // Vérification de l'admin
+    await this.checkAdmin(admin_uuid);
 
-  const take = Number(limit) > 0 ? Number(limit) : 20;
-  const skip = (Number(page) - 1) * take;
+    const take = Number(limit) > 0 ? Number(limit) : 20;
+    const skip = (Number(page) - 1) * take;
 
-  // Construction du where avec Or
-  const where: any = search && search.trim() !== ''
-    ? [
-        { actor_name: ILike(`%${search.trim()}%`) },
-        { beneficiary_name: ILike(`%${search.trim()}%`) },
-      ]
-    : {};
+    // Construction du where avec Or
+    const where: any = search && search.trim() !== ''
+      ? [
+          { actor_name: ILike(`%${search.trim()}%`) },
+          { beneficiary_name: ILike(`%${search.trim()}%`) },
+        ]
+      : {};
 
-  const [items, total] = await this.donateRepo.findAndCount({
-    where,
-    order: { created_at: 'DESC' },
-    skip,
-    take,
-  });
+    const [items, total] = await this.donateRepo.findAndCount({
+      where,
+      order: { created_at: 'DESC' },
+      skip,
+      take,
+    });
 
-  return {
-    total,
-    page: Number(page),
-    limit: take,
-    data: items,
-    search: search || null,
-  };
-}
-
+    return {
+      total,
+      page: Number(page),
+      limit: take,
+      data: items,
+      search: search || null,
+    };
+  }
 
 
   async findOne(uuid: string, admin_uuid: string) {

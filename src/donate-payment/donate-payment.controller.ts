@@ -57,7 +57,6 @@ export class DonatePaymentController {
     );
   }
 
-
   @Get(':uuid')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
