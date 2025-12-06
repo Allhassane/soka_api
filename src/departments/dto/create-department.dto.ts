@@ -29,6 +29,7 @@ export class CreateDepartmentDto {
   @IsEnum(['mixte', 'homme', 'femme'], {
     message: 'Le genre doit être mixte, homme ou femme',
   })
+  gender?: 'mixte' | 'homme' | 'femme';
 
   @ApiPropertyOptional({
     description: 'Description du département',
