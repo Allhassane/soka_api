@@ -43,8 +43,13 @@ import { MemberTravelModule } from './member-travel/member-travel.module';
 import { SubscriptionPaymentModule } from './subscription-payment/subscription-payment.module';
 import { CinetpayCallbackController } from './payments/cinetpay.controller';
 import { StatistiqueModule } from './statistique/statistique.module';
+
+import { ConfigModule } from '@nestjs/config';
+import { LocationModule } from './location/location.module';
 @Module({
   imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+
     TypeOrmModule.forRootAsync({
       inject: [AppConfigService],
       useFactory: (config: AppConfigService) => ({
@@ -110,7 +115,8 @@ import { StatistiqueModule } from './statistique/statistique.module';
     DonatePaymentModule,
     MemberTravelModule,
     SubscriptionPaymentModule,
-    StatistiqueModule
+    StatistiqueModule,
+    LocationModule
   ],
   controllers: [AppController, RolePermissionController,CinetpayCallbackController],
   providers: [AppService, RolePermissionService],

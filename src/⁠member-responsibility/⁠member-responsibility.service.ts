@@ -54,5 +54,14 @@ export class MemberResponsibilityService {
     return memberResponsibility;
   }
 
+  async findResponsibilityByMember(member_uuid: string) {
+    const memberResponsibility = await this.memberResponsibilityRepo.findOne({
+      where: {
+       member_uuid: member_uuid,
+      },
+    });
+    
+    return memberResponsibility;
+  }
   // async find
 }
