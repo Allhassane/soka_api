@@ -505,8 +505,12 @@ export class PaymentService {
 
 
   async confirmCinetPayCallback(payload: any) {
-  const { transaction_id } = payload;
+  //const { transaction_id } = payload;
 
+  console.log('Vérification du paiement CinetPay pour transaction_id:', payload);
+
+
+/*
   if (!transaction_id) {
     throw new BadRequestException('transaction_id manquant.');
   }
@@ -569,7 +573,7 @@ export class PaymentService {
       await this.updateLinkedEntities(payment,GlobalStatus.SUCCESS);
 
       return payment;
-    }
+    } */
 }
 
 
