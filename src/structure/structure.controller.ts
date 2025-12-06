@@ -83,6 +83,11 @@ export class StructureController {
 @ApiQuery({ name: 'search', required: false })
 @ApiQuery({ name: 'gender', required: false, enum: ['homme', 'femme'] })
 @ApiQuery({ name: 'has_gohonzon', required: false, type: Boolean })
+@ApiQuery({ name: 'region_uuid', required: false, type: String })
+@ApiQuery({ name: 'centre_uuid', required: false, type: String })
+@ApiQuery({ name: 'chapitre_uuid', required: false, type: String })
+@ApiQuery({ name: 'district_uuid', required: false, type: String })
+@ApiQuery({ name: 'groupe_uuid', required: false, type: String })
 @ApiQuery({ name: 'department_uuid', required: false })
 @ApiQuery({ name: 'division_uuid', required: false })
 async exportMembersToExcel(
@@ -91,6 +96,11 @@ async exportMembersToExcel(
   @Query('search') search?: string,
   @Query('gender') gender?: 'homme' | 'femme',
   @Query('has_gohonzon') has_gohonzon?: boolean,
+  @Query('region_uuid') region_uuid?: string,
+  @Query('centre_uuid') centre_uuid?: string,
+  @Query('chapitre_uuid') chapitre_uuid?: string,
+  @Query('district_uuid') district_uuid?: string,
+  @Query('groupe_uuid') groupe_uuid?: string,
   @Query('department_uuid') department_uuid?: string,
   @Query('division_uuid') division_uuid?: string,
 ): Promise<void> {
@@ -98,6 +108,11 @@ async exportMembersToExcel(
     search,
     gender,
     has_gohonzon,
+    region_uuid,
+    centre_uuid,
+    chapitre_uuid,
+    district_uuid,
+    groupe_uuid,
     department_uuid,
     division_uuid,
   };

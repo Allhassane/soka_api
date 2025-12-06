@@ -1299,8 +1299,14 @@ export class StructureTreeService {
       search?: string;
       gender?: 'homme' | 'femme';
       has_gohonzon?: boolean;
+      region_uuid?: string;
+      centre_uuid?: string;
+      chapitre_uuid?: string;
+      disctrict_uuid?: string;
+      group_uuid?: string;
       department_uuid?: string;
       division_uuid?: string;
+
     }
   ): Promise<void> {
 

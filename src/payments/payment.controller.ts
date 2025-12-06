@@ -128,17 +128,20 @@ export class PaymentController {
   })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 50 })
+  @ApiQuery({ name: 'search', required: false, description: 'Recherche par nom ou prénom' })
   async findTransactionsForSubGroups(
     @Query('source_uuid') source_uuid: string,
     @Query('page') page = 1,
     @Query('limit') limit = 50,
     @Request() req,
+    @Query('search') search?: string | undefined,
   ) {
     return this.paymentService.findTransactionsForSubGroups(
       source_uuid,
       req.user.uuid, // admin uuid
       +page,
       +limit,
+      search,
     );
   }
 }
