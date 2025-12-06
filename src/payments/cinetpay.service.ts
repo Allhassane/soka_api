@@ -79,7 +79,7 @@ export class CinetPayService {
 
         // --- CALLBACKS ---
         notify_url: this.notifyUrl,
-        return_url: this.returnUrl,
+        return_url: this.returnUrl+'/'+transactionId ,
 
         // --- OPTIONS ---
         channels: 'ALL',
@@ -93,7 +93,7 @@ export class CinetPayService {
         }
       };
 
-      //console.log('Payload envoyé à CinetPay :', payload);
+      console.log('Payload envoyé à CinetPay :', payload);
 
       const response = await axios.post(
         'https://api-checkout.cinetpay.com/v2/payment',
