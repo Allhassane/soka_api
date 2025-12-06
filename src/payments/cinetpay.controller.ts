@@ -17,7 +17,7 @@ export class CinetpayCallbackController {
   constructor(
     private readonly paymentService: PaymentService,
     private readonly logService: LogActivitiesService,
-  ) {}
+  ) { }
 
   @Post('callback')
   @HttpCode(200) // CinetPay exige un 200 même pour les erreurs internes
@@ -42,8 +42,8 @@ export class CinetpayCallbackController {
     status: 200,
     description: 'Callback traité',
   })
-@Post('callback')
-@HttpCode(200)
+  @Post('callback')
+  @HttpCode(200)
   async cinetpayCallback(@Body() payload: any, @Res() res: Response) {
     //console.log('Callback CinetPay reçu:', payload);
 
@@ -57,21 +57,28 @@ export class CinetpayCallbackController {
         payload,
       );
 
-      const returnUrl = `${process.env.CINET_RETURN_URL}/${payload.cpm_trans_id}`;
+      let transaction_id: string;
+    if (payload.transaction_id) {
+      console.warn('Utilisation de transaction_id dans le callback CinetPay.');
+      transaction_id = payload.transaction_id;
+    } else {
+      transaction_id = payload.cpm_trans_id;
+    }
+      const returnUrl = `${process.env.CINET_RETURN_URL}/${transaction_id}`;
 
       // Retourner les données ET rediriger
-       // res.redirect(302, returnUrl);
-       console.log('Redirection vers :', returnUrl);
-        return res.redirect(302, returnUrl);
+      // res.redirect(302, returnUrl);
+      console.log('Redirection vers :', returnUrl);
+      return res.redirect(302, returnUrl);
 
-    }    catch (error) {
-    // En cas d'erreur, renvoyer quand même 200 pour CinetPay
+    } catch (error) {
+      // En cas d'erreur, renvoyer quand même 200 pour CinetPay
       return {
         success: true,
         message: 'Callback CinetPay traité',
         redirect_url: '',
         data: '',
       };
-  }
+    }
   }
 }

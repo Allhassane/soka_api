@@ -51,8 +51,8 @@ export class PaymentService {
 
 
     private readonly logService: LogActivitiesService,
-    private readonly cinetPayService:CinetPayService
-  ) {}
+    private readonly cinetPayService: CinetPayService
+  ) { }
 
   // ----------------------------------------------------------
   //  LISTER LES PAIEMENTS
@@ -158,7 +158,7 @@ export class PaymentService {
     const description = `Paiement ${dto.source} par ${dto.actor_name}`;
 
 
-   // Appel API CinetPay
+    // Appel API CinetPay
     const cinetResponse = await this.cinetPayService.initPayment(
       total,
       description,
@@ -446,47 +446,47 @@ export class PaymentService {
 
         actor: p.actor
           ? {
-              uuid: p.actor.uuid,
-              firstname: p.actor.firstname,
-              lastname: p.actor.lastname,
-              phone: p.actor.phone,
-              structure: p.actor.structure
-                ? { uuid: p.actor.structure.uuid, name: p.actor.structure.name }
-                : null,
-            }
+            uuid: p.actor.uuid,
+            firstname: p.actor.firstname,
+            lastname: p.actor.lastname,
+            phone: p.actor.phone,
+            structure: p.actor.structure
+              ? { uuid: p.actor.structure.uuid, name: p.actor.structure.name }
+              : null,
+          }
           : null,
 
         beneficiary: p.beneficiary
           ? {
-              uuid: p.beneficiary.uuid,
-              firstname: p.beneficiary.firstname,
-              lastname: p.beneficiary.lastname,
-              phone: p.beneficiary.phone,
-              structure: p.beneficiary.structure
-                ? {
-                    uuid: p.beneficiary.structure.uuid,
-                    name: p.beneficiary.structure.name,
-                  }
-                : null,
-            }
+            uuid: p.beneficiary.uuid,
+            firstname: p.beneficiary.firstname,
+            lastname: p.beneficiary.lastname,
+            phone: p.beneficiary.phone,
+            structure: p.beneficiary.structure
+              ? {
+                uuid: p.beneficiary.structure.uuid,
+                name: p.beneficiary.structure.name,
+              }
+              : null,
+          }
           : null,
 
         donation: donation
           ? {
-              uuid: donation.uuid,
-              amount: donation.amount,
-              status: donation.status,
-              quantity: donation.quantity,
-            }
+            uuid: donation.uuid,
+            amount: donation.amount,
+            status: donation.status,
+            quantity: donation.quantity,
+          }
           : null,
 
         subscription: subscription
           ? {
-              uuid: subscription.uuid,
-              amount: subscription.amount,
-              status: subscription.status,
-              quantity: subscription.quantity,
-            }
+            uuid: subscription.uuid,
+            amount: subscription.amount,
+            status: subscription.status,
+            quantity: subscription.quantity,
+          }
           : null,
       });
     }
@@ -505,39 +505,39 @@ export class PaymentService {
 
 
   async confirmCinetPayCallback(payload: any) {
-  const { cpm_trans_id } = payload;
-  let transaction_id = '';
-  console.log('Vérification du paiement CinetPay pour transaction_id:', payload);
+    const { cpm_trans_id } = payload;
+    let transaction_id = '';
+    console.log('Vérification du paiement CinetPay pour transaction_id:', payload);
 
-  if (payload.transaction_id) {
-    console.warn('Utilisation de transaction_id dans le callback CinetPay.');
-     transaction_id = payload.transaction_id;
-  }else{
-    transaction_id = cpm_trans_id;
-  }
+    if (payload.transaction_id) {
+      console.warn('Utilisation de transaction_id dans le callback CinetPay.');
+      transaction_id = payload.transaction_id;
+    } else {
+      transaction_id = cpm_trans_id;
+    }
 
-  if (!transaction_id) {
-    throw new BadRequestException('transaction_id manquant.');
-  }
+    if (!transaction_id) {
+      throw new BadRequestException('transaction_id manquant.');
+    }
 
-  // Vérification côté CinetPay
-  const check = await axios.post(
-    'https://api-checkout.cinetpay.com/v2/payment/check',
-    {
-      transaction_id,
-      apikey: process.env.CINET_API_KEY,
-      site_id: process.env.CINET_SITE_ID,
-    },
-  );
-
-  const response = check.data;
-
-  console.log('Réponse de vérification CinetPay :', response);
-  if (response.code !== '00') {
-    throw new BadRequestException(
-      `Paiement refusé par CinetPay : ${response.message}`,
+    // Vérification côté CinetPay
+    const check = await axios.post(
+      'https://api-checkout.cinetpay.com/v2/payment/check',
+      {
+        transaction_id,
+        apikey: process.env.CINET_API_KEY,
+        site_id: process.env.CINET_SITE_ID,
+      },
     );
-  }
+
+    const response = check.data;
+
+    console.log('Réponse de vérification CinetPay :', response);
+    if (response.code !== '00') {
+      throw new BadRequestException(
+        `Paiement refusé par CinetPay : ${response.message}`,
+      );
+    }
 
 
     // data existe
@@ -546,44 +546,44 @@ export class PaymentService {
     }
 
 
-  // Paiement interne
-      const payment = await this.paymentRepo.findOne({
-        where: { transaction_id },
-      });
+    // Paiement interne
+    const payment = await this.paymentRepo.findOne({
+      where: { transaction_id },
+    });
 
-      if (!payment) {
-        throw new NotFoundException(
-          `Aucun paiement trouvé pour transaction_id = ${transaction_id}`,
-        );
+    if (!payment) {
+      throw new NotFoundException(
+        `Aucun paiement trouvé pour transaction_id = ${transaction_id}`,
+      );
     }
 
-      // status = ACCEPTED
+    // status = ACCEPTED
     if (response.data.status !== 'ACCEPTED') {
-        await this.updatePayment(payment.uuid, {
-          status: GlobalStatus.FAILED,
-          payment_status: PaymentStatus.FAILED,
-        });
+      await this.updatePayment(payment.uuid, {
+        status: GlobalStatus.FAILED,
+        payment_status: PaymentStatus.FAILED,
+      });
 
-        // Mise à jour éventuelle d’un don ou abonnement
-        await this.updateLinkedEntities(payment,GlobalStatus.FAILED);
+      // Mise à jour éventuelle d’un don ou abonnement
+      await this.updateLinkedEntities(payment, GlobalStatus.FAILED);
 
       throw new BadRequestException(
         `Paiement refusé : statut = ${response.data.status}`,
       );
-    }else{
+    } else {
       await this.updatePayment(payment.uuid, {
         status: GlobalStatus.SUCCESS,
         payment_status: PaymentStatus.PAID,
       });
 
-      await this.updateLinkedEntities(payment,GlobalStatus.SUCCESS);
+      await this.updateLinkedEntities(payment, GlobalStatus.SUCCESS);
 
       return payment;
     }
-}
+  }
 
 
-  private async updateLinkedEntities(payment: PaymentEntity,status) {
+  private async updateLinkedEntities(payment: PaymentEntity, status) {
     const donation = await this.donatePaymentRepo.findOne({
       where: { payment_uuid: payment.uuid },
     });
