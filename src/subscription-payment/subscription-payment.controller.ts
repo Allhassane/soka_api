@@ -9,6 +9,7 @@ import {
   Query,
   Request,
   UseGuards,
+  HttpCode,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -22,10 +23,10 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { SubscriptionPaymentService } from './subscription-payment.service';
 import { MakeSubscriptionPaymentDto } from './dto/make-subscription-payment';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
+import { Public } from 'src/shared/decorators/public.decorator';
 
 @ApiTags('Paiement d’abonnement')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+
 @Controller('subscription-payments')
 export class SubscriptionPaymentController {
   constructor(
@@ -33,6 +34,8 @@ export class SubscriptionPaymentController {
   ) {}
 
   @Post()
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Initier un paiement d’abonnement (CinetPay)' })
   @ApiResponse({ status: 201, description: 'Paiement créé avec succès' })
   @ApiResponse({ status: 400, description: 'Données invalides' })
@@ -47,22 +50,33 @@ export class SubscriptionPaymentController {
   }
 
   @Get()
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Liste paginée des paiements d’abonnements' })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 20 })
+  @ApiQuery({ name: 'search', required: false, description: 'Recherche par nom ou prénom' })
+
   async findAll(
     @Query('page') page = 1,
     @Query('limit') limit = 20,
     @Request() req,
+    @Query('search') search?: string | undefined,
+
   ) {
     return this.subscriptionPaymentService.findAll(
       +page,
       +limit,
       req.user.uuid,
+      search,
     );
   }
 
+
+
   @Get(':uuid')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Détail d’un paiement d’abonnement' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Détail du paiement' })
@@ -70,7 +84,10 @@ export class SubscriptionPaymentController {
     return this.subscriptionPaymentService.findOne(uuid, req.user.uuid);
   }
 
+
   @Put(':uuid/status')
+  @ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Changer le statut du paiement d’abonnement' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Statut changé' })
@@ -92,12 +109,11 @@ export class SubscriptionPaymentController {
 @ApiResponse({ status: 200, description: 'Statut du paiement vérifié' })
 async cinetPayCheckStatus(
   @Param('transaction_id') transaction_id: string,
-  @Request() req,
 ) {
   // On passe un payload minimal au service
   return this.subscriptionPaymentService.confirmPayment(
     { transaction_id },
-    req.user.uuid, // si ta route est protégée et que confirmPayment attend encore admin_uuid
+    '', // si ta route est protégée et que confirmPayment attend encore admin_uuid
   );
 }
 

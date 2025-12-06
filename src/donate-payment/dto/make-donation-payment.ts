@@ -24,6 +24,14 @@ export class MakeDonationPaymentDto {
   @IsNotEmpty({ message: "Le bénéficiaire est requis." })
   beneficiary_uuid: string;
 
+  // ajout du champ de recherche sur le nom du donateur
+  @ApiProperty({
+    description: "Filtre de recherche par nom du donateur",
+    example: "",
+  })
+  @IsOptional()
+  search?: string;
+
 
   @ApiPropertyOptional({
     description: "Montant du don (utilisé uniquement pour les dons libres)",
