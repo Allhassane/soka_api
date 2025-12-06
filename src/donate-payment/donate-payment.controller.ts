@@ -15,16 +15,18 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { DonatePaymentService } from './donate-payment.service';
 import { MakeDonationPaymentDto } from '../donate-payment/dto/make-donation-payment';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
+import { Public } from 'src/shared/decorators/public.decorator';
 
 @ApiTags('Paiement de don')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+
 @Controller('donate-payments')
 export class DonatePaymentController {
   constructor(private readonly donatePaymentService: DonatePaymentService) {}
 
 
   @Post()
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Initier un paiement de don + redirection CinetPay' })
   @ApiResponse({ status: 201, description: 'Paiement créé avec succès' })
   @ApiResponse({ status: 400, description: 'Données invalides' })
@@ -34,19 +36,31 @@ export class DonatePaymentController {
 
 
   @Get()
-  @ApiOperation({ summary: 'Liste paginée des dons' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Liste paginée des paiements d’abonnements' })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 20 })
+  @ApiQuery({ name: 'search', required: false, description: 'Recherche par nom ou prénom' })
+
   async findAll(
     @Query('page') page = 1,
     @Query('limit') limit = 20,
     @Request() req,
+    @Query('search') search?: string | undefined,
   ) {
-    return this.donatePaymentService.findAll(+page, +limit, req.user.uuid);
+    return this.donatePaymentService.findAll(
+      +page,
+      +limit,
+      req.user.uuid,
+      search,
+    );
   }
 
 
   @Get(':uuid')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Récupérer un paiement de don par UUID' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Détail du don' })
@@ -56,6 +70,8 @@ export class DonatePaymentController {
 
 
   @Put(':uuid')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Modifier un paiement de don' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Données modifiées avec succès' })
@@ -69,6 +85,8 @@ export class DonatePaymentController {
 
 
   @Put(':uuid/status')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Changer le statut du paiement de don' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Statut modifié' })
@@ -81,23 +99,24 @@ export class DonatePaymentController {
   }
 
 
-
+  @Public()
   @Post('cinetpay/check/status/:transaction_id')
   @ApiOperation({ summary: 'Vérifier le statut d’un paiement CinetPay' })
   @ApiResponse({ status: 200, description: 'Statut du paiement vérifié' })
   async cinetPayCheckStatus(
     @Param('transaction_id') transaction_id: string,
-    @Request() req,
   ) {
     // On passe un payload minimal au service
     return this.donatePaymentService.confirmPayment(
       { transaction_id },
-      req.user.uuid, // si ta route est protégée et que confirmPayment attend encore admin_uuid
+      '', // si ta route est protégée et que confirmPayment attend encore admin_uuid
     );
   }
 
 
   @Delete(':uuid')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Supprimer un paiement de don' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Supprimé avec succès' })

@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { SubscriptionPaymentEntity } from './entities/subscription-payment.entity';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { ILike, Repository } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
 import { LogActivitiesService } from 'src/log-activities/log-activities.service';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
@@ -268,8 +268,45 @@ async changeStatus(uuid: string, status: GlobalStatus, admin_uuid: string) {
   };
 }
 
+async findAll(
+  page = 1,
+  limit = 20,
+  admin_uuid: string,
+  search?: string,
+) {
+  // Vérification de l'admin
+  await this.checkAdmin(admin_uuid);
 
-async findAll(page = 1, limit = 20, admin_uuid: string) {
+  const take = Number(limit) > 0 ? Number(limit) : 20;
+  const skip = (Number(page) - 1) * take;
+
+  // Construction du where
+  const where: any = {};
+
+  if (search && search.trim() !== '') {
+    where.OR = [
+      { nom: ILike(`%${search.trim()}%`) },
+      { prenom: ILike(`%${search.trim()}%`) },
+    ];
+  }
+
+  const [items, total] = await this.subscriptionPaymentRepo.findAndCount({
+    where,
+    order: { created_at: 'DESC' },
+    skip,
+    take,
+  });
+
+  return {
+    total,
+    page: Number(page),
+    limit: take,
+    data: items,
+    search: search || null,
+  };
+}
+
+/* async findAll(page = 1, limit = 20, search:string, admin_uuid: string) {
   // Vérification de l’admin
   await this.checkAdmin(admin_uuid);
 
@@ -288,7 +325,7 @@ async findAll(page = 1, limit = 20, admin_uuid: string) {
     limit: take,
     data: items,
   };
-}
+} */
 
   // ============================================================
   // HELPERS
