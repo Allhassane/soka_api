@@ -61,6 +61,7 @@
     "@swc/core": "^1.10.7",
     "@types/axios": "^0.9.36",
     "@types/bcrypt": "^6.0.0",
+    "@types/exceljs": "^0.5.3",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
     "@types/joi": "^17.2.3",
