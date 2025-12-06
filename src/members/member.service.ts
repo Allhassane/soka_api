@@ -2,9 +2,11 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { MemberEntity } from './entities/member.entity';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
@@ -31,6 +33,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { StructureService } from 'src/structure/structure.service';
 import { MemberList } from 'src/shared/interfaces/member.interface';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { ok } from 'assert';
+import { MemberResponsibilityService } from 'src/⁠member-responsibility/⁠member-responsibility.service';
 
 @Injectable()
 export class MemberService {
@@ -78,9 +82,6 @@ export class MemberService {
     @InjectRepository(StructureEntity)
     private readonly structureRepo: Repository<StructureEntity>,
 
-
-
-
     private readonly responsibilityService: ResponsibilityService,
 
     private readonly accessoryService: AccessoryService,
@@ -89,6 +90,10 @@ export class MemberService {
     private readonly responsibilityRepo: Repository<ResponsibilityEntity>,
 
     private readonly structureService: StructureService,
+
+    @Inject(forwardRef(() => MemberResponsibilityService))
+    private readonly memberResponsibilityService: MemberResponsibilityService
+
 
   ) {}
 
@@ -585,7 +590,6 @@ export class MemberService {
     }
   }
 
-
   async findAllBeneficiaryByUserConnected(
     admin_uuid: string,
   ): Promise<any> {
@@ -695,4 +699,185 @@ export class MemberService {
       data: members
     }*/
   }
+
+  // Obtenir les statistiques
+async getStatsByStructure(uuid: string, admin_uuid: string) {
+  const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+  if (!admin) {
+    throw new NotFoundException("Identifiant de l'auteur introuvable");
+  }
+  //connaitre la responsabilité
+  const respo = await this.memberResponsibilityService.findResponsibilityByMember(admin.member_uuid);
+  // Récupérer tous les sous-groupes
+  const sous_groupes = await this.structureService.findByAllChildrens(uuid);
+  //console.log('info sgpe');
+  //console.log(sous_groupes);
+  // Total membres
+  const total = await this.memberRepo.count({
+    where: { structure_uuid: In(sous_groupes) },
+  });
+
+  // --- DEPARTEMENTS ---
+  const total_hommes = await this.memberRepo.count({
+    where: {
+      structure_uuid: In(sous_groupes),
+      department: { name: 'HOMME' },
+    },
+    relations: ['department'],
+  });
+
+  const total_femmes = await this.memberRepo.count({
+    where: {
+      structure_uuid: In(sous_groupes),
+      department: { name: 'FEMME' },
+    },
+    relations: ['department'],
+  });
+
+  const total_jeunes = await this.memberRepo.count({
+    where: {
+      structure_uuid: In(sous_groupes),
+      department: { name: 'JEUNESSE' },
+    },
+    relations: ['department'],
+  });
+
+  // --- DIVISIONS ---
+  const total_jeune_hommes = await this.memberRepo.count({
+    where: {
+      structure_uuid: In(sous_groupes),
+      division: { name: 'JEUNES_HOMMES' },
+    },
+    relations: ['division'],
+  });
+
+  const total_jeune_femmes = await this.memberRepo.count({
+    where: {
+      structure_uuid: In(sous_groupes),
+      division: { name: 'JEUNES_FEMMES' },
+    },
+    relations: ['division'],
+  });
+
+  const total_avenir = await this.memberRepo.count({
+    where: {
+      structure_uuid: In(sous_groupes),
+      division: { name: 'AVENIR' },
+    },
+    relations: ['division'],
+  });
+
+  
+  const jeunes_sans_division = await this.memberRepo.count({
+    where: {
+      structure_uuid: In(sous_groupes),
+      department: { name: 'JEUNESSE' },
+      division: IsNull(), 
+    },
+    relations: ['department', 'division'],
+  });
+
+  // Log
+  await this.logService.logAction(
+    'members-getStatsByStructure',
+    admin.id,
+    `Consultation des statistiques de la structure ${uuid}`,
+  );
+
+  return {
+    total,
+    total_hommes,
+    total_femmes,
+    total_jeunes,
+
+    // Divisions
+    total_jeune_hommes,
+    total_jeune_femmes,
+    total_avenir,
+    jeunes_sans_division,
+
+  };
+}
+//afficher tous les membres par catégorie de statistique
+async getAllMembersGroupedByStats(uuid: string, admin_uuid: string) {
+  const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+  if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
+
+  // Récupération des sous structures
+  const sous_groupes = await this.structureService.findByAllChildrens(uuid);
+
+  // --- HOMMES ---
+  const hommes = await this.memberRepo.find({
+    where: {
+      structure_uuid: In(sous_groupes),
+      department: { name: 'HOMME' },
+    },
+    relations: ['department', 'division'],
+    order: { firstname: 'ASC' },
+  });
+
+  // --- FEMMES ---
+  const femmes = await this.memberRepo.find({
+    where: {
+      structure_uuid: In(sous_groupes),
+      department: { name: 'FEMME' },
+    },
+    relations: ['department', 'division'],
+    order: { firstname: 'ASC' },
+  });
+
+  // --- JEUNES SANS DIVISION ---
+  const jeunes_sans_division = await this.memberRepo.find({
+    where: {
+      structure_uuid: In(sous_groupes),
+      department: { name: 'JEUNESSE' },
+      division: IsNull(),
+    },
+    relations: ['department', 'division'],
+    order: { firstname: 'ASC' },
+  });
+
+  // --- JEUNES HOMMES ---
+  const jeunes_hommes = await this.memberRepo.find({
+    where: {
+      structure_uuid: In(sous_groupes),
+      division: { name: 'JEUNES_HOMMES' },
+    },
+    relations: ['department', 'division'],
+    order: { firstname: 'ASC' },
+  });
+
+  // --- JEUNES FEMMES ---
+  const jeunes_femmes = await this.memberRepo.find({
+    where: {
+      structure_uuid: In(sous_groupes),
+      division: { name: 'JEUNES_FEMMES' },
+    },
+    relations: ['department', 'division'],
+    order: { firstname: 'ASC' },
+  });
+
+  // --- AVENIR ---
+  const avenir = await this.memberRepo.find({
+    where: {
+      structure_uuid: In(sous_groupes),
+      division: { name: 'AVENIR' },
+    },
+    relations: ['department', 'division'],
+    order: { firstname: 'ASC' },
+  });
+
+  return {
+    hommes,
+    femmes,
+    jeunes: {
+      sans_division: jeunes_sans_division,
+      jeunes_hommes,
+      jeunes_femmes,
+      avenir,
+    },
+  };
+}
+  
+
 }
