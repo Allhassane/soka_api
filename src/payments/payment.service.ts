@@ -19,6 +19,9 @@ import { DonatePaymentEntity } from 'src/donate-payment/entities/donate-payment.
 import { SubscriptionPaymentEntity } from 'src/subscription-payment/entities/subscription-payment.entity';
 import { TransactionWithDetails } from './types/transaction-with-details.type';
 import axios from 'axios';
+import * as ExcelJS from 'exceljs';
+import { Response } from 'express';
+
 
 @Injectable()
 export class PaymentService {
@@ -518,6 +521,170 @@ export class PaymentService {
 }
 
 
+async findTransactionsForSubGroupsExport(
+  source_uuid: string,
+  admin_uuid: string,
+  res: Response,
+  status?: GlobalStatus,
+) {
+
+  const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+  if (!admin) {
+    throw new NotFoundException("Identifiant de l'auteur introuvable");
+  }
+  const member = await this.memberRepo.findOne({ where: { uuid: admin.member_uuid } });
+
+  if (!member) {
+    throw new NotFoundException("Identifiant du membre introuvable");
+  }
+  const sousGroups = await this.structureService.findByAllChildrens(member?.structure_uuid);
+
+  if (!sousGroups.length) {
+    throw new NotFoundException("Aucun sous-groupe trouvé");
+  }
+
+  // Query principale SANS pagination
+  const qb = this.paymentRepo
+    .createQueryBuilder('p')
+    .leftJoinAndSelect('p.actor', 'actor')
+    .leftJoinAndSelect('actor.structure', 'actorStructure')
+    .leftJoinAndSelect('p.beneficiary', 'beneficiary')
+    .leftJoinAndSelect('beneficiary.structure', 'beneficiaryStructure')
+    .where('p.source_uuid = :source_uuid', { source_uuid })
+    .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups });
+
+  // Filtre par status si fourni
+  if (status) {
+    qb.andWhere('p.status = :status', { status });
+  }
+
+  qb.orderBy('p.created_at', 'DESC');
+
+  const payments = await qb.getMany();
+
+  // Récupérer les détails (donations/subscriptions)
+  const result: any[] = [];
+
+  for (const p of payments) {
+    let donation: DonatePaymentEntity | null = null;
+    let subscription: SubscriptionPaymentEntity | null = null;
+
+    if (p.source === PaymentSource.DONATION) {
+      donation = await this.donatePaymentRepo.findOne({
+        where: { payment_uuid: p.uuid },
+      });
+    }
+
+    if (p.source === PaymentSource.SUBSCRIPTION) {
+      subscription = await this.subscriptionPaymentRepo.findOne({
+        where: { payment_uuid: p.uuid },
+      });
+    }
+
+    result.push({
+      payment_uuid: p.uuid,
+      source: p.source,
+      transaction_id: p.transaction_id,
+      payment_status: p.payment_status,
+      status: p.status,
+      created_at: p.created_at,
+      amount_unit: p.amount,
+      quantity: p.quantity,
+      total_amount: p.total_amount,
+      actor_firstname: p.actor?.firstname || '',
+      actor_lastname: p.actor?.lastname || '',
+      actor_phone: p.actor?.phone || '',
+      actor_structure: p.actor?.structure?.name || '',
+      beneficiary_firstname: p.beneficiary?.firstname || '',
+      beneficiary_lastname: p.beneficiary?.lastname || '',
+      beneficiary_phone: p.beneficiary?.phone || '',
+      beneficiary_structure: p.beneficiary?.structure?.name || '',
+      donation_amount: donation?.amount || '',
+      donation_status: donation?.status || '',
+      subscription_amount: subscription?.amount || '',
+      subscription_status: subscription?.status || '',
+    });
+  }
+
+  // Créer le workbook Excel
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Transactions');
+
+  // Définir les colonnes
+  worksheet.columns = [
+    { header: 'ID Transaction', key: 'transaction_id', width: 20 },
+    { header: 'Source', key: 'source', width: 15 },
+    { header: 'Statut Paiement', key: 'payment_status', width: 15 },
+    { header: 'Statut', key: 'status', width: 15 },
+    { header: 'Date', key: 'created_at', width: 20 },
+    { header: 'Montant Unitaire', key: 'amount_unit', width: 15 },
+    { header: 'Quantité', key: 'quantity', width: 10 },
+    { header: 'Montant Total', key: 'total_amount', width: 15 },
+    { header: 'Acteur - Prénom', key: 'actor_firstname', width: 20 },
+    { header: 'Acteur - Nom', key: 'actor_lastname', width: 20 },
+    { header: 'Acteur - Téléphone', key: 'actor_phone', width: 15 },
+    { header: 'Acteur - Structure', key: 'actor_structure', width: 25 },
+    { header: 'Bénéficiaire - Prénom', key: 'beneficiary_firstname', width: 20 },
+    { header: 'Bénéficiaire - Nom', key: 'beneficiary_lastname', width: 20 },
+    { header: 'Bénéficiaire - Téléphone', key: 'beneficiary_phone', width: 15 },
+    { header: 'Bénéficiaire - Structure', key: 'beneficiary_structure', width: 25 },
+  ];
+
+  // Styliser l'en-tête
+  worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  worksheet.getRow(1).fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF4472C4' },
+  };
+  worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+  // Ajouter les données
+  result.forEach(item => {
+    worksheet.addRow({
+      transaction_id: item.transaction_id || '',
+      source: item.source || '',
+      payment_status: item.payment_status || '',
+      status: item.status || '',
+      created_at: item.created_at ? new Date(item.created_at).toLocaleString('fr-FR') : '',
+      amount_unit: item.amount_unit || 0,
+      quantity: item.quantity || 0,
+      total_amount: item.total_amount || 0,
+      actor_firstname: item.actor_firstname,
+      actor_lastname: item.actor_lastname,
+      actor_phone: item.actor_phone,
+      actor_structure: item.actor_structure,
+      beneficiary_firstname: item.beneficiary_firstname,
+      beneficiary_lastname: item.beneficiary_lastname,
+      beneficiary_phone: item.beneficiary_phone,
+      beneficiary_structure: item.beneficiary_structure,
+    });
+  });
+
+  // Appliquer des bordures
+  worksheet.eachRow((row, rowNumber) => {
+    row.eachCell((cell) => {
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+    });
+  });
+
+  // Générer le fichier Excel
+  const fileName = `transactions_export_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+  res.setHeader(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  );
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+  await workbook.xlsx.write(res);
+  res.end();
+}
 
 /*
   async findTransactionsForSubGroups(

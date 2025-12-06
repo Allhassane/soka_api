@@ -8,6 +8,7 @@ import {
   UseGuards,
   Request,
   Query,
+  Res,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -25,6 +26,7 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 import { PaymentSource } from './dto/create-payment.dto';
+import { Response } from 'express';
 
 @ApiBearerAuth()
 @ApiTags('Paiements')
@@ -68,6 +70,33 @@ export class PaymentController {
   }
 
 
+@Get('export/subgroups')
+@ApiOperation({ summary: 'Exporter les transactions des sous-groupes en Excel' })
+@ApiQuery({
+  name: 'source_uuid',
+  required: true,
+  example: 'e4bb675f-21c7-4af7-bd8e-c1d934c89e2e',
+  description: "UUID de la campagne (donation ou abonnement)",
+})
+@ApiQuery({
+  name: 'status',
+  required: false,
+  enum: GlobalStatus,
+  description: 'Filtrer par statut'
+})
+async exportTransactionsForSubGroups(
+  @Query('source_uuid') source_uuid: string,
+  @Request() req,
+  @Res() res: Response,
+  @Query('status') status?: GlobalStatus,
+): Promise<void> {
+  await this.paymentService.findTransactionsForSubGroupsExport(
+    source_uuid,
+    req.user.uuid,
+    res,
+    status,
+  );
+}
 
   @Put(':uuid')
   @ApiOperation({ summary: 'Modifier un paiement' })
@@ -144,4 +173,36 @@ export class PaymentController {
       search,
     );
   }
+
+
+
+/*   @Get('export/subgroups')
+@ApiOperation({ summary: 'Exporter les transactions des sous-groupes en Excel' })
+@ApiQuery({
+  name: 'source_uuid',
+  required: true,
+  example: 'e4bb675f-21c7-4af7-bd8e-c1d934c89e2e',
+  description: "UUID de la campagne (donation ou abonnement)",
+})
+@ApiQuery({
+  name: 'status',
+  required: false,
+  enum: GlobalStatus,
+  description: 'Filtrer par statut'
+})
+async exportTransactionsForSubGroups(
+  @Query('source_uuid') source_uuid: string,
+  @Query('status') status?: GlobalStatus,
+  @Res() Res: Response,
+  @Req() req?,
+) {
+  await this.paymentService.findTransactionsForSubGroupsExport(
+    source_uuid,
+    req.user.uuid,
+    res,
+    status,
+  );
+} */
+
+
 }
