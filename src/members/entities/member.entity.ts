@@ -111,6 +111,12 @@ export class MemberEntity extends DateTimeEntity {
   @Column({ type: 'varchar', length: 191, nullable: true })
   town: string;
 
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  longitude: string;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  latitude: string;
+
   @Column({ type: 'uuid',length: 36, nullable: true })
   formation_uuid: string;
 

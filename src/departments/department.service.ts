@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { DepartmentEntity } from './entities/department.entity';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
@@ -12,11 +12,40 @@ export class DepartmentService {
     @InjectRepository(DepartmentEntity)
     private readonly departmentRepo: Repository<DepartmentEntity>,
     private readonly logService: LogActivitiesService,
-    
+
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
-    
+
   ) {}
+
+  // recuperer tous les départements par genre (homme/femme) [findByGender]
+  async findByGender(gender: string,admin_uuid: string) {
+
+    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+
+    if (!admin) {
+        throw new NotFoundException("Identifiant de l'auteur introuvable");
+    }
+
+    let genders: string[] = [];
+      genders.push(gender);
+      genders.push('mixte');
+
+      const departement = await this.departmentRepo.find({
+        where: {
+          gender: In(genders),
+        },
+      });
+
+    await this.logService.logAction(
+      'department-findByGender',
+      admin.id,
+      'recupération des départements par genre: '+gender
+    );
+
+    return departement;
+  }
+
 
   async findAll(admin_uuid: string) {
     const departement = await this.departmentRepo.find({
@@ -25,7 +54,7 @@ export class DepartmentService {
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -47,11 +76,13 @@ export class DepartmentService {
     const newModule = this.departmentRepo.create({
       uuid: payload.uuid ?? uuid(),
       name: payload.name,
+      gender: payload.gender ?? 'mixte',
+      description: payload.description ?? null,
       admin_uuid: admin_uuid ?? null,
     });
-    
+
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -74,7 +105,7 @@ export class DepartmentService {
         throw new NotFoundException('Aucun module trouvé');
     }
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -87,7 +118,7 @@ export class DepartmentService {
 
     return  departement;
   }
-  
+
   async findOneByName(name: string) {
     const departement = await this.departmentRepo.findOne({ where: { name } });
     return  departement;
@@ -101,12 +132,12 @@ export class DepartmentService {
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
- 
+
 
     const existing = await this.departmentRepo.findOne({ where: { uuid } });
     if (!existing) {
@@ -114,6 +145,8 @@ export class DepartmentService {
     }
 
     existing.name = name;
+    existing.description = payload.description ?? existing.description;
+    existing.gender = payload.gender ?? existing.gender;
 
     const updated = await this.departmentRepo.save(existing);
 
@@ -134,7 +167,7 @@ export class DepartmentService {
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }

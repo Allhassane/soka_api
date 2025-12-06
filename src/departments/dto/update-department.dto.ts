@@ -12,6 +12,16 @@ export class UpdateDepartmentDto {
   name?: string;
 
   @ApiPropertyOptional({
+    description: 'Genre du departement',
+    example: 'mixte',
+  })
+  @IsString()
+  @IsOptional()
+  @IsEnum(['mixte', 'homme', 'femme'], {
+    message: 'Le genre doit être mixte, homme ou femme',
+  })
+
+  @ApiPropertyOptional({
     description: 'Description du departement',
     example: 'Departement le pour gérer les utilisateurs',
   })

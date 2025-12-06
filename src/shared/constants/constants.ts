@@ -13,3 +13,4 @@ export const MAIL_FROM = process.env.MAIL_FROM_ADRESSE;
 export const MIGRATION_URL = process.env.MIGRATION_URL;
 
 export const ROLE_MEMBER_SLUG = 'responsable-membre';
+export const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;

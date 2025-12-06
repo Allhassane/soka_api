@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { DonatePaymentEntity } from './entities/donate-payment.entity';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { ILike, Repository } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
 import { LogActivitiesService } from 'src/log-activities/log-activities.service';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
@@ -37,7 +37,7 @@ export class DonatePaymentService {
     private readonly memberRepo: Repository<MemberEntity>,
 
     private readonly paymentService: PaymentService,
-  ) {}
+  ) { }
 
   // ============================================================
   //   INITIER UN DON + PAIEMENT
@@ -46,14 +46,14 @@ export class DonatePaymentService {
   async makeDonation(dto: MakeDonationPaymentDto, admin_uuid: string) {
 
 
-  const admin = await this.checkAdmin(admin_uuid);
-  const beneficiary = await this.findMember(dto.beneficiary_uuid);
-  const actor = await this.findMember(admin.member_uuid);
-  const donate = await this.findCampaign(dto.donation_uuid);
+    const admin = await this.checkAdmin(admin_uuid);
+    const beneficiary = await this.findMember(dto.beneficiary_uuid);
+    const actor = await this.findMember(admin.member_uuid);
+    const donate = await this.findCampaign(dto.donation_uuid);
 
-  // -----------------------------------------
-  // Vérification période de validité du don
-  // -----------------------------------------
+    // -----------------------------------------
+    // Vérification période de validité du don
+    // -----------------------------------------
     const now = new Date();
     const start = new Date(donate.starts_at);
     const stop = new Date(donate.stops_at);
@@ -70,130 +70,151 @@ export class DonatePaymentService {
       );
     }
 
-  // -------------------------------
-  //  Vérifier le quota de paiements
-  // -------------------------------
-  // On suppose un champ : donate.max_payments_per_beneficiary (number | null)
-  if (
-    donate.max_payments_per_beneficiary &&
-    donate.max_payments_per_beneficiary > 0
-  ) {
-    const existingCount = await this.donateRepo.count({
-      where: {
-        donate_uuid: donate.uuid,
+    // -------------------------------
+    //  Vérifier le quota de paiements
+    // -------------------------------
+    // On suppose un champ : donate.max_payments_per_beneficiary (number | null)
+    if (
+      donate.max_payments_per_beneficiary &&
+      donate.max_payments_per_beneficiary > 0
+    ) {
+      const existingCount = await this.donateRepo.count({
+        where: {
+          donate_uuid: donate.uuid,
+          beneficiary_uuid: beneficiary.uuid,
+        },
+      });
+
+      if (existingCount >= donate.max_payments_per_beneficiary) {
+        throw new BadRequestException(
+          `Ce bénéficiaire a déjà atteint le nombre maximum de paiements autorisés pour cette campagne.`,
+        );
+      }
+    }
+
+    let unitAmount: number;
+    let quantity: number;
+
+    // Toujours s’assurer que la quantité est un entier >= 1
+    const rawQuantity = dto.quantity ?? 1;
+    if (!Number.isInteger(rawQuantity) || rawQuantity < 1) {
+      throw new BadRequestException(
+        'La quantité doit être un entier supérieur ou égal à 1.',
+      );
+    }
+    quantity = rawQuantity;
+
+    if (donate.category === DonateCategory.FIXIED_AMOUNT) {
+      // Montant imposé par la campagne
+      if (!donate.amount || donate.amount <= 0) {
+        throw new BadRequestException(
+          "Le montant fixe configuré pour cette campagne est invalide.",
+        );
+      }
+
+      unitAmount = donate.amount;
+      // On ignore dto.amount même s’il est envoyé par le frontend
+    } else {
+      // FREE_AMOUNT
+      if (!dto.amount || dto.amount <= 0) {
+        throw new BadRequestException(
+          'Le montant du zaimu est obligatoire et doit être positif pour une campagne à montant libre.',
+        );
+      }
+
+      unitAmount = dto.amount;
+    }
+
+    const total = unitAmount * quantity;
+
+    const description = `Paiement donation par ${actor.firstname} ${actor.lastname}`;
+
+    // -------------------------------
+    // Appel PaymentService (CinetPay inclus)
+    // -------------------------------
+    const paymentResult = await this.paymentService.store(
+      {
+        source: PaymentSource.DONATION,
+        source_uuid: donate.uuid,
+
         beneficiary_uuid: beneficiary.uuid,
+        beneficiary_name: `${beneficiary.firstname} ${beneficiary.lastname}`,
+
+        actor_uuid: actor.uuid,
+        actor_name: `${actor.firstname} ${actor.lastname}`,
+
+        amount: unitAmount, // montant unitaire
+        quantity,           // quantité validée
       },
-    });
-
-    if (existingCount >= donate.max_payments_per_beneficiary) {
-      throw new BadRequestException(
-        `Ce bénéficiaire a déjà atteint le nombre maximum de paiements autorisés pour cette campagne.`,
-      );
-    }
-  }
-
-  let unitAmount: number;
-  let quantity: number;
-
-  // Toujours s’assurer que la quantité est un entier >= 1
-  const rawQuantity = dto.quantity ?? 1;
-  if (!Number.isInteger(rawQuantity) || rawQuantity < 1) {
-    throw new BadRequestException(
-      'La quantité doit être un entier supérieur ou égal à 1.',
+      admin_uuid,
     );
-  }
-  quantity = rawQuantity;
 
-  if (donate.category === DonateCategory.FIXIED_AMOUNT) {
-    // Montant imposé par la campagne
-    if (!donate.amount || donate.amount <= 0) {
-      throw new BadRequestException(
-        "Le montant fixe configuré pour cette campagne est invalide.",
-      );
-    }
+    console.log('Paiement via PaymentService :', paymentResult);
 
-    unitAmount = donate.amount;
-    // On ignore dto.amount même s’il est envoyé par le frontend
-  } else {
-    // FREE_AMOUNT
-    if (!dto.amount || dto.amount <= 0) {
-      throw new BadRequestException(
-        'Le montant du zaimu est obligatoire et doit être positif pour une campagne à montant libre.',
-      );
-    }
-
-    unitAmount = dto.amount;
-  }
-
-  const total = unitAmount * quantity;
-
-  const description = `Paiement donation par ${actor.firstname} ${actor.lastname}`;
-
-  // -------------------------------
-  // Appel PaymentService (CinetPay inclus)
-  // -------------------------------
-  const paymentResult = await this.paymentService.store(
-    {
-      source: PaymentSource.DONATION,
-      source_uuid: donate.uuid,
-
+    // -------------------------------
+    // 7. Sauvegarde du DON (paiement de don)
+    // -------------------------------
+    const donation = this.donateRepo.create({
+      amount: total, // montant total effectivement payé
+      quantity,
       beneficiary_uuid: beneficiary.uuid,
       beneficiary_name: `${beneficiary.firstname} ${beneficiary.lastname}`,
-
       actor_uuid: actor.uuid,
       actor_name: `${actor.firstname} ${actor.lastname}`,
+      donate_uuid: donate.uuid,
+      payment_uuid: paymentResult.payment_uuid,
+      status: GlobalStatus.PENDING,
+    });
 
-      amount: unitAmount, // montant unitaire
-      quantity,           // quantité validée
-    },
-    admin_uuid,
-  );
+    const saved = await this.donateRepo.save(donation);
 
-  console.log('Paiement via PaymentService :', paymentResult);
+    return {
+      message: 'zaimu initié avec succès',
+      donation_uuid: saved.uuid,
+      payment_uuid: paymentResult.payment_uuid,
+      transaction_id: paymentResult.transaction_id,
+      amount: total,
+      payment_url: paymentResult.payment_url,
+    };
+  }
 
-  // -------------------------------
-  // 7. Sauvegarde du DON (paiement de don)
-  // -------------------------------
-  const donation = this.donateRepo.create({
-    amount: total, // montant total effectivement payé
-    quantity,
-    beneficiary_uuid: beneficiary.uuid,
-    beneficiary_name: `${beneficiary.firstname} ${beneficiary.lastname}`,
-    actor_uuid: actor.uuid,
-    actor_name: `${actor.firstname} ${actor.lastname}`,
-    donate_uuid: donate.uuid,
-    payment_uuid: paymentResult.payment_uuid,
-    status: GlobalStatus.PENDING,
+
+async findAll(
+  page = 1,
+  limit = 20,
+  admin_uuid: string,
+  search?: string,
+) {
+  // Vérification de l'admin
+  await this.checkAdmin(admin_uuid);
+
+  const take = Number(limit) > 0 ? Number(limit) : 20;
+  const skip = (Number(page) - 1) * take;
+
+  // Construction du where avec Or
+  const where: any = search && search.trim() !== ''
+    ? [
+        { actor_name: ILike(`%${search.trim()}%`) },
+        { beneficiary_name: ILike(`%${search.trim()}%`) },
+      ]
+    : {};
+
+  const [items, total] = await this.donateRepo.findAndCount({
+    where,
+    order: { created_at: 'DESC' },
+    skip,
+    take,
   });
 
-  const saved = await this.donateRepo.save(donation);
-
   return {
-    message: 'zaimu initié avec succès',
-    donation_uuid: saved.uuid,
-    payment_uuid: paymentResult.payment_uuid,
-    transaction_id: paymentResult.transaction_id,
-    amount: total,
-    payment_url: paymentResult.payment_url,
+    total,
+    page: Number(page),
+    limit: take,
+    data: items,
+    search: search || null,
   };
 }
 
-  async findAll(page = 1, limit = 20, admin_uuid: string) {
-    await this.checkAdmin(admin_uuid);
-
-    const [items, total] = await this.donateRepo.findAndCount({
-      order: { created_at: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
-
-    return {
-      total,
-      page,
-      limit,
-      data: items,
-    };
-  }
 
 
   async findOne(uuid: string, admin_uuid: string) {
@@ -248,8 +269,40 @@ export class DonatePaymentService {
       const response = verification.data;
 
       if (response.code !== '00') {
+        if(response.message === 'WAITING_CUSTOMER_PAYMENT' || response.message === 'WAITING_CUSTOMER_TO_VALIDATE') {
+            throw new BadRequestException(
+              `Le paiement est en attente de validation.`,
+            );
+        }
+
+        else if(response.message === 'PAYMENT_FAILED') {
+            const payment = await this.paymentService.findByTransactionIdOrFail(transaction_id, admin_uuid);
+            if (!payment) {
+              throw new NotFoundException(
+                `Aucun paiement trouvé pour transaction_id = ${transaction_id}`,
+              );
+            }
+
+            await this.paymentService.updatePayment(payment.uuid, {
+              status: GlobalStatus.FAILED,
+              payment_status: PaymentStatus.FAILED,
+            });
+
+          const donation = await this.donateRepo.findOne({
+            where: { payment_uuid: payment.uuid },
+          });
+
+          if (donation) {
+            donation.status = GlobalStatus.FAILED;
+            await this.donateRepo.save(donation);
+          }
+           throw new BadRequestException(
+            `Paiement échoué`,
+          );
+        }
+
         throw new BadRequestException(
-          `Paiement non validé par CinetPay : ${response.message}`,
+          `Paiement non vérifié`,
         );
       }
 
@@ -257,11 +310,11 @@ export class DonatePaymentService {
 
       if (paymentStatus !== 'ACCEPTED') {
         throw new BadRequestException(
-          `Paiement non accepté : statut = ${paymentStatus}`,
+          `Paiement non accepté`,
         );
       }
 
-      const payment = await this.paymentService.findByTransactionIdOrFail(transaction_id,admin_uuid);
+      const payment = await this.paymentService.findByTransactionIdOrFail(transaction_id, admin_uuid);
 
       if (!payment) {
         throw new NotFoundException(
@@ -271,7 +324,7 @@ export class DonatePaymentService {
 
       await this.paymentService.updatePayment(payment.uuid, {
         status: GlobalStatus.SUCCESS,
-        payment_status:PaymentStatus.PAID,
+        payment_status: PaymentStatus.PAID,
       });
 
 
