@@ -1,6 +1,6 @@
-# API DESPES
+# API SOKA
 
-API SOKA est une interface backend développée avec **NestJS**, destinée à la gestion de **SOKA** sur le territoire national.  
+API SOKA est une interface backend développée avec **NestJS**, destinée à la gestion de **SOKA** sur le territoire national.
 
 
 Le projet est actuellement en phase de mise en place. La documentation détaillée et les spécifications métier seront ajoutées au fil de l’évolution.

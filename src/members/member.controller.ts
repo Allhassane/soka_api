@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, Query, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { MemberService } from './member.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
@@ -27,7 +27,7 @@ export class MemberController {
 
 
   @Get('structures')
-  @ApiOperation({ summary: 'Récupérer tous les membres en fonction du user connecté par son UUID' })  
+  @ApiOperation({ summary: 'Récupérer tous les membres en fonction du user connecté par son UUID' })
   @ApiResponse({ status: 200, description: 'Liste des membres récupérée avec succès.' })
   @ApiResponse({ status: 400, description: 'Liste des membres non trouvée.' })
   @ApiQuery({ name: 'page', required: false, description: 'Page actuelle', default: 1 })
@@ -41,9 +41,8 @@ export class MemberController {
     return this.membreService.findAllMemberByUserConnected(admin_uuid, Number(page), Number(limit));
   }
 
-
   @Get('beneficiary')
-  @ApiOperation({ summary: 'Récupérer tous les bénéficiaires en fonction du membre connecté par son UUID' })  
+  @ApiOperation({ summary: 'Récupérer tous les bénéficiaires en fonction du membre connecté par son UUID' })
   @ApiResponse({ status: 200, description: 'Liste des bénéficiaires récupérée avec succès.' })
   @ApiResponse({ status: 400, description: 'Liste des bénéficiaires non trouvée.' })
   findAllBeneficiaryByUserConnected(
@@ -80,7 +79,7 @@ export class MemberController {
   //   return this.membreService.verifyPhoneNumber(payload);
   // }
 
-  
+
 
   @Get('by-structure/:uuid')
   @ApiOperation({ summary: 'Récupérer tous les membres d une structure par UUID' })
