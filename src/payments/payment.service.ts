@@ -528,6 +528,7 @@ export class PaymentService {
 
   const response = check.data;
 
+  console.log('Réponse de vérification CinetPay :', response);
   if (response.code !== '00') {
     throw new BadRequestException(
       `Paiement refusé par CinetPay : ${response.message}`,
