@@ -18,6 +18,7 @@ import { MemberAccessoryModule } from 'src/member-accessories/member-accessories
 import { ResponsibilityModule } from 'src/responsibilities/reponsibility.module';
 import { MemberResponsibilityModule } from 'src/⁠member-responsibility/⁠member-responsibility.module';
 import { UserModule } from 'src/users/user.module';
+import { RoleModule } from 'src/roles/role.module';
 
 @Module({
   providers: [MigrationService],
@@ -39,7 +40,8 @@ import { UserModule } from 'src/users/user.module';
     AccessoryModule, 
     MemberAccessoryModule, 
     MemberResponsibilityModule,
-    UserModule
+    UserModule,
+    RoleModule
   ]
 })
 export class MigrationModule {}

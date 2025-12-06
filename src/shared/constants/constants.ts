@@ -11,3 +11,5 @@ export const FROM = process.env.MAIL_FROM_ADRESSE;
 export const MAIL_FROM = process.env.MAIL_FROM_ADRESSE;
 
 export const MIGRATION_URL = process.env.MIGRATION_URL;
+
+export const ROLE_MEMBER_SLUG = 'responsable-membre';

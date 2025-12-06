@@ -16,6 +16,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { RolePermissionEntity } from 'src/role-permission/entities/role-permission.entity';
 import { PaginateMeta } from 'src/shared/interfaces/paginate-meta.interface';
 import { v4 as uuidv4 } from 'uuid';
+import { ROLE_MEMBER_SLUG } from 'src/shared/constants/constants';
 
 @Injectable()
 export class RoleService {
@@ -41,6 +42,15 @@ export class RoleService {
     if (!existing) {
       const role = new Role();
       role.name = 'superadmin';
+      await this.roleRepository.save(role);
+    }
+
+    const existeMemberRole = await this.roleRepository.findOne({ where: { slug: ROLE_MEMBER_SLUG } });
+
+    if (!existeMemberRole) {
+      const role = new Role();
+      role.name = 'Responsable membre';
+      role.slug = ROLE_MEMBER_SLUG;
       await this.roleRepository.save(role);
     }
   }
@@ -79,6 +89,12 @@ export class RoleService {
 
   async findOneByUuid(uuid: string): Promise<Role> {
     const role = await this.roleRepository.findOne({ where: { uuid } });
+    if (!role) throw new NotFoundException('Rôle non trouvé');
+    return role;
+  }
+
+  async findOneBySlug(slug: string): Promise<Role> {
+    const role = await this.roleRepository.findOne({ where: { slug } });
     if (!role) throw new NotFoundException('Rôle non trouvé');
     return role;
   }

@@ -4,7 +4,6 @@ import { CreateCivilityDto } from 'src/civilities/dto/create-civility.dto';
 import { CountryService } from 'src/countries/country.service';
 import { DepartmentService } from 'src/departments/department.service';
 import { CreateDepartmentDto } from 'src/departments/dto/create-department.dto';
-import { DepartmentEntity } from 'src/departments/entities/department.entity';
 import { DivisionService } from 'src/divisions/division.service';
 import { CreateDivisionDto } from 'src/divisions/dto/create-division.dto';
 import { MaritalStatusService } from 'src/marital-status/marital-status.service';
@@ -22,13 +21,14 @@ import { AccessoryService } from 'src/accessories/accessory.service';
 import { CreateAccessoryDto } from 'src/accessories/dto/create-accessory.dto';
 import { MemberAccessoryService } from 'src/member-accessories/member-accessories.service';
 import { MemberResponsibilityService } from 'src/⁠member-responsibility/⁠member-responsibility.service';
-import { CreateMemberResponsibilityDto } from 'src/⁠member-responsibility/dto/create-member-responsibility.dto';
 import { slugify } from 'src/shared/functions/slug';
 import { CreateLevelDto } from 'src/level/dto/create-level.dto';
 import { CreateStructureDto } from 'src/structure/dto/create-structure.dto';
-import { MIGRATION_URL } from 'src/shared/constants/constants';
+import { MIGRATION_URL, ROLE_MEMBER_SLUG } from 'src/shared/constants/constants';
 import { UserService } from 'src/users/user.service';
 import { CreateUserDto } from 'src/users/dtos/create-user.dto';
+import { formatDateOrNull } from 'src/shared/functions/format-migration-date';
+import { RoleService } from 'src/roles/role.service';
 
 @Injectable()
 export class MigrationService {
@@ -50,11 +50,12 @@ export class MigrationService {
         private readonly memberAccessoryService : MemberAccessoryService,
         private readonly memberResponsibilityService : MemberResponsibilityService,
         private readonly userService : UserService,
+        private readonly roleService : RoleService,
     ){}
 
     async migrate(option: string, admin_uuid: string) {
-        
-        const migration_url = 'https://dev.sokagakkaici.org/api/v1';
+
+        const migration_url = MIGRATION_URL; //'https://dev.sokagakkaici.org/api/v1';
 
         console.log(migration_url + '/migration?option=' + option);
         const query = await fetch(migration_url + '/migration?option=' + option);
@@ -170,285 +171,291 @@ export class MigrationService {
             for(const member of data){
                 x++;
                 const findMember = await this.memberService.findOneByUuid(member.id);
+                const role = await this.roleService.findOneBySlug(ROLE_MEMBER_SLUG);
 
                 if(!findMember){
 
-                    // situation matrimonal
-                    const maritalStatus = await this.maritalStatusService.findOneByName(member.situation_matrimoniale);
-                    if(!maritalStatus){
-                        await this.maritalStatusService.store({
-                            name: member.situation_matrimoniale,
-                            description: "",
-                        }, admin_uuid);
-                    }
-                    console.log('maritalStatus ................... OK');
-                    
-                    // pays
-                    let country;
-                    if(member.nationalite){
-                        const verifyCountry = member.nationalite.toLowerCase();
-                        let countryName = ""
-                        if(verifyCountry == "japan"){
-                            countryName = "JAPON"
-                        }else{
-                            countryName = member.nationalite
-                        }
-                        let country = await this.countryService.findOneByName(countryName.toUpperCase());
-                        if(!country){
-                            country = await this.countryService.store({
-                                name: "COTE D'IVOIRE",
-                                description: "",
-                            }, admin_uuid);
-                        }
-                    }
-                    
-                    !country ? country = await this.countryService.store({
-                            name: "COTE D'IVOIRE",
-                            description: "",
-                        }, admin_uuid) : null;
-
-                    console.log('country ................... OK');
-
-                    
-                    // civility
-                    let civility = await this.civilityService.findOneByName(member.civility);
-                    if(!civility){
-                        await this.civilityService.store("homme", admin_uuid);
-                    }
-                    console.log('civility ................... OK');
-                    
-                    // city
-                    let cityUuid : string | undefined = undefined;
-                    if(member.localite_residence){
-                        let city = await this.cityService.findOneBySlug(slugify(member.localite_residence));
-
-                        if(!city){
-                            city = await this.cityService.store({
-                                uuid: uuidv4(),
-                                name: member.localite_residence,
-                                description: "",
-                            }, admin_uuid);
-                        }
-                        cityUuid = city.uuid;
-                    }
-                    console.log('city ................... OK');
-                    
-                    // formation
-                    let formationUuid : string | undefined = undefined;
-                    if(member.profession){
-                        let formation = await this.formationService.findOneBySlug(slugify(member.profession));
-
-                        if(!formation){
-                            formation = await this.formationService.store({
-                                uuid: uuidv4(),
-                                name: member.profession,
-                                description: "",
-                            }, admin_uuid);
-                        }
-                        formationUuid = formation.uuid;
-                    }
-                    console.log('formation ................... OK');
-                    
-                    // job
-                    let jobUuid : string | undefined = undefined;
-                    if(member.metier){
-                        let job = await this.jobService.findOneBySlug(slugify(member.metier));
-
-                        if(!job){
-                            job = await this.jobService.store({
-                                uuid: uuidv4(),
-                                name: member.metier,
-                                description: "",
-                            }, admin_uuid);
-                        }
-                        jobUuid = job.uuid;
-                    }
-                    console.log('job ................... OK');
-                    
-                    // organisation city
-                    let organisationUuid : string | undefined = undefined;
-                    if(member.ville_rattachement){
-                        let organisation = await this.organisationCityService.findOneBySlug(slugify(member.ville_rattachement));
-
-                        if(!organisation){
-                            organisation = await this.organisationCityService.store({
-                                uuid: uuidv4(),
-                                name: member.ville_rattachement,
-                                description: "",
-                            }, admin_uuid);
-                        }
-                        organisationUuid = organisation.uuid;
-                    }
-                    console.log('organisation ................... OK');
-                    
-                    // departmentUuid 
-                    let departmentUuid : string | undefined = undefined;
                     if(member.departement){
-                        let department = await this.departmentService.findOne(member.departement, admin_uuid);
-                        departmentUuid = department.uuid;
-                    }
-                    console.log('department ................... OK');
-                    
-                    // division
-                    let divisionUuid : string | undefined = undefined;
-                    if(member.division){
-                        let division = await this.divisionService.findOne(member.division, admin_uuid);
-                        divisionUuid = division.uuid;
-                    }
-                    console.log('division ................... OK');
-                    
-                    // structure
-                    let structure = await this.structureService.findOne(member.structure_id);
-                    console.log('structure ................... OK');
-                    
-                    // responsability
-                    let responsibilityUuid : string | undefined = undefined;
-                    if(member.type_responsabilite){
 
-                        let gender: "mixte" | "homme" | "femme" = "mixte";
-                        const searchGender = member.type_responsabilite.toLowerCase();
-                        if(searchGender.includes("homme")){
-                            gender = "homme";
-                        }else if(searchGender.includes("femme")){
-                            gender = "femme";
+                        // situation matrimonal
+                        const maritalStatus = await this.maritalStatusService.findOneByName(member.situation_matrimoniale);
+                        if(!maritalStatus){
+                            await this.maritalStatusService.store({
+                                name: member.situation_matrimoniale,
+                                description: "",
+                            }, admin_uuid);
                         }
-
-                        const level = await this.levelService.findOneByName(member.niveau_responsabilite);
-                        if(level){
-
-                            let responsibility = await this.responsibilityService.findOneBySlug(slugify(member.type_responsabilite));
-                            if(!responsibility){
-                                responsibility = await this.responsibilityService.store({
-                                    uuid: uuidv4(),
-                                    name: member.type_responsabilite,
+                        console.log('maritalStatus ................... OK');
+                        
+                        // pays
+                        let country;
+                        if(member.nationalite){
+                            const verifyCountry = member.nationalite.toLowerCase();
+                            let countryName = ""
+                            if(verifyCountry == "japan"){
+                                countryName = "JAPON"
+                            }else{
+                                countryName = member.nationalite
+                            }
+                            let country = await this.countryService.findOneByName(countryName.toUpperCase());
+                            if(!country){
+                                country = await this.countryService.store({
+                                    name: "COTE D'IVOIRE",
                                     description: "",
-                                    level_uuid: level.uuid,
-                                    level: level,
-                                    gender: gender,
                                 }, admin_uuid);
                             }
-                            responsibilityUuid = responsibility.uuid;
                         }
-                    }
-                    console.log('responsability ................... ' + responsibilityUuid);
-
-                    const verifyPhoneQuery = await this.memberService.verifyPhoneNumber({phone: member.contact, category: 'principal'});
-                    
-                    let member_phone = undefined;
-                    if(member.contact){
-                        member_phone = verifyPhoneQuery.is_available ? member.contact : undefined;
-                    }
-
-                    const verifyEmailQuery = await this.memberService.verifyEmail({email: member.email});
-                    
-                    let member_email = undefined;
-                    if(member.email){
-                        member_email = verifyEmailQuery.is_available ? member.email : undefined;
-                    }
-
-                    const prepareSaveMember: CreateMemberDto = {
-                        picture: member.picture,
-                        matricule: member.matricule,
-                        firstname: member.nom,
-                        lastname: member.prenom,
-                        gender: civility?.gender as string,
-                        birth_date: member.date_naissance ?? null,
-                        birth_city: member.lieu_naissance ?? null,
-                        civility_uuid: civility?.uuid,
-                        marital_status_uuid: maritalStatus?.uuid,
-                        spouse_name: member.nom_conjoint ?? null,
-                        spouse_member: member.conjoint_membre ?? false,
-                        childrens: member.nb_enfants ?? 0,
-                        country_uuid: country?.uuid,
-                        city_uuid: cityUuid,
-                        town: member.ville_residence ?? null,
-                        formation_uuid: formationUuid,
-                        job_uuid: jobUuid,
-                        phone: member_phone,
-                        phone_whatsapp: member.whatsapp ?? null,
-                        email: member_email,
-                        tutor_name: member.contact_urgence_nom ?? null,
-                        tutor_phone: member.contact_urgence_numero ?? null,
-                        organisation_city_uuid: organisationUuid,
-                        membership_date: member.debut_pratique ?? null,
-                        sokahan_byakuren: member.sokahan_byakuren ?? false,
-                        department_uuid: departmentUuid,
-                        division_uuid: divisionUuid,
-                        responsibility_uuid: responsibilityUuid,
-                        accessories: member.accessories ?? [],
-                        has_gohonzon: member.possede_gohonzon ?? false,
-                        date_gohonzon: member.date_gohonzon ?? null,
-                        has_tokusso: member.possede_tokusso ?? false,
-                        date_tokusso: member.date_tokusso ?? null,
-                        has_omamori: member.possede_omamori ?? false,
-                        date_omamori: member.date_omamori ?? null,
-                        structure_id: structure.id,
-                        structure_uuid: structure.uuid,
-                        status: 'success',
-                    }
-
-                
-                    console.log(prepareSaveMember);
-                    const saveMember = await this.memberService.storeFromMigration({...prepareSaveMember, uuid: member.id}, admin_uuid);
-                    console.log('member ................... OK');
-                    
-                    // creation du compte utilisateur lié au membre
-                    if(member_phone != undefined && verifyPhoneQuery.is_available){
-
-                        const prepareUser : CreateUserDto = {
-                            phone_number: member_phone,
-                            email: member_email,
-                            firstname: saveMember.firstname,
-                            lastname: saveMember.lastname,
-                            password: member.user_password_no_hashed,
-                            is_active: true,
-                            member_uuid: saveMember.uuid,
-                        };
-
-                        await this.userService.createUserByMigration(prepareUser);
-                        console.log('user ................... OK');
-                    }
-
-                    if(member.accessoires){
-                        const tmp_accessories = member.accessoires.split(',');
-                        const accessories = JSON.parse(tmp_accessories);
-
-                        for(const accessory of accessories){
-                            const findAccessory = await this.accessoryService.findOneByLastVersionName(accessory);
-
-                            if (!findAccessory) {
-                                throw new NotFoundException('Aucun accessoire trouvé');
-                            }
-
-                            const accessoryEntity = await this.memberAccessoryService.findOneMemberAndAccessory(saveMember.uuid, findAccessory.uuid);
-                            
-                            if(!accessoryEntity){
-                                await this.memberAccessoryService.create({
-                                    member_uuid: saveMember.uuid,
-                                    accessory_uuid: findAccessory.uuid,
-                                });
-                            }
-                        }
-                    }
-                    console.log('member accessories ................... OK');
-
-                    if(responsibilityUuid !== undefined){
-                        console.log(responsibilityUuid);
-                        const memberResponsibility = await this.memberResponsibilityService.findOneByResponsibilityAndMember(saveMember.uuid, responsibilityUuid);
                         
-                        if(!memberResponsibility){
-                            await this.memberResponsibilityService.create({
-                                member_uuid: saveMember.uuid,
-                                responsibility_uuid: responsibilityUuid,
-                                priority: 'high',
-                            }, admin_uuid);
-                        }
-                    }
-                    console.log('member responsability ................... OK');
+                        !country ? country = await this.countryService.store({
+                                name: "COTE D'IVOIRE",
+                                description: "",
+                            }, admin_uuid) : null;
 
-                    console.log('################################################################################## ' + x);
+                        console.log('country ................... OK');
+
+                        
+                        // civility
+                        let civility = await this.civilityService.findOneByName(member.civility);
+                        if(!civility){
+                            await this.civilityService.store("homme", admin_uuid);
+                        }
+                        console.log('civility ................... OK');
+                        
+                        // city
+                        let cityUuid : string | undefined = undefined;
+                        if(member.localite_residence){
+                            let city = await this.cityService.findOneBySlug(slugify(member.localite_residence));
+
+                            if(!city){
+                                city = await this.cityService.store({
+                                    uuid: uuidv4(),
+                                    name: member.localite_residence,
+                                    description: "",
+                                }, admin_uuid);
+                            }
+                            cityUuid = city.uuid;
+                        }
+                        console.log('city ................... OK');
+                        
+                        // formation
+                        let formationUuid : string | undefined = undefined;
+                        if(member.profession){
+                            let formation = await this.formationService.findOneBySlug(slugify(member.profession));
+
+                            if(!formation){
+                                formation = await this.formationService.store({
+                                    uuid: uuidv4(),
+                                    name: member.profession,
+                                    description: "",
+                                }, admin_uuid);
+                            }
+                            formationUuid = formation.uuid;
+                        }
+                        console.log('formation ................... OK');
+                        
+                        // job
+                        let jobUuid : string | undefined = undefined;
+                        if(member.metier){
+                            let job = await this.jobService.findOneBySlug(slugify(member.metier));
+
+                            if(!job){
+                                job = await this.jobService.store({
+                                    uuid: uuidv4(),
+                                    name: member.metier,
+                                    description: "",
+                                }, admin_uuid);
+                            }
+                            jobUuid = job.uuid;
+                        }
+                        console.log('job ................... OK');
+                        
+                        // organisation city
+                        let organisationUuid : string | undefined = undefined;
+                        if(member.ville_rattachement){
+                            let organisation = await this.organisationCityService.findOneBySlug(slugify(member.ville_rattachement));
+
+                            if(!organisation){
+                                organisation = await this.organisationCityService.store({
+                                    uuid: uuidv4(),
+                                    name: member.ville_rattachement,
+                                    description: "",
+                                }, admin_uuid);
+                            }
+                            organisationUuid = organisation.uuid;
+                        }
+                        console.log('organisation ................... OK');
+                        
+                        // departmentUuid 
+                        let departmentUuid : string | undefined = undefined;
+                        if(member.departement){
+                            let department = await this.departmentService.findOne(member.departement, admin_uuid);
+                            departmentUuid = department.uuid;
+                        }
+                        console.log('department ................... OK');
+                        
+                        // division
+                        let divisionUuid : string | undefined = undefined;
+                        if(member.division){
+                            let division = await this.divisionService.findOne(member.division, admin_uuid);
+                            divisionUuid = division.uuid;
+                        }
+                        console.log('division ................... OK');
+                        
+                        // structure
+                        let structure = await this.structureService.findOne(member.structure_id);
+                        console.log('structure ................... OK');
+                        
+                        // responsability
+                        let responsibilityUuid : string | undefined = undefined;
+                        if(member.type_responsabilite){
+
+                            let gender: "mixte" | "homme" | "femme" = "mixte";
+                            const searchGender = member.type_responsabilite.toLowerCase();
+                            if(searchGender.includes("homme")){
+                                gender = "homme";
+                            }else if(searchGender.includes("femme")){
+                                gender = "femme";
+                            }
+
+                            const level = await this.levelService.findOneByName(member.niveau_responsabilite);
+                            if(level){
+
+                                let responsibility = await this.responsibilityService.findOneBySlug(slugify(member.type_responsabilite));
+                                if(!responsibility){
+                                    responsibility = await this.responsibilityService.store({
+                                        uuid: uuidv4(),
+                                        name: member.type_responsabilite,
+                                        description: "",
+                                        level_uuid: level.uuid,
+                                        level: level,
+                                        gender: gender,
+                                        role_uuid: role.uuid,
+                                        role,
+                                    }, admin_uuid);
+                                }
+                                responsibilityUuid = responsibility.uuid;
+                            }
+                        }
+                        console.log('responsability ................... ' + responsibilityUuid);
+
+                        const verifyPhoneQuery = await this.memberService.verifyPhoneNumber({phone: member.contact, category: 'principal'});
+                        
+                        let member_phone = undefined;
+                        if(member.contact){
+                            member_phone = verifyPhoneQuery.is_available ? member.contact : undefined;
+                        }
+
+                        const verifyEmailQuery = await this.memberService.verifyEmail({email: member.email});
+                        
+                        let member_email = undefined;
+                        if(member.email){
+                            member_email = verifyEmailQuery.is_available ? member.email : undefined;
+                        }
+
+                        const prepareSaveMember: CreateMemberDto = {
+                            picture: member.picture,
+                            matricule: member.matricule,
+                            firstname: member.nom,
+                            lastname: member.prenom,
+                            gender: civility?.gender as string,
+                            birth_date: member.date_naissance ?? null,
+                            birth_city: member.lieu_naissance ?? null,
+                            civility_uuid: civility?.uuid,
+                            marital_status_uuid: maritalStatus?.uuid,
+                            spouse_name: member.nom_conjoint ?? null,
+                            spouse_member: member.conjoint_membre ?? false,
+                            childrens: member.nb_enfants ?? 0,
+                            country_uuid: country?.uuid,
+                            city_uuid: cityUuid,
+                            town: member.ville_residence ?? null,
+                            formation_uuid: formationUuid,
+                            job_uuid: jobUuid,
+                            phone: member_phone,
+                            phone_whatsapp: member.whatsapp ?? null,
+                            email: member_email,
+                            tutor_name: member.contact_urgence_nom ?? null,
+                            tutor_phone: member.contact_urgence_numero ?? null,
+                            organisation_city_uuid: organisationUuid,
+                            membership_date: member.debut_pratique ?? null,
+                            sokahan_byakuren: member.sokahan_byakuren ?? false,
+                            department_uuid: departmentUuid,
+                            division_uuid: divisionUuid,
+                            responsibility_uuid: responsibilityUuid,
+                            accessories: member.accessories ?? [],
+                            has_gohonzon: member.possede_gohonzon ?? false,
+                            date_gohonzon: member.annee_gohonzon ?? null,
+                            has_tokusso: member.possede_tokusso ?? false,
+                            date_tokusso: member.annee_tokusso ?? null,
+                            has_omamori: member.possede_omamori ?? false,
+                            date_omamori: member.annee_omamori ?? null,
+                            structure_id: structure.id,
+                            structure_uuid: structure.uuid,
+                            status: 'success',
+                        }
+
+                        console.log(prepareSaveMember);
+                        const saveMember = await this.memberService.storeFromMigration({...prepareSaveMember, uuid: member.id}, admin_uuid);
+                        console.log('member ................... OK');
+                        
+                        // creation du compte utilisateur lié au membre
+                        if(member_phone != undefined && verifyPhoneQuery.is_available){
+
+                            const prepareUser : CreateUserDto = {
+                                phone_number: member_phone,
+                                email: member_email,
+                                firstname: saveMember.firstname,
+                                lastname: saveMember.lastname,
+                                password: member.user_password_no_hashed,
+                                is_active: true,
+                                member_uuid: saveMember.uuid,
+                            };
+
+                            await this.userService.createUserByMigration(prepareUser);
+                            console.log('user ................... OK');
+                        }
+
+                        if(member.accessoires){
+                            const tmp_accessories = member.accessoires.split(',');
+                            const accessories = JSON.parse(tmp_accessories);
+
+                            for(const accessory of accessories){
+                                const findAccessory = await this.accessoryService.findOneByLastVersionName(accessory);
+
+                                if (!findAccessory) {
+                                    throw new NotFoundException('Aucun accessoire trouvé');
+                                }
+
+                                const accessoryEntity = await this.memberAccessoryService.findOneMemberAndAccessory(saveMember.uuid, findAccessory.uuid);
+                                
+                                if(!accessoryEntity){
+                                    await this.memberAccessoryService.create({
+                                        member_uuid: saveMember.uuid,
+                                        accessory_uuid: findAccessory.uuid,
+                                    });
+                                }
+                            }
+                        }
+                        console.log('member accessories ................... OK');
+
+                        if(responsibilityUuid !== undefined){
+                            console.log(responsibilityUuid);
+                            const memberResponsibility = await this.memberResponsibilityService.findOneByResponsibilityAndMember(saveMember.uuid, responsibilityUuid);
+                            
+                            if(!memberResponsibility){
+                                await this.memberResponsibilityService.create({
+                                    member_uuid: saveMember.uuid,
+                                    responsibility_uuid: responsibilityUuid,
+                                    priority: 'high',
+                                }, admin_uuid);
+                            }
+                        }
+                        console.log('member responsability ................... OK');
+
+                        console.log('################################################################################## ' + x);
+                    }
                 }
             }
+
         }
 
         return {

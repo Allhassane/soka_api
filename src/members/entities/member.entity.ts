@@ -171,20 +171,20 @@ export class MemberEntity extends DateTimeEntity {
   @Column({ type: 'boolean', default: false })
   has_gohonzon: boolean;
 
-  @Column({ type: 'date', nullable: true })
-  date_gohonzon: Date;
+  @Column({ type: 'varchar', nullable: true })
+  date_gohonzon: string;
 
   @Column({ type: 'boolean', default: false })
   has_tokusso: boolean;
 
-  @Column({ type: 'date', nullable: true })
-  date_tokusso: Date;
+  @Column({ type: 'varchar', nullable: true })
+  date_tokusso: string;
 
   @Column({ type: 'boolean', default: false })
   has_omamori: boolean;
 
-  @Column({ type: 'date', nullable: true })
-  date_omamori: Date;
+  @Column({ type: 'varchar', nullable: true })
+  date_omamori: string;
 
   /** Structure */
   @Column({ type: 'int', nullable: true })
