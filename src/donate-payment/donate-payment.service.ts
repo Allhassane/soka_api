@@ -60,13 +60,13 @@ export class DonatePaymentService {
 
     if (now < start) {
       throw new BadRequestException(
-        `Cette campagne de don n'est pas encore ouverte. Elle démarre le ${start.toLocaleDateString()}.`
+        `Cette campagne de zaimu n'est pas encore ouverte. Elle démarre le ${start.toLocaleDateString()}.`
       );
     }
 
     if (now > stop) {
       throw new BadRequestException(
-        `Cette campagne de don est déjà clôturée depuis le ${stop.toLocaleDateString()}.`
+        `Cette campagne de zaimu est déjà clôturée depuis le ${stop.toLocaleDateString()}.`
       );
     }
 
@@ -118,7 +118,7 @@ export class DonatePaymentService {
     // FREE_AMOUNT
     if (!dto.amount || dto.amount <= 0) {
       throw new BadRequestException(
-        'Le montant du don est obligatoire et doit être positif pour une campagne à montant libre.',
+        'Le montant du zaimu est obligatoire et doit être positif pour une campagne à montant libre.',
       );
     }
 
@@ -169,7 +169,7 @@ export class DonatePaymentService {
   const saved = await this.donateRepo.save(donation);
 
   return {
-    message: 'Don initié avec succès',
+    message: 'zaimu initié avec succès',
     donation_uuid: saved.uuid,
     payment_uuid: paymentResult.payment_uuid,
     transaction_id: paymentResult.transaction_id,
@@ -201,7 +201,7 @@ export class DonatePaymentService {
 
     const donation = await this.donateRepo.findOne({ where: { uuid } });
 
-    if (!donation) throw new NotFoundException('Don introuvable.');
+    if (!donation) throw new NotFoundException('zaimu introuvable.');
 
     return donation;
   }
@@ -307,7 +307,7 @@ export class DonatePaymentService {
 
     await this.donateRepo.remove(donation);
 
-    return { message: 'Don supprimé avec succès' };
+    return { message: 'zaimu supprimé avec succès' };
   }
 
   // ============================================================
@@ -327,13 +327,13 @@ export class DonatePaymentService {
 
   private async findDonation(uuid: string) {
     const donation = await this.donateRepo.findOne({ where: { uuid } });
-    if (!donation) throw new NotFoundException('Don introuvable');
+    if (!donation) throw new NotFoundException('zaimu introuvable');
     return donation;
   }
 
   private async findCampaign(uuid: string) {
     const campaign = await this.donateCampaignRepo.findOne({ where: { uuid } });
-    if (!campaign) throw new NotFoundException('Campagne de dons introuvable');
+    if (!campaign) throw new NotFoundException('Campagne de zaimu introuvable');
     return campaign;
   }
 }
