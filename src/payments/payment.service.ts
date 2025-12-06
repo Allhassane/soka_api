@@ -506,11 +506,15 @@ export class PaymentService {
 
   async confirmCinetPayCallback(payload: any) {
   const { cpm_trans_id } = payload;
-
+  let transaction_id = '';
   console.log('Vérification du paiement CinetPay pour transaction_id:', payload);
 
-  const transaction_id = cpm_trans_id;
-
+  if (payload.transaction_id) {
+    console.warn('Utilisation de transaction_id dans le callback CinetPay.');
+     transaction_id = payload.transaction_id;
+  }else{
+    transaction_id = cpm_trans_id;
+  }
 
   if (!transaction_id) {
     throw new BadRequestException('transaction_id manquant.');
