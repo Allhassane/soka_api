@@ -5,6 +5,10 @@ export interface AuthCredentialsDto {
   email?: string | null;
   phone_number?: string;
   member_uuid?: string | null;
+  firstname?: string | null;
+  lastname?: string | null;
+  full_name?: string | null;
+  avatar_url?: string | null;
   responsibilities?: {
     uuid: string;
     name: string;

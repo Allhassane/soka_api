@@ -10,6 +10,7 @@ import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { StructureEntity } from 'src/structure/entities/structure.entity';
 import { LevelEntity } from 'src/level/entities/level.entity';
+import { first } from 'rxjs';
 
 @Injectable()
 export class AuthService {
@@ -290,6 +291,9 @@ export class AuthService {
       uuid: user.uuid,
       email: user.email ?? null,
       phone_number: user.phone_number,
+      firstname: user.firstname ?? null,
+      lastname: user.lastname ?? null,
+      full_name: user.firstname && user.lastname ? `${user.firstname} ${user.lastname}` : null,
       member: memberInfo,
       roles,
       global_permissions: globalPermissions,
