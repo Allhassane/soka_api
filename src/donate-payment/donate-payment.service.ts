@@ -270,6 +270,13 @@ export class DonatePaymentService {
       const response = verification.data;
 
       if (response.code !== '00') {
+        if(response.message === 'WAITING_CUSTOMER_PAYMENT' || response.message === 'WAITING_CUSTOMER_TO_VALIDATE') {
+          return {
+            success: false,
+            message: "Le paiement est en attente de validation par le client.",
+            transaction_id,
+          };
+        }
         throw new BadRequestException(
           `Paiement non validé par CinetPay : ${response.message}`,
         );
