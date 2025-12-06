@@ -301,43 +301,6 @@ export class SubscriptionPaymentService {
     };
   }
 
-  /* async findAll(
-    page = 1,
-    limit = 20,
-    admin_uuid: string,
-    search?: string,
-  ) {
-    // Vérification de l'admin
-    await this.checkAdmin(admin_uuid);
-
-    const take = Number(limit) > 0 ? Number(limit) : 20;
-    const skip = (Number(page) - 1) * take;
-
-    // Construction du where
-    const where: any = {};
-
-    if (search && search.trim() !== '') {
-      where.OR = [
-        { nom: ILike(`%${search.trim()}%`) },
-        { prenom: ILike(`%${search.trim()}%`) },
-      ];
-    }
-
-    const [items, total] = await this.subscriptionPaymentRepo.findAndCount({
-      where,
-      order: { created_at: 'DESC' },
-      skip,
-      take,
-    });
-
-    return {
-      total,
-      page: Number(page),
-      limit: take,
-      data: items,
-      search: search || null,
-    };
-  } */
 
   async findAll(
     page = 1,
@@ -351,30 +314,20 @@ export class SubscriptionPaymentService {
     const take = Number(limit) > 0 ? Number(limit) : 20;
     const skip = (Number(page) - 1) * take;
 
-    const queryBuilder = this.subscriptionPaymentRepo
-      .createQueryBuilder('sp')
-      .leftJoinAndSelect('sp.actor', 'actor') // Jointure avec member (actor)
-      .leftJoinAndSelect('sp.beneficiary', 'beneficiary') // Jointure avec member (beneficiary)
-      .orderBy('sp.created_at', 'DESC');
+    // Construction du where avec Or
+    const where: any = search && search.trim() !== ''
+      ? [
+        { actor_name: ILike(`%${search.trim()}%`) },
+        { beneficiary_name: ILike(`%${search.trim()}%`) },
+      ]
+      : {};
 
-    // Filtre par recherche globale (actor_name OU actor firstname OU actor lastname OU beneficiary firstname OU beneficiary lastname)
-    if (search && search.trim() !== '') {
-      queryBuilder.andWhere(
-        `(
-        LOWER(sp.actor_name) LIKE LOWER(:search) OR
-        LOWER(actor.firstname) LIKE LOWER(:search) OR
-        LOWER(actor.lastname) LIKE LOWER(:search) OR
-        LOWER(beneficiary.firstname) LIKE LOWER(:search) OR
-        LOWER(beneficiary.lastname) LIKE LOWER(:search)
-      )`,
-        { search: `%${search.trim()}%` }
-      );
-    }
-
-    // Pagination
-    queryBuilder.skip(skip).take(take);
-
-    const [items, total] = await queryBuilder.getManyAndCount();
+    const [items, total] = await this.subscriptionPaymentRepo.findAndCount({
+      where,
+      order: { created_at: 'DESC' },
+      skip,
+      take,
+    });
 
     return {
       total,
