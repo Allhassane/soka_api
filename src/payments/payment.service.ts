@@ -589,7 +589,7 @@ export class PaymentService {
       await this.donatePaymentRepo.save(donation);
 
       console.log(`Don mis à jour pour paiement ${payment.uuid}`);
-      return { updated: 'donation', uuid: donation.uuid };
+      //return { updated: 'donation', uuid: donation.uuid };
     }
 
     const subscription = await this.subscriptionPaymentRepo.findOne({
