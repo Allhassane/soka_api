@@ -271,14 +271,39 @@ export class DonatePaymentService {
 
       if (response.code !== '00') {
         if(response.message === 'WAITING_CUSTOMER_PAYMENT' || response.message === 'WAITING_CUSTOMER_TO_VALIDATE') {
-          return {
-            success: false,
-            message: "Le paiement est en attente de validation par le client.",
-            transaction_id,
-          };
+            throw new BadRequestException(
+              `Le paiement est en attente de validation par le client.`,
+            );
         }
+
+        else if(response.message === 'PAYMENT_FAILED') {
+            const payment = await this.paymentService.findByTransactionIdOrFail(transaction_id, admin_uuid);
+            if (!payment) {
+              throw new NotFoundException(
+                `Aucun paiement trouvé pour transaction_id = ${transaction_id}`,
+              );
+            }
+
+            await this.paymentService.updatePayment(payment.uuid, {
+              status: GlobalStatus.FAILED,
+              payment_status: PaymentStatus.FAILED,
+            });
+
+          const donation = await this.donateRepo.findOne({
+            where: { payment_uuid: payment.uuid },
+          });
+
+          if (donation) {
+            donation.status = GlobalStatus.FAILED;
+            await this.donateRepo.save(donation);
+          }
+           throw new BadRequestException(
+            `Paiement échoué`,
+          );
+        }
+
         throw new BadRequestException(
-          `Paiement non validé par CinetPay : ${response.message}`,
+          `Paiement non vérifié`,
         );
       }
 
