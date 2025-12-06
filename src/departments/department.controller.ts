@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { DepartmentService } from './department.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateDepartmentDto } from './dto/create-department.dto';
@@ -19,6 +19,24 @@ export class DepartmentController {
     const admin_uuid = req.user.uuid as string;
     return this.departmentService.findAll(admin_uuid);
   }
+
+
+
+    @Get('find-by-gender/:gender')
+    @ApiOperation({ summary: 'Récupérer un département par genre' })
+    @ApiResponse({ status: 200, description: 'Département trouvé.' })
+    @ApiResponse({ status: 400, description: 'Département non trouvé.' })
+    @ApiParam({ name: 'gender', required: true, enum: ['homme', 'femme'] })
+    findByGender(
+      @Param('gender') gender: string,
+      @Request() req,
+    ) {
+      const admin_uuid = req.user.uuid as string;
+      return this.departmentService.findByGender(
+        gender,
+        admin_uuid,
+      );
+    }
 
   @Post()
   @ApiOperation({ summary: 'Créer un nouveau département' })
