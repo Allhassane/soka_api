@@ -23,7 +23,6 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { SubscriptionPaymentService } from './subscription-payment.service';
 import { MakeSubscriptionPaymentDto } from './dto/make-subscription-payment';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
-import { Public } from 'src/shared/decorators/public.decorator';
 
 @ApiTags('Paiement d’abonnement')
 
