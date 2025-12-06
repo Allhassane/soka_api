@@ -272,7 +272,7 @@ export class DonatePaymentService {
       if (response.code !== '00') {
         if(response.message === 'WAITING_CUSTOMER_PAYMENT' || response.message === 'WAITING_CUSTOMER_TO_VALIDATE') {
             throw new BadRequestException(
-              `Le paiement est en attente de validation par le client.`,
+              `Le paiement est en attente de validation.`,
             );
         }
 
@@ -311,7 +311,7 @@ export class DonatePaymentService {
 
       if (paymentStatus !== 'ACCEPTED') {
         throw new BadRequestException(
-          `Paiement non accepté : statut = ${paymentStatus}`,
+          `Paiement non accepté`,
         );
       }
 

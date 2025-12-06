@@ -35,7 +35,7 @@ export class SubscriptionPaymentService {
     private readonly memberRepo: Repository<MemberEntity>,
 
     private readonly paymentService: PaymentService,
-  ) {}
+  ) { }
 
   // ============================================================
   // 1. INITIER UN PAIEMENT D’ABONNEMENT
@@ -163,7 +163,7 @@ export class SubscriptionPaymentService {
   }
 
 
-  async confirmPayment(payload: any,admin_uuid:string) {
+  async confirmPayment(payload: any, admin_uuid: string) {
     const { transaction_id } = payload;
 
     if (!transaction_id) {
@@ -185,14 +185,47 @@ export class SubscriptionPaymentService {
     const data = check.data;
 
     if (data.code !== '00') {
+      if (data.message === 'WAITING_CUSTOMER_PAYMENT' || data.message === 'WAITING_CUSTOMER_TO_VALIDATE') {
+        throw new BadRequestException(
+          `Le paiement est en attente de validation.`,
+        );
+      }
+
+      else if (data.message === 'PAYMENT_FAILED') {
+        // --- Récupération du paiement ---
+        const payment = await this.paymentService.findByTransactionIdOrFail(
+          transaction_id,
+          admin_uuid
+        );
+
+        // --- Mise à jour du paiement ---
+        await this.paymentService.updatePayment(payment.uuid, {
+          status: GlobalStatus.FAILED,
+          payment_status: PaymentStatus.FAILED,
+        });
+
+        // --- Mise à jour du paiement d'abonnement ---
+        const subscriptionPayment = await this.subscriptionPaymentRepo.findOne({
+          where: { payment_uuid: payment.uuid },
+        });
+
+        if (subscriptionPayment) {
+          subscriptionPayment.status = GlobalStatus.FAILED;
+          await this.subscriptionPaymentRepo.save(subscriptionPayment);
+        }
+        throw new BadRequestException(
+          `Paiement échoué`,
+        );
+      }
+
       throw new BadRequestException(
-        `Paiement non validé par CinetPay : ${data.message}`,
+        `Paiement non vérifié`,
       );
     }
 
     if (data.data.status !== 'ACCEPTED') {
       throw new BadRequestException(
-        `Paiement refusé : statut = ${data.data.status}`,
+        `Paiement refusé`,
       );
     }
 
@@ -227,130 +260,130 @@ export class SubscriptionPaymentService {
   }
 
 
-async findOne(uuid: string, admin_uuid: string) {
-  // Vérifier l’admin
-  await this.checkAdmin(admin_uuid);
+  async findOne(uuid: string, admin_uuid: string) {
+    // Vérifier l’admin
+    await this.checkAdmin(admin_uuid);
 
-  const payment = await this.subscriptionPaymentRepo.findOne({
-    where: { uuid },
-  });
+    const payment = await this.subscriptionPaymentRepo.findOne({
+      where: { uuid },
+    });
 
-  if (!payment) {
-    throw new NotFoundException('Paiement d’abonnement introuvable.');
+    if (!payment) {
+      throw new NotFoundException('Paiement d’abonnement introuvable.');
+    }
+
+    return payment;
   }
 
-  return payment;
-}
 
+  async changeStatus(uuid: string, status: GlobalStatus, admin_uuid: string) {
+    // Vérifier l’admin
+    await this.checkAdmin(admin_uuid);
 
-async changeStatus(uuid: string, status: GlobalStatus, admin_uuid: string) {
-  // Vérifier l’admin
-  await this.checkAdmin(admin_uuid);
+    // Récupérer l’enregistrement
+    const payment = await this.subscriptionPaymentRepo.findOne({
+      where: { uuid },
+    });
 
-  // Récupérer l’enregistrement
-  const payment = await this.subscriptionPaymentRepo.findOne({
-    where: { uuid },
-  });
+    if (!payment) {
+      throw new NotFoundException('Paiement d’abonnement introuvable.');
+    }
 
-  if (!payment) {
-    throw new NotFoundException('Paiement d’abonnement introuvable.');
+    // Mise à jour du statut
+    payment.status = status;
+
+    const updated = await this.subscriptionPaymentRepo.save(payment);
+
+    return {
+      message: 'Statut mis à jour avec succès',
+      uuid: updated.uuid,
+      status: updated.status,
+    };
   }
 
-  // Mise à jour du statut
-  payment.status = status;
+  /* async findAll(
+    page = 1,
+    limit = 20,
+    admin_uuid: string,
+    search?: string,
+  ) {
+    // Vérification de l'admin
+    await this.checkAdmin(admin_uuid);
 
-  const updated = await this.subscriptionPaymentRepo.save(payment);
+    const take = Number(limit) > 0 ? Number(limit) : 20;
+    const skip = (Number(page) - 1) * take;
 
-  return {
-    message: 'Statut mis à jour avec succès',
-    uuid: updated.uuid,
-    status: updated.status,
-  };
-}
+    // Construction du where
+    const where: any = {};
 
-/* async findAll(
-  page = 1,
-  limit = 20,
-  admin_uuid: string,
-  search?: string,
-) {
-  // Vérification de l'admin
-  await this.checkAdmin(admin_uuid);
+    if (search && search.trim() !== '') {
+      where.OR = [
+        { nom: ILike(`%${search.trim()}%`) },
+        { prenom: ILike(`%${search.trim()}%`) },
+      ];
+    }
 
-  const take = Number(limit) > 0 ? Number(limit) : 20;
-  const skip = (Number(page) - 1) * take;
+    const [items, total] = await this.subscriptionPaymentRepo.findAndCount({
+      where,
+      order: { created_at: 'DESC' },
+      skip,
+      take,
+    });
 
-  // Construction du where
-  const where: any = {};
-
-  if (search && search.trim() !== '') {
-    where.OR = [
-      { nom: ILike(`%${search.trim()}%`) },
-      { prenom: ILike(`%${search.trim()}%`) },
-    ];
-  }
-
-  const [items, total] = await this.subscriptionPaymentRepo.findAndCount({
-    where,
-    order: { created_at: 'DESC' },
-    skip,
-    take,
-  });
-
-  return {
-    total,
-    page: Number(page),
-    limit: take,
-    data: items,
-    search: search || null,
-  };
-} */
+    return {
+      total,
+      page: Number(page),
+      limit: take,
+      data: items,
+      search: search || null,
+    };
+  } */
 
   async findAll(
-  page = 1,
-  limit = 20,
-  admin_uuid: string,
-  search?: string,
-) {
-  // Vérification de l'admin
-  await this.checkAdmin(admin_uuid);
+    page = 1,
+    limit = 20,
+    admin_uuid: string,
+    search?: string,
+  ) {
+    // Vérification de l'admin
+    await this.checkAdmin(admin_uuid);
 
-  const take = Number(limit) > 0 ? Number(limit) : 20;
-  const skip = (Number(page) - 1) * take;
+    const take = Number(limit) > 0 ? Number(limit) : 20;
+    const skip = (Number(page) - 1) * take;
 
-  const queryBuilder = this.subscriptionPaymentRepo
-    .createQueryBuilder('sp')
-    .leftJoinAndSelect('sp.actor', 'actor') // Jointure avec member (actor)
-    .leftJoinAndSelect('sp.beneficiary', 'beneficiary') // Jointure avec member (beneficiary)
-    .orderBy('sp.created_at', 'DESC');
+    const queryBuilder = this.subscriptionPaymentRepo
+      .createQueryBuilder('sp')
+      .leftJoinAndSelect('sp.actor', 'actor') // Jointure avec member (actor)
+      .leftJoinAndSelect('sp.beneficiary', 'beneficiary') // Jointure avec member (beneficiary)
+      .orderBy('sp.created_at', 'DESC');
 
-  // Filtre par recherche globale (actor_name OU actor firstname OU actor lastname OU beneficiary firstname OU beneficiary lastname)
-  if (search && search.trim() !== '') {
-    queryBuilder.andWhere(
-      `(
+    // Filtre par recherche globale (actor_name OU actor firstname OU actor lastname OU beneficiary firstname OU beneficiary lastname)
+    if (search && search.trim() !== '') {
+      queryBuilder.andWhere(
+        `(
         LOWER(sp.actor_name) LIKE LOWER(:search) OR
         LOWER(actor.firstname) LIKE LOWER(:search) OR
         LOWER(actor.lastname) LIKE LOWER(:search) OR
         LOWER(beneficiary.firstname) LIKE LOWER(:search) OR
         LOWER(beneficiary.lastname) LIKE LOWER(:search)
       )`,
-      { search: `%${search.trim()}%` }
-    );
+        { search: `%${search.trim()}%` }
+      );
+    }
+
+    // Pagination
+    queryBuilder.skip(skip).take(take);
+
+    const [items, total] = await queryBuilder.getManyAndCount();
+
+    return {
+      total,
+      page: Number(page),
+      limit: take,
+      data: items,
+      search: search || null,
+    };
   }
-
-  // Pagination
-  queryBuilder.skip(skip).take(take);
-
-  const [items, total] = await queryBuilder.getManyAndCount();
-
-  return {
-    total,
-    page: Number(page),
-    limit: take,
-    data: items,
-    search: search || null,
-  };
-}
 
   // ============================================================
   // HELPERS
