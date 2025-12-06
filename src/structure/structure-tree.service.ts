@@ -46,12 +46,22 @@ import { AuthService } from 'src/auth/auth.service';
         hommes: number;
         femmes: number;
         jeunesse: number;
+        stats:{
+          percent_man: number;
+          percent_woman: number;
+          percent_young: number;
+        }
       };
       divisions: {
         total: number;
         jeune_homme: number;
         jeune_femme: number;
         avenir: number;
+        stats:{
+          percent_man: number;
+          percent_woman: number;
+          percent_young: number;
+        }
       };
     };
     breadcrumb: {
@@ -1279,263 +1289,7 @@ export class StructureTreeService {
 
     return formattedMembers;
   }
-  /*
 
-  async getStructureMembersWithStats_old(
-    structureUuid: string,
-    paginationParams?: PaginationMemberParams
-  ): Promise<StructureMembersStats> {
-    // Paramètres de pagination par défaut
-    const page = paginationParams?.page || 1;
-    const limit = paginationParams?.limit || 20;
-    const offset = (page - 1) * limit;
-
-    // 1. Récupérer la structure
-    const structure = await this.structureRepository.findOne({
-      where: { uuid: structureUuid },
-    });
-
-    if (!structure) {
-      throw new NotFoundException('Structure non trouvée');
-    }
-
-    // 2. Récupérer le niveau
-    let level: LevelEntity | null = null;
-    if (structure.level_uuid) {
-      level = await this.levelRepository.findOne({
-        where: { uuid: structure.level_uuid },
-      });
-    }
-
-    // 3. Récupérer les responsables de cette structure spécifique
-    const structureResponsibles = await this.memberRepository
-      .createQueryBuilder('m')
-      .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
-      .innerJoin('responsibilities', 'r', 'r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL')
-      .select([
-        'm.uuid AS member_uuid',
-        "CONCAT(m.firstname, ' ', m.lastname) AS member_name",
-        'r.uuid AS responsibility_uuid',
-        'r.name AS responsibility_name',
-      ])
-      .where('m.structure_uuid = :structureUuid', { structureUuid })
-      .andWhere('m.deleted_at IS NULL')
-      .getRawMany();
-
-    // 4. Récupérer toutes les sous-structures (récursivement)
-    const allStructureUuids = await this.getAllSubStructureUuids(structureUuid);
-
-    // 5. Construire la requête de base pour les membres
-    let membersQuery = this.memberRepository
-      .createQueryBuilder('m')
-      .leftJoin('structures', 's', 's.uuid = m.structure_uuid')
-      .leftJoin('departments', 'd', 'd.uuid = m.department_uuid')
-      .leftJoin('divisions', 'div', 'div.uuid = m.division_uuid')
-      .select([
-        'm.uuid AS uuid',
-        'm.matricule AS matricule',
-        'm.firstname AS firstname',
-        'm.lastname AS lastname',
-        'm.gender AS gender',
-        'm.birth_date AS birth_date',
-        'm.phone AS phone',
-        'm.email AS email',
-        'm.structure_uuid AS structure_uuid',
-        's.name AS structure_name',
-        'm.department_uuid AS department_uuid',
-        'd.name AS department_name',
-        'm.division_uuid AS division_uuid',
-        'div.name AS division_name',
-        'm.has_gohonzon AS has_gohonzon',
-        'm.membership_date AS membership_date',
-      ])
-      .where('m.structure_uuid IN (:...uuids)', { uuids: allStructureUuids })
-      .andWhere('m.deleted_at IS NULL');
-
-    // Appliquer les filtres optionnels
-    if (paginationParams?.search) {
-      membersQuery = membersQuery.andWhere(
-        "(m.firstname LIKE :search OR m.lastname LIKE :search OR m.matricule LIKE :search OR m.phone LIKE :search OR m.email LIKE :search)",
-        { search: `%${paginationParams.search}%` }
-      );
-    }
-
-    if (paginationParams?.gender) {
-      membersQuery = membersQuery.andWhere('m.gender = :gender', {
-        gender: paginationParams.gender
-      });
-    }
-
-    if (paginationParams?.has_gohonzon !== undefined) {
-      membersQuery = membersQuery.andWhere('m.has_gohonzon = :hasGohonzon', {
-        hasGohonzon: paginationParams.has_gohonzon
-      });
-    }
-
-    if (paginationParams?.department_uuid) {
-      membersQuery = membersQuery.andWhere('m.department_uuid = :deptUuid', {
-        deptUuid: paginationParams.department_uuid
-      });
-    }
-
-    if (paginationParams?.division_uuid) {
-      membersQuery = membersQuery.andWhere('m.division_uuid = :divUuid', {
-        divUuid: paginationParams.division_uuid
-      });
-    }
-
-    // 6. Compter le total pour la pagination
-    const totalCount = await membersQuery.getCount();
-
-    // 7. Récupérer les membres paginés
-    const members = await membersQuery
-      .orderBy('m.firstname', 'ASC')
-      .addOrderBy('m.lastname', 'ASC')
-      .offset(offset)
-      .limit(limit)
-      .getRawMany();
-
-    // 8. Récupérer tous les membres pour les stats (sans pagination)
-    const allMembersForStats = await this.memberRepository
-      .createQueryBuilder('m')
-      .where('m.structure_uuid IN (:...uuids)', { uuids: allStructureUuids })
-      .andWhere('m.deleted_at IS NULL')
-      .getMany();
-
-    // 9. Récupérer les responsabilités des membres paginés
-    const memberUuids = members.map(m => m.uuid);
-    let memberResponsibilities: any[] = [];
-
-    if (memberUuids.length > 0) {
-      memberResponsibilities = await this.memberRepository
-        .createQueryBuilder('m')
-        .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
-        .innerJoin('responsibilities', 'r', 'r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL')
-        .select([
-          'm.uuid AS member_uuid',
-          'r.uuid AS responsibility_uuid',
-          'r.name AS responsibility_name',
-        ])
-        .where('m.uuid IN (:...uuids)', { uuids: memberUuids })
-        .andWhere('m.deleted_at IS NULL')
-        .getRawMany();
-    }
-
-    // Grouper les responsabilités par membre
-    const responsibilitiesMap = new Map<string, { uuid: string; name: string }[]>();
-    for (const mr of memberResponsibilities) {
-      if (!responsibilitiesMap.has(mr.member_uuid)) {
-        responsibilitiesMap.set(mr.member_uuid, []);
-      }
-      responsibilitiesMap.get(mr.member_uuid)!.push({
-        uuid: mr.responsibility_uuid,
-        name: mr.responsibility_name,
-      });
-    }
-
-    // 10. Calculer les statistiques (sur tous les membres, pas seulement les paginés)
-    const totalMembers = allMembersForStats.length;
-    const hommes = allMembersForStats.filter(m => m.gender === 'homme').length;
-    const femmes = allMembersForStats.filter(m => m.gender === 'femme').length;
-    const withGohonzon = allMembersForStats.filter(m => m.has_gohonzon).length;
-
-    // Répartition par âge
-    const now = new Date();
-    const ageGroups = { '0-18': 0, '19-35': 0, '36-50': 0, '51-65': 0, '65+': 0 };
-    for (const m of allMembersForStats) {
-      if (m.birth_date) {
-        const age = Math.floor(
-          (now.getTime() - new Date(m.birth_date).getTime()) / (365.25 * 24 * 60 * 60 * 1000)
-        );
-        if (age <= 18) ageGroups['0-18']++;
-        else if (age <= 35) ageGroups['19-35']++;
-        else if (age <= 50) ageGroups['36-50']++;
-        else if (age <= 65) ageGroups['51-65']++;
-        else ageGroups['65+']++;
-      }
-    }
-
-    // Stats par département
-    const departmentStats = await this.getDepartmentsSummary(allStructureUuids, totalMembers);
-
-    // Stats par division
-    const divisionStats = await this.getDivisionsSummary(allStructureUuids, totalMembers);
-
-    // Compter les responsables
-    const allResponsibilities = await this.memberRepository
-      .createQueryBuilder('m')
-      .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
-      .select('m.uuid', 'member_uuid')
-      .where('m.structure_uuid IN (:...uuids)', { uuids: allStructureUuids })
-      .andWhere('m.deleted_at IS NULL')
-      .getRawMany();
-
-    const totalResponsibles = new Set(allResponsibilities.map(r => r.member_uuid)).size;
-
-    // 11. Formater les membres paginés avec leurs responsabilités
-    const formattedMembers = members.map(m => ({
-      uuid: m.uuid,
-      matricule: m.matricule,
-      firstname: m.firstname,
-      lastname: m.lastname,
-      gender: m.gender,
-      birth_date: m.birth_date,
-      phone: m.phone,
-      email: m.email,
-      structure_uuid: m.structure_uuid,
-      structure_name: m.structure_name,
-      department_uuid: m.department_uuid,
-      department_name: m.department_name,
-      division_uuid: m.division_uuid,
-      division_name: m.division_name,
-      has_gohonzon: m.has_gohonzon,
-      membership_date: m.membership_date,
-      responsibilities: responsibilitiesMap.get(m.uuid) || [],
-    }));
-
-    // 12. Calculer les infos de pagination
-    const totalPages = Math.ceil(totalCount / limit);
-
-    // 13. Retourner le résultat
-    return {
-      structure: {
-        uuid: structure.uuid,
-        name: structure.name,
-        level_uuid: structure.level_uuid ?? null,
-        level_name: level?.name || 'Inconnu',
-        responsibles: structureResponsibles.map(r => ({
-          member_uuid: r.member_uuid,
-          member_name: r.member_name,
-          responsibility_uuid: r.responsibility_uuid,
-          responsibility_name: r.responsibility_name,
-        })),
-      },
-      stats: {
-        total_members: totalMembers,
-        total_hommes: hommes,
-        total_femmes: femmes,
-        total_with_gohonzon: withGohonzon,
-        gohonzon_rate: totalMembers > 0
-          ? Math.round((withGohonzon / totalMembers) * 100)
-          : 0,
-        total_responsibles: totalResponsibles,
-        total_sub_structures: allStructureUuids.length - 1,
-        age_distribution: ageGroups,
-        departments: departmentStats,
-        divisions: divisionStats,
-      },
-      members: formattedMembers,
-      pagination: {
-        current_page: page,
-        per_page: limit,
-        total_items: totalCount,
-        total_pages: totalPages,
-        has_next: page < totalPages,
-        has_previous: page > 1,
-      },
-    };
-  }
-  */
 
 
   /**
@@ -1758,26 +1512,48 @@ async getMemberStatsByConnectedUser(
 
   // 9. Retourner le résultat
   return {
-    filters_available: filtersAvailable,
-    stats: {
-      total_members: totalMembers,
-      total_hommes: totalHommes,
-      total_femmes: totalFemmes,
-      departments: {
-        total: deptHommes + deptFemmes + deptJeunesse,
-        hommes: deptHommes,
-        femmes: deptFemmes,
-        jeunesse: deptJeunesse,
-      },
-      divisions: {
-        total: divJeuneHomme + divJeuneFemme + divAvenir,
-        jeune_homme: divJeuneHomme,
-        jeune_femme: divJeuneFemme,
-        avenir: divAvenir,
-      },
+  filters_available: filtersAvailable,
+  stats: {
+    total_members: totalMembers,
+    total_hommes: totalHommes,
+    total_femmes: totalFemmes,
+    departments: {
+      total: deptHommes + deptFemmes + deptJeunesse,
+      hommes: deptHommes,
+      femmes: deptFemmes,
+      jeunesse: deptJeunesse,
+      stats: {
+        percent_man: deptHommes + deptFemmes + deptJeunesse > 0
+          ? parseFloat(((deptHommes / (deptHommes + deptFemmes + deptJeunesse)) * 100).toFixed(2))
+          : 0,
+        percent_woman: deptHommes + deptFemmes + deptJeunesse > 0
+          ? parseFloat(((deptFemmes / (deptHommes + deptFemmes + deptJeunesse)) * 100).toFixed(2))
+          : 0,
+        percent_young: deptHommes + deptFemmes + deptJeunesse > 0
+          ? parseFloat(((deptJeunesse / (deptHommes + deptFemmes + deptJeunesse)) * 100).toFixed(2))
+          : 0,
+      }
     },
-    breadcrumb,
-  };
+    divisions: {
+      total: divJeuneHomme + divJeuneFemme + divAvenir,
+      jeune_homme: divJeuneHomme,
+      jeune_femme: divJeuneFemme,
+      avenir: divAvenir,
+      stats: {
+        percent_man: divJeuneHomme + divJeuneFemme + divAvenir > 0
+          ? parseFloat(((divJeuneHomme / (divJeuneHomme + divJeuneFemme + divAvenir)) * 100).toFixed(2))
+          : 0,
+        percent_woman: divJeuneHomme + divJeuneFemme + divAvenir > 0
+          ? parseFloat(((divJeuneFemme / (divJeuneHomme + divJeuneFemme + divAvenir)) * 100).toFixed(2))
+          : 0,
+        percent_young: divJeuneHomme + divJeuneFemme + divAvenir > 0
+          ? parseFloat(((divAvenir / (divJeuneHomme + divJeuneFemme + divAvenir)) * 100).toFixed(2))
+          : 0,
+      }
+    },
+  },
+  breadcrumb,
+};
 }
 /**
  * Récupère toutes les structures accessibles (parents + enfants)
