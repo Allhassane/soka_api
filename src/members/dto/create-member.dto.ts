@@ -89,6 +89,16 @@ export class CreateMemberDto {
   @IsString()
   town?: string;
 
+  @ApiPropertyOptional({ description: 'longitude' })
+  @IsOptional()
+  @IsString()
+  longitude?: string;
+
+  @ApiPropertyOptional({ description: 'latitude' })
+  @IsOptional()
+  @IsString()
+  latitude?: string;
+
   @ApiPropertyOptional({ description: 'UUID de la formation du membre' })
   @IsOptional()
   @IsUUID()
@@ -155,12 +165,12 @@ export class CreateMemberDto {
   @IsUUID()
   responsibility_uuid?: string;
 
-  
+
   @ApiPropertyOptional({ description: 'Liste des UUIDs des accessoires du membre', type: [String] })
   @IsOptional()
   @IsUUID('all', { each: true })
   accessories?: string[];
-    
+
   @ApiPropertyOptional({ description: 'Possède un Gohonzon' })
   @IsOptional()
   @IsBoolean()
