@@ -40,6 +40,7 @@ export class StructureService {
       );
     }
 
+
     const newStructure = this.structureRepo.create({
       uuid: createStructureDto.uuid ?? uuidv4(),
       name: createStructureDto.name,

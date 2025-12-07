@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { JobEntity } from './entities/job.entity';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
+import { find } from 'rxjs';
 
 @Injectable()
 export class JobService {
@@ -11,7 +12,7 @@ export class JobService {
     @InjectRepository(JobEntity)
     private readonly jobRepo: Repository<JobEntity>,
     private readonly logService: LogActivitiesService,
-    
+
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
   ) {}
@@ -22,7 +23,7 @@ export class JobService {
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -41,13 +42,19 @@ export class JobService {
         throw new NotFoundException('Veuillez renseigner tous les champs');
     }
 
+    const check_job = await this.jobRepo.findOne({ where: { name: payload.name } });
+    if(check_job){
+      console.log('job existe');
+      return check_job;
+    }
+
     const newJob = this.jobRepo.create({
       name: payload.name,
       admin_uuid: admin_uuid ?? null,
     });
-    
+
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -70,7 +77,7 @@ export class JobService {
         throw new NotFoundException('Aucune job trouvé');
     }
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -104,12 +111,12 @@ export class JobService {
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
- 
+
 
     const existing = await this.jobRepo.findOne({ where: { uuid } });
     if (!existing) {
@@ -137,7 +144,7 @@ export class JobService {
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }

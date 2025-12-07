@@ -69,6 +69,20 @@ export class ResponsibilityService {
       throw new NotFoundException('Role introuvable');
     }
 
+    const check_responsibility = await this.responsibilityRepo.findOne({
+      where: {
+        name: payload.nname,
+        gender: payload.gender,
+        level_uuid: level.uuid,
+        role_uuid: role.uuid
+      }
+    });
+
+    if(check_responsibility){
+      //console.log('responsibility existe');
+      return check_responsibility;
+    }
+
     const newJob = this.responsibilityRepo.create({
       uuid: payload.uuid ?? uuidv4(),
       name: payload.name,

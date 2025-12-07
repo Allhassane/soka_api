@@ -271,6 +271,11 @@ export class CountryService {
         throw new NotFoundException('Veuillez renseigner tous les champs');
     }
 
+    const check_country = await this.countryRepo.findOne({ where: { name: payload.name }});
+    if(check_country){
+        return check_country;
+    }
+
     const newCountry = this.countryRepo.create({
       name: payload.name,
       captial:payload.captial ?? null,

@@ -47,6 +47,12 @@ export class RoleService {
 
   async create(createRoleDto: CreateRoleDto): Promise<Role> {
     try {
+      const check_role = await this.roleRepository.findOne({ where: { name: createRoleDto.name}});
+      if(check_role){
+        console.log('role existe');
+        return check_role;
+      }
+
       const role = this.roleRepository.create(createRoleDto);
       await this.roleRepository.save(role); // d'abord sauver pour avoir uuid
       await this.generateRolePermissions(role.uuid);

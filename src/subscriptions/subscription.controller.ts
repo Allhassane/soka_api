@@ -29,13 +29,24 @@ export class SubscriptionController {
     return this.subscriptionService.store(payload, req.user.uuid as string);
   }
 
+  @Get('findOneByUuid:uuid')
+  @ApiOperation({ summary: 'Récupérer une abonnement par UUID' })
+  @ApiResponse({ status: 200, description: 'Abonnement trouvé.' })
+  @ApiResponse({ status: 400, description: 'Abonnement non trouvé.' })
+  findOneByUuid(@Param('uuid') uuid: string, @Request() req) {
+    const admin_uuid = req.user.uuid as string;
+    return this.subscriptionService.findOneByUuid(uuid, admin_uuid);
+  }
+
   @Get(':uuid')
   @ApiOperation({ summary: 'Récupérer une abonnement par UUID' })
   @ApiResponse({ status: 200, description: 'Abonnement trouvé.' })
   @ApiResponse({ status: 400, description: 'Abonnement non trouvé.' })
   findOne(@Param('uuid') uuid: string, @Request() req) {
-    const admin_uuid = req.user.uuid as string;
-    return this.subscriptionService.findOne(uuid, admin_uuid);
+    return this.subscriptionService.findOne( uuid,
+      req.user.uuid,
+      req.user.member_uuid,
+      req.user.responsibilities[0]?.structure?.uuid,);
   }
 
  @Put(':uuid')
@@ -50,7 +61,7 @@ export class SubscriptionController {
     return this.subscriptionService.update(uuid, payload,req.user.uuid);
  }
 
- 
+
 @Put(':uuid/status')
 @ApiOperation({ summary: 'Changer le statut d’un abonnement' })
 @ApiParam({ name: 'uuid', description: 'UUID de l’abonnement à modifier' })

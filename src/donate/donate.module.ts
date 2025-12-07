@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { DonateController } from './donate.controller';
 import { DonateService } from './donate.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -8,9 +8,12 @@ import { UserModule } from 'src/users/user.module';
 import { User } from 'src/users/entities/user.entity';
 import { MemberEntity } from 'src/members/entities/member.entity';
 import { PaymentModule } from 'src/payments/payment.module';
+import { DonatePaymentEntity } from 'src/donate-payment/entities/donate-payment.entity';
+import { StructureModule } from 'src/structure/structure.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([DonateEntity,User,MemberEntity]),LogActivitiesModule,UserModule,PaymentModule],
+  imports: [TypeOrmModule.forFeature([DonateEntity,User,MemberEntity,DonatePaymentEntity]),LogActivitiesModule,UserModule,PaymentModule,
+   forwardRef(() => StructureModule), ],
   controllers: [DonateController],
   providers: [DonateService],
 })

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { SubscriptionPaymentController } from './subscription-payment.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SubscriptionPaymentEntity } from './entities/subscription-payment.entity';
@@ -8,11 +8,9 @@ import { User } from 'src/users/entities/user.entity';
 import { MemberEntity } from 'src/members/entities/member.entity';
 import { PaymentModule } from 'src/payments/payment.module';
 import { DonateEntity } from 'src/donate/entities/donate.entity';
-import { DonatePaymentEntity } from 'src/donate-payment/entities/donate-payment.entity';
-import { DonatePaymentController } from 'src/donate-payment/donate-payment.controller';
-import { DonatePaymentService } from 'src/donate-payment/donate-payment.service';
 import { SubscriptionEntity } from 'src/subscriptions/entities/subscription.entity';
 import { SubscriptionPaymentService } from './subscription-payment.service';
+import { StructureModule } from 'src/structure/structure.module';
 
 @Module({
   imports: [TypeOrmModule.forFeature(
@@ -21,8 +19,14 @@ import { SubscriptionPaymentService } from './subscription-payment.service';
       User,
       MemberEntity,
       DonateEntity,
-      SubscriptionEntity
-    ]),LogActivitiesModule,UserModule,PaymentModule],
+      SubscriptionEntity,
+    ]),
+    LogActivitiesModule,
+    UserModule,
+    PaymentModule,
+    forwardRef(() => PaymentModule),
+    forwardRef(() => StructureModule),
+  ],
   controllers: [SubscriptionPaymentController],
   providers: [SubscriptionPaymentService],
   exports: [SubscriptionPaymentService]

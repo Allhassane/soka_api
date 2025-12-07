@@ -59,6 +59,12 @@ export class DivisionService {
       throw new NotFoundException('Département introuvable.');
     }
 
+    const check_division = await this.divisionRepo.findOne({ where:{ name : payload.name, department_uuid: department.uuid} });
+    if(check_division){
+      console.log('division existe');
+      return check_division;
+    }
+
     const newDivision = this.divisionRepo.create({
       uuid: payload.uuid ?? uuid(),
       name: payload.name,
@@ -113,17 +119,17 @@ export class DivisionService {
       let genders: string[] = [];
       genders.push(gender);
       genders.push('mixte');
-  
+
       const division = await this.divisionRepo.find({
         where: {
           department_uuid: department_uuid,
           gender: In(genders),
         },
       });
-  
+
       return division;
     }
-  
+
 
   async update(uuid: string, payload: any, admin_uuid: string) {
     const { name, department_uuid, gender } = payload;

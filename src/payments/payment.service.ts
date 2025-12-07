@@ -341,9 +341,191 @@ export class PaymentService {
     return await this.paymentRepo.save(payment);
   }
 
+/*
 
+      async findTransactionsForSubGroups_old(
+      source_uuid: string,
+      admin_uuid: string,
+      page = 1,
+      limit = 50,
+      search?: string | undefined,
+    ) {
 
-  async findTransactionsForSubGroups(
+      const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+      if (!admin) {
+        throw new NotFoundException("Identifiant de l'auteur introuvable");
+      }
+      const member = await this.memberRepo.findOne({ where: { uuid: admin.member_uuid } });
+
+      if (!member) {
+        throw new NotFoundException("Identifiant du membre introuvable");
+      }
+      const sousGroups = await this.structureService.findByAllChildrens(member?.structure_uuid);
+
+      if (!sousGroups.length) {
+        return {
+          total: 0,
+          page,
+          limit,
+          sous_groups: [],
+          total_campaign_amount: 0,
+          data: [],
+        };
+      }
+
+      //  Query principale avec recherche
+      const qb = this.paymentRepo
+        .createQueryBuilder('p')
+        .leftJoinAndSelect('p.actor', 'actor')
+        .leftJoinAndSelect('actor.structure', 'actorStructure')
+        .leftJoinAndSelect('p.beneficiary', 'beneficiary')
+        .leftJoinAndSelect('beneficiary.structure', 'beneficiaryStructure')
+        .where('p.source_uuid = :source_uuid', { source_uuid })
+        .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups });
+
+      //  Ajouter la recherche sur actor et beneficiary
+      if (search && search.trim() !== '') {
+        qb.andWhere(
+          `(
+            LOWER(actor.firstname) LIKE LOWER(:search) OR
+            LOWER(actor.lastname) LIKE LOWER(:search) OR
+            LOWER(beneficiary.firstname) LIKE LOWER(:search) OR
+            LOWER(beneficiary.lastname) LIKE LOWER(:search) OR
+            CONCAT(LOWER(actor.firstname), ' ', LOWER(actor.lastname)) LIKE LOWER(:search) OR
+            CONCAT(LOWER(beneficiary.firstname), ' ', LOWER(beneficiary.lastname)) LIKE LOWER(:search)
+          )`,
+          { search: `%${search.trim()}%` }
+        );
+      }
+
+      qb.orderBy('p.created_at', 'DESC')
+        .skip((page - 1) * limit)
+        .take(limit);
+
+      const [payments, total] = await qb.getManyAndCount();
+
+      let total_campaign_amount = 0;
+
+      const samplePayment = await this.paymentRepo.findOne({
+        where: { source_uuid },
+      });
+
+      if (samplePayment) {
+        if (samplePayment.source === PaymentSource.DONATION) {
+          const donationSum = await this.donatePaymentRepo
+            .createQueryBuilder('d')
+            .select('SUM(d.amount)', 'sum')
+            .where('d.donate_uuid = :id', { id: source_uuid })
+            .andWhere('d.status = :status', { status: GlobalStatus.SUCCESS })
+            .getRawOne();
+
+          total_campaign_amount = Number(donationSum?.sum ?? 0);
+        }
+
+        if (samplePayment.source === PaymentSource.SUBSCRIPTION) {
+          const subscriptionSum = await this.subscriptionPaymentRepo
+            .createQueryBuilder('s')
+            .select('SUM(s.amount)', 'sum')
+            .where('s.subscription_uuid = :id', { id: source_uuid })
+            .andWhere('s.status = :status', { status: GlobalStatus.SUCCESS })
+            .getRawOne();
+
+          total_campaign_amount = Number(subscriptionSum?.sum ?? 0);
+        }
+      }
+
+      const result: TransactionWithDetails[] = [];
+
+      for (const p of payments) {
+        let donation: DonatePaymentEntity | null = null;
+        let subscription: SubscriptionPaymentEntity | null = null;
+
+        if (p.source === PaymentSource.DONATION) {
+          donation = await this.donatePaymentRepo.findOne({
+            where: { payment_uuid: p.uuid },
+          });
+        }
+
+        if (p.source === PaymentSource.SUBSCRIPTION) {
+          subscription = await this.subscriptionPaymentRepo.findOne({
+            where: { payment_uuid: p.uuid },
+          });
+        }
+
+        result.push({
+          payment_uuid: p.uuid,
+          source: p.source,
+          source_uuid: p.source_uuid,
+          transaction_id: p.transaction_id,
+          payment_status: p.payment_status,
+          status: p.status,
+          created_at: p.created_at,
+
+          amount_unit: p.amount,
+          quantity: p.quantity,
+          total_amount: p.total_amount,
+
+          actor: p.actor
+            ? {
+              uuid: p.actor.uuid,
+              firstname: p.actor.firstname,
+              lastname: p.actor.lastname,
+              phone: p.actor.phone,
+              structure: p.actor.structure
+                ? { uuid: p.actor.structure.uuid, name: p.actor.structure.name }
+                : null,
+            }
+            : null,
+
+          beneficiary: p.beneficiary
+            ? {
+              uuid: p.beneficiary.uuid,
+              firstname: p.beneficiary.firstname,
+              lastname: p.beneficiary.lastname,
+              phone: p.beneficiary.phone,
+              structure: p.beneficiary.structure
+                ? {
+                  uuid: p.beneficiary.structure.uuid,
+                  name: p.beneficiary.structure.name,
+                }
+                : null,
+            }
+            : null,
+
+          donation: donation
+            ? {
+              uuid: donation.uuid,
+              amount: donation.amount,
+              status: donation.status,
+              quantity: donation.quantity,
+            }
+            : null,
+
+          subscription: subscription
+            ? {
+              uuid: subscription.uuid,
+              amount: subscription.amount,
+              status: subscription.status,
+              quantity: subscription.quantity,
+            }
+            : null,
+        });
+      }
+
+      return {
+        total,
+        total_campaign_amount,
+        page,
+        limit,
+        root_structure_uuid: member.structure_uuid,
+        sous_groups: sousGroups,
+        source_uuid,
+        data: result,
+      };
+    }
+*/
+
+async findTransactionsForSubGroups(
   source_uuid: string,
   admin_uuid: string,
   page = 1,
@@ -369,11 +551,13 @@ export class PaymentService {
       limit,
       sous_groups: [],
       total_campaign_amount: 0,
+      total_successful_payments: 0,
+      total_successful_amount: 0,
       data: [],
     };
   }
 
-  // ✅ Query principale avec recherche
+  // Query principale avec recherche
   const qb = this.paymentRepo
     .createQueryBuilder('p')
     .leftJoinAndSelect('p.actor', 'actor')
@@ -383,7 +567,7 @@ export class PaymentService {
     .where('p.source_uuid = :source_uuid', { source_uuid })
     .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups });
 
-  // ✅ Ajouter la recherche sur actor et beneficiary
+  //  Ajouter la recherche sur actor et beneficiary
   if (search && search.trim() !== '') {
     qb.andWhere(
       `(
@@ -405,6 +589,8 @@ export class PaymentService {
   const [payments, total] = await qb.getManyAndCount();
 
   let total_campaign_amount = 0;
+  let total_successful_payments = 0;
+  let total_successful_amount = 0;
 
   const samplePayment = await this.paymentRepo.findOne({
     where: { source_uuid },
@@ -412,6 +598,7 @@ export class PaymentService {
 
   if (samplePayment) {
     if (samplePayment.source === PaymentSource.DONATION) {
+      // Total de la campagne (tous statuts)
       const donationSum = await this.donatePaymentRepo
         .createQueryBuilder('d')
         .select('SUM(d.amount)', 'sum')
@@ -420,9 +607,42 @@ export class PaymentService {
         .getRawOne();
 
       total_campaign_amount = Number(donationSum?.sum ?? 0);
+
+      //  Total des paiements réussis AVEC FILTRE de recherche
+      const successfulDonationsQb = this.donatePaymentRepo
+        .createQueryBuilder('d')
+        .innerJoin('payments', 'p', 'p.uuid = d.payment_uuid')
+        .innerJoin('members', 'actor', 'actor.uuid = p.actor_uuid')
+        .leftJoin('members', 'beneficiary', 'beneficiary.uuid = p.beneficiary_uuid')
+        .select('COUNT(DISTINCT d.uuid)', 'count')
+        .addSelect('SUM(d.amount)', 'sum')
+        .where('d.donate_uuid = :id', { id: source_uuid })
+        .andWhere('d.status = :status', { status: GlobalStatus.SUCCESS })
+        .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups });
+
+      //  Appliquer le même filtre de recherche
+      if (search && search.trim() !== '') {
+        successfulDonationsQb.andWhere(
+          `(
+            LOWER(actor.firstname) LIKE LOWER(:search) OR
+            LOWER(actor.lastname) LIKE LOWER(:search) OR
+            LOWER(beneficiary.firstname) LIKE LOWER(:search) OR
+            LOWER(beneficiary.lastname) LIKE LOWER(:search) OR
+            CONCAT(LOWER(actor.firstname), ' ', LOWER(actor.lastname)) LIKE LOWER(:search) OR
+            CONCAT(LOWER(beneficiary.firstname), ' ', LOWER(beneficiary.lastname)) LIKE LOWER(:search)
+          )`,
+          { search: `%${search.trim()}%` }
+        );
+      }
+
+      const successfulDonations = await successfulDonationsQb.getRawOne();
+
+      total_successful_payments = Number(successfulDonations?.count ?? 0);
+      total_successful_amount = Number(successfulDonations?.sum ?? 0);
     }
 
     if (samplePayment.source === PaymentSource.SUBSCRIPTION) {
+      // Total de la campagne (tous statuts)
       const subscriptionSum = await this.subscriptionPaymentRepo
         .createQueryBuilder('s')
         .select('SUM(s.amount)', 'sum')
@@ -431,6 +651,38 @@ export class PaymentService {
         .getRawOne();
 
       total_campaign_amount = Number(subscriptionSum?.sum ?? 0);
+
+      // ✅ Total des paiements réussis AVEC FILTRE de recherche
+      const successfulSubscriptionsQb = this.subscriptionPaymentRepo
+        .createQueryBuilder('s')
+        .innerJoin('payments', 'p', 'p.uuid = s.payment_uuid')
+        .innerJoin('members', 'actor', 'actor.uuid = p.actor_uuid')
+        .leftJoin('members', 'beneficiary', 'beneficiary.uuid = p.beneficiary_uuid')
+        .select('COUNT(DISTINCT s.uuid)', 'count')
+        .addSelect('SUM(s.amount)', 'sum')
+        .where('s.subscription_uuid = :id', { id: source_uuid })
+        .andWhere('s.status = :status', { status: GlobalStatus.SUCCESS })
+        .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups });
+
+      // ✅ Appliquer le même filtre de recherche
+      if (search && search.trim() !== '') {
+        successfulSubscriptionsQb.andWhere(
+          `(
+            LOWER(actor.firstname) LIKE LOWER(:search) OR
+            LOWER(actor.lastname) LIKE LOWER(:search) OR
+            LOWER(beneficiary.firstname) LIKE LOWER(:search) OR
+            LOWER(beneficiary.lastname) LIKE LOWER(:search) OR
+            CONCAT(LOWER(actor.firstname), ' ', LOWER(actor.lastname)) LIKE LOWER(:search) OR
+            CONCAT(LOWER(beneficiary.firstname), ' ', LOWER(beneficiary.lastname)) LIKE LOWER(:search)
+          )`,
+          { search: `%${search.trim()}%` }
+        );
+      }
+
+      const successfulSubscriptions = await successfulSubscriptionsQb.getRawOne();
+
+      total_successful_payments = Number(successfulSubscriptions?.count ?? 0);
+      total_successful_amount = Number(successfulSubscriptions?.sum ?? 0);
     }
   }
 
@@ -513,8 +765,10 @@ export class PaymentService {
   }
 
   return {
-    total,
-    total_campaign_amount,
+    total, // Change avec le filtre
+    total_campaign_amount, // Ne change pas (total global)
+    total_successful_payments, // Change avec le filtre
+    total_successful_amount, // Change avec le filtre
     page,
     limit,
     root_structure_uuid: member.structure_uuid,
@@ -523,6 +777,7 @@ export class PaymentService {
     data: result,
   };
 }
+
 
 
 async findTransactionsForSubGroupsExport(
