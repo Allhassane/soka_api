@@ -12,7 +12,7 @@ export class ModuleService {
 
   async findAll() {
     const modules = await this.moduleRepo.find({
-      order: { name: 'DESC' },
+      order: { name: 'ASC' },
     });
 
     return modules;
