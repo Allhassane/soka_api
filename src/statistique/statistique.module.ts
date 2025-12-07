@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { StatistiqueController } from './statistique.controller';
 import { StructureService } from '../structure/structure.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -13,6 +13,7 @@ import { ResponsibilityEntity } from 'src/responsibilities/entities/responsibili
 import { StructureTreeService } from 'src/structure/structure-tree.service';
 import { StatistiqueService } from './statistique.service';
 import { User } from 'src/users/entities/user.entity';
+import { ExportJobModule } from 'src/export-async/export-job.module';
 
 @Module({
   imports: [
@@ -27,6 +28,8 @@ import { User } from 'src/users/entities/user.entity';
     LogActivitiesModule,
     UserModule,
     LevelModule,
+    forwardRef(() => ExportJobModule), // ✅ Ajouter ceci
+
   ],
   controllers: [StatistiqueController],
   providers: [StructureService,StructureTreeService,StatistiqueService],

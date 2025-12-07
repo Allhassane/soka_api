@@ -77,7 +77,7 @@ export class StructureController {
     }
 
 
-
+/*
 @Get('export/my-members/excel')
 @ApiOperation({ summary: 'Exporter les membres en Excel' })
 @ApiQuery({ name: 'search', required: false })
@@ -124,7 +124,89 @@ async exportMembersToExcel(
     filterParams
   );
 }
+*/
 
+/* ######################## */
+
+
+@Get('export/my-members/excel')
+@ApiOperation({ summary: 'Lancer l\'export des membres en arrière-plan' })
+@ApiQuery({ name: 'search', required: false })
+@ApiQuery({ name: 'gender', required: false, enum: ['homme', 'femme'] })
+@ApiQuery({ name: 'has_gohonzon', required: false, type: Boolean })
+@ApiQuery({ name: 'region_uuid', required: false, type: String })
+@ApiQuery({ name: 'centre_uuid', required: false, type: String })
+@ApiQuery({ name: 'chapitre_uuid', required: false, type: String })
+@ApiQuery({ name: 'district_uuid', required: false, type: String })
+@ApiQuery({ name: 'groupe_uuid', required: false, type: String })
+@ApiQuery({ name: 'department_uuid', required: false })
+@ApiQuery({ name: 'division_uuid', required: false })
+async queueMembersExport(
+  @Req() req,
+  @Query('search') search?: string,
+  @Query('gender') gender?: 'homme' | 'femme',
+  @Query('has_gohonzon') has_gohonzon?: boolean,
+  @Query('region_uuid') region_uuid?: string,
+  @Query('centre_uuid') centre_uuid?: string,
+  @Query('chapitre_uuid') chapitre_uuid?: string,
+  @Query('district_uuid') district_uuid?: string,
+  @Query('groupe_uuid') groupe_uuid?: string,
+  @Query('department_uuid') department_uuid?: string,
+  @Query('division_uuid') division_uuid?: string,
+) {
+  const filterParams = {
+    search,
+    gender,
+    has_gohonzon,
+    region_uuid,
+    centre_uuid,
+    chapitre_uuid,
+    district_uuid,
+    groupe_uuid,
+    department_uuid,
+    division_uuid,
+  };
+
+  const user = req.user;
+
+  return this.structureTreeService.queueMembersExport(
+    user.member_uuid,
+    user.responsibilities[0]?.structure?.uuid,
+    filterParams,
+    user.uuid,
+  );
+}
+
+@Get('async-export/status/:jobId')
+@ApiOperation({ summary: 'Vérifier le statut d\'un export de membres' })
+async getExportStatus(@Param('jobId') jobId: string) {
+  return this.structureTreeService.getExportJobStatus(jobId);
+}
+
+@Get('async-exports/download/:jobUuid')
+@ApiOperation({ summary: 'Télécharger un export de membres terminé' })
+async downloadMembersExport(
+  @Param('jobUuid') jobUuid: string,
+  @Res() res: Response,
+  @Req() req,
+) {
+  try {
+    const { buffer, filename, mimeType } = await this.structureTreeService.downloadMembersExport(
+      jobUuid,
+      req.user.uuid,
+    );
+
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+  } catch (error) {
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message
+    });
+  }
+}
 
     @Get('my-beneficiary')
     @UseGuards(JwtAuthGuard)

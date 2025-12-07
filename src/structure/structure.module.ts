@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { StructureController } from './structure.controller';
 import { StructureService } from './structure.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -12,14 +12,16 @@ import { LevelEntity } from 'src/level/entities/level.entity';
 import { MemberResponsibilityEntity } from 'src/⁠member-responsibility/entities/member-responsibility.entity';
 import { ResponsibilityEntity } from 'src/responsibilities/entities/responsibility.entity';
 import { AuthService } from 'src/auth/auth.service';
+import { ExportJobModule } from 'src/export-async/export-job.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([StructureEntity,MemberEntity,LevelEntity,MemberResponsibilityEntity,ResponsibilityEntity]),
+    TypeOrmModule.forFeature([StructureEntity,MemberEntity,LevelEntity,MemberResponsibilityEntity,ResponsibilityEntity,]),
     LogActivitiesModule,
     UserModule,
     LevelModule,
-
+    ExportJobModule,
+    forwardRef(() => ExportJobModule),
   ],
   controllers: [StructureController],
   providers: [StructureService,StructureTreeService],
