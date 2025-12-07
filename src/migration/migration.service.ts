@@ -55,7 +55,7 @@ export class MigrationService {
 
     async migrate(option: string, admin_uuid: string) {
 
-        const migration_url = MIGRATION_URL; //'https://dev.sokagakkaici.org/api/v1';
+        const migration_url = 'https://dev.sokagakkaici.org/api/v1';
 
         console.log(migration_url + '/migration?option=' + option);
         const query = await fetch(migration_url + '/migration?option=' + option);
