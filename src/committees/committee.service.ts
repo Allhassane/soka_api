@@ -11,18 +11,18 @@ export class CommitteeService {
     @InjectRepository(CommitteesEntity)
     private readonly committeesRepo: Repository<CommitteesEntity>,
     private readonly logService: LogActivitiesService,
-    
+
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
   ) {}
 
   async findAll(admin_uuid: string) {
     const division = await this.committeesRepo.find({
-      order: { name: 'DESC' },
+      order: { name: 'ASC' },
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -45,9 +45,9 @@ export class CommitteeService {
       name: payload.name,
       admin_uuid: admin_uuid ?? null,
     });
-    
+
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -70,7 +70,7 @@ export class CommitteeService {
         throw new NotFoundException('Aucune division trouvé');
     }
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -92,12 +92,12 @@ export class CommitteeService {
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
- 
+
 
     const existing = await this.committeesRepo.findOne({ where: { uuid } });
     if (!existing) {
@@ -125,7 +125,7 @@ export class CommitteeService {
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }

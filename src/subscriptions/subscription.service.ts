@@ -27,7 +27,7 @@ export class SubscriptionService {
 
   async findAll(admin_uuid: string) {
     const subscription = await this.subscriptionRepo.find({
-      order: { name: 'DESC' },
+      order: { name: 'ASC' },
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });

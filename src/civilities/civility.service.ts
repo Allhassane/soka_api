@@ -22,7 +22,7 @@ export class CivilityService {
 
   async findAll(admin_uuid: string) {
     const civility = await this.civilitiesRepo.find({
-      order: { name: 'DESC' },
+      order: { name: 'ASC' },
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });

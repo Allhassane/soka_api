@@ -19,7 +19,7 @@ export class JobService {
 
   async findAll(admin_uuid: string) {
     const job = await this.jobRepo.find({
-      order: { name: 'DESC' },
+      order: { name: 'ASC' },
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });

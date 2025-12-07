@@ -18,7 +18,7 @@ export class OrganisationCityService {
 
   async findAll(admin_uuid: string) {
     const city = await this.organisationCityRepo.find({
-      order: { name: 'DESC' },
+      order: { name: 'ASC' },
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });

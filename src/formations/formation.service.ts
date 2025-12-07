@@ -18,7 +18,7 @@ export class FormationService {
 
   async findAll(admin_uuid: string) {
     const formation = await this.formationRepo.find({
-      order: { name: 'DESC' },
+      order: { name: 'ASC' },
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
