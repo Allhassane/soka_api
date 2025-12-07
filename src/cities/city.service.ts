@@ -42,7 +42,11 @@ export class CityService {
         throw new NotFoundException('Veuillez renseigner tous les champs');
     }
 
-    const check_city = await this.cityRepo.findOne({ where:{ name : payload.name}})
+    const check_city = await this.cityRepo.findOne({ where:{ name : payload.name}});
+
+    if(check_city){
+      return check_city;
+    }
     const newJob = this.cityRepo.create({
       uuid: payload.uuid ?? uuidv4(),
       name: payload.name,
