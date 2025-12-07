@@ -255,7 +255,7 @@ export class CountryService {
 
   async findAll(admin_uuid: string) {
     const counrty = await this.countryRepo.find({
-      order: { name: 'DESC' },
+      order: { name: 'ASC' },
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
@@ -276,6 +276,11 @@ export class CountryService {
   async store(payload: any,admin_uuid) {
     if (!payload?.name) {
         throw new NotFoundException('Veuillez renseigner tous les champs');
+    }
+
+    const check_country = await this.countryRepo.findOne({ where: { name: payload.name }});
+    if(check_country){
+        return check_country;
     }
 
     const newCountry = this.countryRepo.create({

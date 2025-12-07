@@ -13,6 +13,8 @@ import { CinetPayService } from './cinetpay.service';
 import { DonatePaymentEntity } from 'src/donate-payment/entities/donate-payment.entity';
 import { SubscriptionPaymentEntity } from 'src/subscription-payment/entities/subscription-payment.entity';
 import { StructureModule } from 'src/structure/structure.module';
+import { ExportJobModule } from '../export-async/export-job.module';
+
 
 @Module({
   imports: [TypeOrmModule.forFeature([
@@ -23,7 +25,7 @@ import { StructureModule } from 'src/structure/structure.module';
       DonateEntity,
       DonatePaymentEntity,
       SubscriptionPaymentEntity,
-  ]),LogActivitiesModule,UserModule,StructureModule],
+  ]),LogActivitiesModule,UserModule,StructureModule,ExportJobModule],
   controllers: [PaymentController],
   providers: [
     PaymentService,

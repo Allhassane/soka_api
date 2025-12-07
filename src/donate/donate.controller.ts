@@ -29,16 +29,31 @@ export class DonateController {
     const admin_uuid = req.user.uuid as string;
     return this.donateService.findAll(admin_uuid);
   }
-  
+
+  @Get('findOneByUuid:uuid')
+  @ApiOperation({ summary: 'Récupérer une don par UUID' })
+  @ApiResponse({ status: 200, description: 'Don trouvé.' })
+  @ApiResponse({ status: 400, description: 'Don non trouvé.' })
+  findOneByUuid(@Param('uuid') uuid: string, @Request() req) {
+    const admin_uuid = req.user.uuid as string;
+    return this.donateService.findOneByUuid(uuid, admin_uuid);
+  }
+
+
   @Get(':uuid')
   @ApiOperation({ summary: 'Récupérer une don par UUID' })
   @ApiResponse({ status: 200, description: 'Don trouvé.' })
   @ApiResponse({ status: 400, description: 'Don non trouvé.' })
   findOne(@Param('uuid') uuid: string, @Request() req) {
-    const admin_uuid = req.user.uuid as string;
-    return this.donateService.findOne(uuid, admin_uuid);
+    return this.donateService.findOne(
+      uuid,
+      req.user.uuid,
+      req.user.member_uuid,
+      req.user.responsibilities[0]?.structure?.uuid,
+    );
   }
-  
+
+
    @Put(':uuid')
    @ApiOperation({ summary: 'Modifier un don' })
    @ApiResponse({ status: 200, description: 'Don modifié avec succès.' })
@@ -61,7 +76,7 @@ export class DonateController {
     const admin_uuid = req.user.uuid as string;
     return this.donateService.create(createDonateDto, admin_uuid);
   }
-   
+
   @Put(':uuid/status')
   @ApiOperation({ summary: 'Changer le statut d’un don' })
   @ApiParam({ name: 'uuid', description: 'UUID du don à modifier' })

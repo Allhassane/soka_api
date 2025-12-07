@@ -26,7 +26,7 @@ export class ResponsibilityService {
 
   async findAll(admin_uuid: string) {
     const responsibility = await this.responsibilityRepo.find({
-      order: { name: 'DESC' },
+      order: { name: 'ASC' },
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
@@ -67,6 +67,20 @@ export class ResponsibilityService {
 
     if (!role) {
       throw new NotFoundException('Role introuvable');
+    }
+
+    const check_responsibility = await this.responsibilityRepo.findOne({
+      where: {
+        name: payload.nname,
+        gender: payload.gender,
+        level_uuid: level.uuid,
+        role_uuid: role.uuid
+      }
+    });
+
+    if(check_responsibility){
+      //console.log('responsibility existe');
+      return check_responsibility;
     }
 
     const newJob = this.responsibilityRepo.create({

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException,ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -19,6 +19,13 @@ import { DonatePaymentEntity } from 'src/donate-payment/entities/donate-payment.
 import { SubscriptionPaymentEntity } from 'src/subscription-payment/entities/subscription-payment.entity';
 import { TransactionWithDetails } from './types/transaction-with-details.type';
 import axios from 'axios';
+import * as ExcelJS from 'exceljs';
+import { Response } from 'express';
+import { ExportJobService } from 'src/export-async/export-job.service';
+import { ExportProcessorService } from 'src/export-async/export-processor.service';
+import * as fs from 'fs';
+import * as path from 'path';
+import { ExportJobStatus } from 'src/export-async/entities/export-job.entity';
 
 @Injectable()
 export class PaymentService {
@@ -41,8 +48,8 @@ export class PaymentService {
     @InjectRepository(SubscriptionPaymentEntity)
     private subscriptionPaymentRepo: Repository<SubscriptionPaymentEntity>,
 
-
-
+    private exportJobService: ExportJobService,
+    private exportProcessorService: ExportProcessorService,
 
     @InjectRepository(User)
     private userRepo: Repository<User>,
@@ -334,9 +341,191 @@ export class PaymentService {
     return await this.paymentRepo.save(payment);
   }
 
+/*
 
+      async findTransactionsForSubGroups_old(
+      source_uuid: string,
+      admin_uuid: string,
+      page = 1,
+      limit = 50,
+      search?: string | undefined,
+    ) {
 
-  async findTransactionsForSubGroups(
+      const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+      if (!admin) {
+        throw new NotFoundException("Identifiant de l'auteur introuvable");
+      }
+      const member = await this.memberRepo.findOne({ where: { uuid: admin.member_uuid } });
+
+      if (!member) {
+        throw new NotFoundException("Identifiant du membre introuvable");
+      }
+      const sousGroups = await this.structureService.findByAllChildrens(member?.structure_uuid);
+
+      if (!sousGroups.length) {
+        return {
+          total: 0,
+          page,
+          limit,
+          sous_groups: [],
+          total_campaign_amount: 0,
+          data: [],
+        };
+      }
+
+      //  Query principale avec recherche
+      const qb = this.paymentRepo
+        .createQueryBuilder('p')
+        .leftJoinAndSelect('p.actor', 'actor')
+        .leftJoinAndSelect('actor.structure', 'actorStructure')
+        .leftJoinAndSelect('p.beneficiary', 'beneficiary')
+        .leftJoinAndSelect('beneficiary.structure', 'beneficiaryStructure')
+        .where('p.source_uuid = :source_uuid', { source_uuid })
+        .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups });
+
+      //  Ajouter la recherche sur actor et beneficiary
+      if (search && search.trim() !== '') {
+        qb.andWhere(
+          `(
+            LOWER(actor.firstname) LIKE LOWER(:search) OR
+            LOWER(actor.lastname) LIKE LOWER(:search) OR
+            LOWER(beneficiary.firstname) LIKE LOWER(:search) OR
+            LOWER(beneficiary.lastname) LIKE LOWER(:search) OR
+            CONCAT(LOWER(actor.firstname), ' ', LOWER(actor.lastname)) LIKE LOWER(:search) OR
+            CONCAT(LOWER(beneficiary.firstname), ' ', LOWER(beneficiary.lastname)) LIKE LOWER(:search)
+          )`,
+          { search: `%${search.trim()}%` }
+        );
+      }
+
+      qb.orderBy('p.created_at', 'DESC')
+        .skip((page - 1) * limit)
+        .take(limit);
+
+      const [payments, total] = await qb.getManyAndCount();
+
+      let total_campaign_amount = 0;
+
+      const samplePayment = await this.paymentRepo.findOne({
+        where: { source_uuid },
+      });
+
+      if (samplePayment) {
+        if (samplePayment.source === PaymentSource.DONATION) {
+          const donationSum = await this.donatePaymentRepo
+            .createQueryBuilder('d')
+            .select('SUM(d.amount)', 'sum')
+            .where('d.donate_uuid = :id', { id: source_uuid })
+            .andWhere('d.status = :status', { status: GlobalStatus.SUCCESS })
+            .getRawOne();
+
+          total_campaign_amount = Number(donationSum?.sum ?? 0);
+        }
+
+        if (samplePayment.source === PaymentSource.SUBSCRIPTION) {
+          const subscriptionSum = await this.subscriptionPaymentRepo
+            .createQueryBuilder('s')
+            .select('SUM(s.amount)', 'sum')
+            .where('s.subscription_uuid = :id', { id: source_uuid })
+            .andWhere('s.status = :status', { status: GlobalStatus.SUCCESS })
+            .getRawOne();
+
+          total_campaign_amount = Number(subscriptionSum?.sum ?? 0);
+        }
+      }
+
+      const result: TransactionWithDetails[] = [];
+
+      for (const p of payments) {
+        let donation: DonatePaymentEntity | null = null;
+        let subscription: SubscriptionPaymentEntity | null = null;
+
+        if (p.source === PaymentSource.DONATION) {
+          donation = await this.donatePaymentRepo.findOne({
+            where: { payment_uuid: p.uuid },
+          });
+        }
+
+        if (p.source === PaymentSource.SUBSCRIPTION) {
+          subscription = await this.subscriptionPaymentRepo.findOne({
+            where: { payment_uuid: p.uuid },
+          });
+        }
+
+        result.push({
+          payment_uuid: p.uuid,
+          source: p.source,
+          source_uuid: p.source_uuid,
+          transaction_id: p.transaction_id,
+          payment_status: p.payment_status,
+          status: p.status,
+          created_at: p.created_at,
+
+          amount_unit: p.amount,
+          quantity: p.quantity,
+          total_amount: p.total_amount,
+
+          actor: p.actor
+            ? {
+              uuid: p.actor.uuid,
+              firstname: p.actor.firstname,
+              lastname: p.actor.lastname,
+              phone: p.actor.phone,
+              structure: p.actor.structure
+                ? { uuid: p.actor.structure.uuid, name: p.actor.structure.name }
+                : null,
+            }
+            : null,
+
+          beneficiary: p.beneficiary
+            ? {
+              uuid: p.beneficiary.uuid,
+              firstname: p.beneficiary.firstname,
+              lastname: p.beneficiary.lastname,
+              phone: p.beneficiary.phone,
+              structure: p.beneficiary.structure
+                ? {
+                  uuid: p.beneficiary.structure.uuid,
+                  name: p.beneficiary.structure.name,
+                }
+                : null,
+            }
+            : null,
+
+          donation: donation
+            ? {
+              uuid: donation.uuid,
+              amount: donation.amount,
+              status: donation.status,
+              quantity: donation.quantity,
+            }
+            : null,
+
+          subscription: subscription
+            ? {
+              uuid: subscription.uuid,
+              amount: subscription.amount,
+              status: subscription.status,
+              quantity: subscription.quantity,
+            }
+            : null,
+        });
+      }
+
+      return {
+        total,
+        total_campaign_amount,
+        page,
+        limit,
+        root_structure_uuid: member.structure_uuid,
+        sous_groups: sousGroups,
+        source_uuid,
+        data: result,
+      };
+    }
+*/
+
+async findTransactionsForSubGroups(
   source_uuid: string,
   admin_uuid: string,
   page = 1,
@@ -362,11 +551,13 @@ export class PaymentService {
       limit,
       sous_groups: [],
       total_campaign_amount: 0,
+      total_successful_payments: 0,
+      total_successful_amount: 0,
       data: [],
     };
   }
 
-  // ✅ Query principale avec recherche
+  // Query principale avec recherche
   const qb = this.paymentRepo
     .createQueryBuilder('p')
     .leftJoinAndSelect('p.actor', 'actor')
@@ -376,7 +567,7 @@ export class PaymentService {
     .where('p.source_uuid = :source_uuid', { source_uuid })
     .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups });
 
-  // ✅ Ajouter la recherche sur actor et beneficiary
+  //  Ajouter la recherche sur actor et beneficiary
   if (search && search.trim() !== '') {
     qb.andWhere(
       `(
@@ -398,6 +589,8 @@ export class PaymentService {
   const [payments, total] = await qb.getManyAndCount();
 
   let total_campaign_amount = 0;
+  let total_successful_payments = 0;
+  let total_successful_amount = 0;
 
   const samplePayment = await this.paymentRepo.findOne({
     where: { source_uuid },
@@ -405,6 +598,7 @@ export class PaymentService {
 
   if (samplePayment) {
     if (samplePayment.source === PaymentSource.DONATION) {
+      // Total de la campagne (tous statuts)
       const donationSum = await this.donatePaymentRepo
         .createQueryBuilder('d')
         .select('SUM(d.amount)', 'sum')
@@ -413,9 +607,42 @@ export class PaymentService {
         .getRawOne();
 
       total_campaign_amount = Number(donationSum?.sum ?? 0);
+
+      //  Total des paiements réussis AVEC FILTRE de recherche
+      const successfulDonationsQb = this.donatePaymentRepo
+        .createQueryBuilder('d')
+        .innerJoin('payments', 'p', 'p.uuid = d.payment_uuid')
+        .innerJoin('members', 'actor', 'actor.uuid = p.actor_uuid')
+        .leftJoin('members', 'beneficiary', 'beneficiary.uuid = p.beneficiary_uuid')
+        .select('COUNT(DISTINCT d.uuid)', 'count')
+        .addSelect('SUM(d.amount)', 'sum')
+        .where('d.donate_uuid = :id', { id: source_uuid })
+        .andWhere('d.status = :status', { status: GlobalStatus.SUCCESS })
+        .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups });
+
+      //  Appliquer le même filtre de recherche
+      if (search && search.trim() !== '') {
+        successfulDonationsQb.andWhere(
+          `(
+            LOWER(actor.firstname) LIKE LOWER(:search) OR
+            LOWER(actor.lastname) LIKE LOWER(:search) OR
+            LOWER(beneficiary.firstname) LIKE LOWER(:search) OR
+            LOWER(beneficiary.lastname) LIKE LOWER(:search) OR
+            CONCAT(LOWER(actor.firstname), ' ', LOWER(actor.lastname)) LIKE LOWER(:search) OR
+            CONCAT(LOWER(beneficiary.firstname), ' ', LOWER(beneficiary.lastname)) LIKE LOWER(:search)
+          )`,
+          { search: `%${search.trim()}%` }
+        );
+      }
+
+      const successfulDonations = await successfulDonationsQb.getRawOne();
+
+      total_successful_payments = Number(successfulDonations?.count ?? 0);
+      total_successful_amount = Number(successfulDonations?.sum ?? 0);
     }
 
     if (samplePayment.source === PaymentSource.SUBSCRIPTION) {
+      // Total de la campagne (tous statuts)
       const subscriptionSum = await this.subscriptionPaymentRepo
         .createQueryBuilder('s')
         .select('SUM(s.amount)', 'sum')
@@ -424,6 +651,38 @@ export class PaymentService {
         .getRawOne();
 
       total_campaign_amount = Number(subscriptionSum?.sum ?? 0);
+
+      //  Total des paiements réussis AVEC FILTRE de recherche
+      const successfulSubscriptionsQb = this.subscriptionPaymentRepo
+        .createQueryBuilder('s')
+        .innerJoin('payments', 'p', 'p.uuid = s.payment_uuid')
+        .innerJoin('members', 'actor', 'actor.uuid = p.actor_uuid')
+        .leftJoin('members', 'beneficiary', 'beneficiary.uuid = p.beneficiary_uuid')
+        .select('COUNT(DISTINCT s.uuid)', 'count')
+        .addSelect('SUM(s.amount)', 'sum')
+        .where('s.subscription_uuid = :id', { id: source_uuid })
+        .andWhere('s.status = :status', { status: GlobalStatus.SUCCESS })
+        .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups });
+
+      //  Appliquer le même filtre de recherche
+      if (search && search.trim() !== '') {
+        successfulSubscriptionsQb.andWhere(
+          `(
+            LOWER(actor.firstname) LIKE LOWER(:search) OR
+            LOWER(actor.lastname) LIKE LOWER(:search) OR
+            LOWER(beneficiary.firstname) LIKE LOWER(:search) OR
+            LOWER(beneficiary.lastname) LIKE LOWER(:search) OR
+            CONCAT(LOWER(actor.firstname), ' ', LOWER(actor.lastname)) LIKE LOWER(:search) OR
+            CONCAT(LOWER(beneficiary.firstname), ' ', LOWER(beneficiary.lastname)) LIKE LOWER(:search)
+          )`,
+          { search: `%${search.trim()}%` }
+        );
+      }
+
+      const successfulSubscriptions = await successfulSubscriptionsQb.getRawOne();
+
+      total_successful_payments = Number(successfulSubscriptions?.count ?? 0);
+      total_successful_amount = Number(successfulSubscriptions?.sum ?? 0);
     }
   }
 
@@ -506,8 +765,10 @@ export class PaymentService {
   }
 
   return {
-    total,
-    total_campaign_amount,
+    total, // Change avec le filtre
+    total_campaign_amount, // Ne change pas (total global)
+    total_successful_payments, // Change avec le filtre
+    total_successful_amount, // Change avec le filtre
     page,
     limit,
     root_structure_uuid: member.structure_uuid,
@@ -519,177 +780,171 @@ export class PaymentService {
 
 
 
-/*
-  async findTransactionsForSubGroups(
-    source_uuid: string,
-    admin_uuid: string,
-    page = 1,
-    limit = 50,
-    search?: string | undefined,
-  ) {
+async findTransactionsForSubGroupsExport(
+  source_uuid: string,
+  admin_uuid: string,
+  res: Response,
+  status?: GlobalStatus,
+) {
 
+  const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+  if (!admin) {
+    throw new NotFoundException("Identifiant de l'auteur introuvable");
+  }
+  const member = await this.memberRepo.findOne({ where: { uuid: admin.member_uuid } });
 
-    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    if (!admin) {
-      throw new NotFoundException("Identifiant de l'auteur introuvable");
-    }
-    const member = await this.memberRepo.findOne({ where: { uuid: admin.member_uuid } });
+  if (!member) {
+    throw new NotFoundException("Identifiant du membre introuvable");
+  }
+  const sousGroups = await this.structureService.findByAllChildrens(member?.structure_uuid);
 
-    if (!member) {
-      throw new NotFoundException("Identifiant du membre introuvable");
-    }
-    const sousGroups = await this.structureService.findByAllChildrens(member?.structure_uuid);
+  if (!sousGroups.length) {
+    throw new NotFoundException("Aucun sous-groupe trouvé");
+  }
 
+  // Query principale SANS pagination
+  const qb = this.paymentRepo
+    .createQueryBuilder('p')
+    .leftJoinAndSelect('p.actor', 'actor')
+    .leftJoinAndSelect('actor.structure', 'actorStructure')
+    .leftJoinAndSelect('p.beneficiary', 'beneficiary')
+    .leftJoinAndSelect('beneficiary.structure', 'beneficiaryStructure')
+    .where('p.source_uuid = :source_uuid', { source_uuid })
+    .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups });
 
-    if (!sousGroups.length) {
-      return {
-        total: 0,
-        page,
-        limit,
-        sous_groups: [],
-        total_campaign_amount: 0,
-        data: [],
-      };
-    }
+  // Filtre par status si fourni
+  if (status) {
+    qb.andWhere('p.status = :status', { status });
+  }
 
+  qb.orderBy('p.created_at', 'DESC');
 
-    // 3) Query principale (paiements)
-    const qb = this.paymentRepo
-      .createQueryBuilder('p')
-      .leftJoinAndSelect('p.actor', 'actor')
-      .leftJoinAndSelect('actor.structure', 'actorStructure')
-      .leftJoinAndSelect('p.beneficiary', 'beneficiary')
-      .leftJoinAndSelect('beneficiary.structure', 'beneficiaryStructure')
-      .where('p.source_uuid = :source_uuid', { source_uuid })
-      .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups })
-      .orderBy('p.created_at', 'DESC')
-      .skip((page - 1) * limit)
-      .take(limit);
+  const payments = await qb.getMany();
 
-    const [payments, total] = await qb.getManyAndCount();
+  // Récupérer les détails (donations/subscriptions)
+  const result: any[] = [];
 
-    let total_campaign_amount = 0;
+  for (const p of payments) {
+    let donation: DonatePaymentEntity | null = null;
+    let subscription: SubscriptionPaymentEntity | null = null;
 
-    const samplePayment = await this.paymentRepo.findOne({
-      where: { source_uuid },
-    });
-
-    if (samplePayment) {
-      if (samplePayment.source === PaymentSource.DONATION) {
-        const donationSum = await this.donatePaymentRepo
-          .createQueryBuilder('d')
-          .select('SUM(d.amount)', 'sum')
-          .where('d.donate_uuid = :id', { id: source_uuid })
-          .andWhere('d.status = :status', { status: GlobalStatus.SUCCESS })
-
-          .getRawOne();
-
-        total_campaign_amount = Number(donationSum?.sum ?? 0);
-      }
-
-      if (samplePayment.source === PaymentSource.SUBSCRIPTION) {
-        const subscriptionSum = await this.subscriptionPaymentRepo
-          .createQueryBuilder('s')
-          .select('SUM(s.amount)', 'sum')
-          .where('s.subscription_uuid = :id', { id: source_uuid })
-          .andWhere('s.status = :status', { status: GlobalStatus.SUCCESS })
-          .getRawOne();
-
-        total_campaign_amount = Number(subscriptionSum?.sum ?? 0);
-      }
-    }
-
-
-    const result: TransactionWithDetails[] = [];
-
-    for (const p of payments) {
-      let donation: DonatePaymentEntity | null = null;
-      let subscription: SubscriptionPaymentEntity | null = null;
-
-      if (p.source === PaymentSource.DONATION) {
-        donation = await this.donatePaymentRepo.findOne({
-          where: { payment_uuid: p.uuid },
-        });
-      }
-
-      if (p.source === PaymentSource.SUBSCRIPTION) {
-        subscription = await this.subscriptionPaymentRepo.findOne({
-          where: { payment_uuid: p.uuid },
-        });
-      }
-
-      result.push({
-        payment_uuid: p.uuid,
-        source: p.source,
-        source_uuid: p.source_uuid,
-        transaction_id: p.transaction_id,
-        payment_status: p.payment_status,
-        status: p.status,
-        created_at: p.created_at,
-
-        amount_unit: p.amount,
-        quantity: p.quantity,
-        total_amount: p.total_amount,
-
-        actor: p.actor
-          ? {
-            uuid: p.actor.uuid,
-            firstname: p.actor.firstname,
-            lastname: p.actor.lastname,
-            phone: p.actor.phone,
-            structure: p.actor.structure
-              ? { uuid: p.actor.structure.uuid, name: p.actor.structure.name }
-              : null,
-          }
-          : null,
-
-        beneficiary: p.beneficiary
-          ? {
-            uuid: p.beneficiary.uuid,
-            firstname: p.beneficiary.firstname,
-            lastname: p.beneficiary.lastname,
-            phone: p.beneficiary.phone,
-            structure: p.beneficiary.structure
-              ? {
-                uuid: p.beneficiary.structure.uuid,
-                name: p.beneficiary.structure.name,
-              }
-              : null,
-          }
-          : null,
-
-        donation: donation
-          ? {
-            uuid: donation.uuid,
-            amount: donation.amount,
-            status: donation.status,
-            quantity: donation.quantity,
-          }
-          : null,
-
-        subscription: subscription
-          ? {
-            uuid: subscription.uuid,
-            amount: subscription.amount,
-            status: subscription.status,
-            quantity: subscription.quantity,
-          }
-          : null,
+    if (p.source === PaymentSource.DONATION) {
+      donation = await this.donatePaymentRepo.findOne({
+        where: { payment_uuid: p.uuid },
       });
     }
 
-    return {
-      total,
-      total_campaign_amount,
-      page,
-      limit,
-      root_structure_uuid: member.structure_uuid,
-      sous_groups: sousGroups,
-      source_uuid,
-      data: result,
-    };
+    if (p.source === PaymentSource.SUBSCRIPTION) {
+      subscription = await this.subscriptionPaymentRepo.findOne({
+        where: { payment_uuid: p.uuid },
+      });
+    }
+
+    result.push({
+      payment_uuid: p.uuid,
+      source: p.source,
+      transaction_id: p.transaction_id,
+      payment_status: p.payment_status,
+      status: p.status,
+      created_at: p.created_at,
+      amount_unit: p.amount,
+      quantity: p.quantity,
+      total_amount: p.total_amount,
+      actor_firstname: p.actor?.firstname || '',
+      actor_lastname: p.actor?.lastname || '',
+      actor_phone: p.actor?.phone || '',
+      actor_structure: p.actor?.structure?.name || '',
+      beneficiary_firstname: p.beneficiary?.firstname || '',
+      beneficiary_lastname: p.beneficiary?.lastname || '',
+      beneficiary_phone: p.beneficiary?.phone || '',
+      beneficiary_structure: p.beneficiary?.structure?.name || '',
+      donation_amount: donation?.amount || '',
+      donation_status: donation?.status || '',
+      subscription_amount: subscription?.amount || '',
+      subscription_status: subscription?.status || '',
+    });
   }
-*/
+
+  // Créer le workbook Excel
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Transactions');
+
+  // Définir les colonnes
+  worksheet.columns = [
+    { header: 'ID Transaction', key: 'transaction_id', width: 20 },
+    { header: 'Source', key: 'source', width: 15 },
+    { header: 'Statut Paiement', key: 'payment_status', width: 15 },
+    { header: 'Statut', key: 'status', width: 15 },
+    { header: 'Date', key: 'created_at', width: 20 },
+    { header: 'Montant Unitaire', key: 'amount_unit', width: 15 },
+    { header: 'Quantité', key: 'quantity', width: 10 },
+    { header: 'Montant Total', key: 'total_amount', width: 15 },
+    { header: 'Acteur - Prénom', key: 'actor_firstname', width: 20 },
+    { header: 'Acteur - Nom', key: 'actor_lastname', width: 20 },
+    { header: 'Acteur - Téléphone', key: 'actor_phone', width: 15 },
+    { header: 'Acteur - Structure', key: 'actor_structure', width: 25 },
+    { header: 'Bénéficiaire - Prénom', key: 'beneficiary_firstname', width: 20 },
+    { header: 'Bénéficiaire - Nom', key: 'beneficiary_lastname', width: 20 },
+    { header: 'Bénéficiaire - Téléphone', key: 'beneficiary_phone', width: 15 },
+    { header: 'Bénéficiaire - Structure', key: 'beneficiary_structure', width: 25 },
+  ];
+
+  // Styliser l'en-tête
+  worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  worksheet.getRow(1).fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF4472C4' },
+  };
+  worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+  // Ajouter les données
+  result.forEach(item => {
+    worksheet.addRow({
+      transaction_id: item.transaction_id || '',
+      source: item.source || '',
+      payment_status: item.payment_status || '',
+      status: item.status || '',
+      created_at: item.created_at ? new Date(item.created_at).toLocaleString('fr-FR') : '',
+      amount_unit: item.amount_unit || 0,
+      quantity: item.quantity || 0,
+      total_amount: item.total_amount || 0,
+      actor_firstname: item.actor_firstname,
+      actor_lastname: item.actor_lastname,
+      actor_phone: item.actor_phone,
+      actor_structure: item.actor_structure,
+      beneficiary_firstname: item.beneficiary_firstname,
+      beneficiary_lastname: item.beneficiary_lastname,
+      beneficiary_phone: item.beneficiary_phone,
+      beneficiary_structure: item.beneficiary_structure,
+    });
+  });
+
+  // Appliquer des bordures
+  worksheet.eachRow((row, rowNumber) => {
+    row.eachCell((cell) => {
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+    });
+  });
+
+  // Générer le fichier Excel
+  const fileName = `transactions_export_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+  res.setHeader(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  );
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+  await workbook.xlsx.write(res);
+  res.end();
+}
+
 
   async confirmCinetPayCallback(payload: any) {
     const { cpm_trans_id } = payload;
@@ -803,4 +1058,81 @@ export class PaymentService {
   }
 
 
+  async queueTransactionsExport(
+    source_uuid: string,
+    admin_uuid: string,
+    member_uuid: string,
+    member_structure_uuid: string,
+    status?: GlobalStatus,
+
+  ) {
+    // Créer le job
+    const job = await this.exportJobService.createJob(
+      'transactions',
+      { source_uuid, admin_uuid, status },
+      admin_uuid,
+    );
+
+    // Lancer le traitement en arrière-plan (sans await)
+    setImmediate(() => {
+      this.exportProcessorService.processTransactionsExport(job.uuid, member_uuid,member_structure_uuid)
+        .catch(error => console.error('Export error:', error));
+    });
+
+    return {
+      success: true,
+      message: 'Export en cours de traitement',
+      jobId: job.uuid,
+      checkStatusUrl: `/payments/export/status/${job.uuid}`,
+    };
+  }
+
+  async getExportJobStatus(jobId: string) {
+    const job = await this.exportJobService.getJob(jobId);
+
+    return {
+      jobId: job.uuid,
+      status: job.status,
+      progress: job.progress,
+      fileName: job.file_name,
+      downloadUrl: job.file_name ? this.exportJobService.getDownloadUrl(job.file_name) : null,
+      errorMessage: job.error_message,
+      createdAt: job.created_at,
+    };
+  }
+
+
+  async getUserExports(user_uuid: string, page: number = 1, limit: number = 20) {
+    return this.exportJobService.getUserJobs(user_uuid, page, limit);
+  }
+
+
+async downloadTransactionsExport(jobUuid: string, user_uuid: string) {
+  // Récupérer le job
+  const job = await this.exportJobService.getJob(jobUuid);
+
+  // Vérifier que l'utilisateur a accès à ce job
+  if (job.user_uuid !== user_uuid) {
+    throw new ForbiddenException('Vous n\'avez pas accès à ce fichier');
+  }
+
+  // Vérifier que le job est terminé
+  if (job.status !== ExportJobStatus.COMPLETED) {
+    throw new BadRequestException(`Export pas encore terminé (statut: ${job.status})`);
+  }
+
+  // Vérifier que le fichier existe
+  if (!job.file_path || !fs.existsSync(job.file_path)) {
+    throw new NotFoundException('Fichier d\'export introuvable');
+  }
+
+  // Lire le fichier
+  const buffer = fs.readFileSync(job.file_path);
+
+  return {
+    buffer,
+    filename: job.file_name,
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  };
+}
 }

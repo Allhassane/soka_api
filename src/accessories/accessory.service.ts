@@ -11,18 +11,18 @@ export class AccessoryService {
     @InjectRepository(AccessoryEntity)
     private readonly accessoryRepo: Repository<AccessoryEntity>,
     private readonly logService: LogActivitiesService,
-    
+
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
   ) {}
 
   async findAll(admin_uuid: string) {
     const accessory = await this.accessoryRepo.find({
-      order: { name: 'DESC' },
+      order: { name: 'ASC' },
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -46,9 +46,9 @@ export class AccessoryService {
       from_last_version: payload.from_last_version ?? null,
       admin_uuid: admin_uuid ?? null,
     });
-    
+
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -71,7 +71,7 @@ export class AccessoryService {
         throw new NotFoundException('Aucun accessoire trouvé');
     }
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -105,12 +105,12 @@ export class AccessoryService {
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
- 
+
 
     const existing = await this.accessoryRepo.findOne({ where: { uuid } });
     if (!existing) {
@@ -138,7 +138,7 @@ export class AccessoryService {
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }

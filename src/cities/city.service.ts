@@ -12,18 +12,18 @@ export class CityService {
     @InjectRepository(CityEntity)
     private readonly cityRepo: Repository<CityEntity>,
     private readonly logService: LogActivitiesService,
-    
+
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
   ) {}
 
   async findAll(admin_uuid: string) {
     const city = await this.cityRepo.find({
-      order: { name: 'DESC' },
+      order: { name: 'ASC' },
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -42,14 +42,19 @@ export class CityService {
         throw new NotFoundException('Veuillez renseigner tous les champs');
     }
 
+    const check_city = await this.cityRepo.findOne({ where:{ name : payload.name}});
+
+    if(check_city){
+      return check_city;
+    }
     const newJob = this.cityRepo.create({
       uuid: payload.uuid ?? uuidv4(),
       name: payload.name,
       admin_uuid: admin_uuid ?? null,
     });
-    
+
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -72,7 +77,7 @@ export class CityService {
         throw new NotFoundException('Aucune localité trouvé');
     }
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -106,12 +111,12 @@ export class CityService {
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
- 
+
 
     const existing = await this.cityRepo.findOne({ where: { uuid } });
     if (!existing) {
@@ -139,7 +144,7 @@ export class CityService {
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }

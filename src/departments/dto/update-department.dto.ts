@@ -20,6 +20,7 @@ export class UpdateDepartmentDto {
   @IsEnum(['mixte', 'homme', 'femme'], {
     message: 'Le genre doit être mixte, homme ou femme',
   })
+  gender?: 'homme';
 
   @ApiPropertyOptional({
     description: 'Description du departement',

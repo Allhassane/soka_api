@@ -50,7 +50,7 @@ export class DepartmentService {
   async findAll(admin_uuid: string) {
     const departement = await this.departmentRepo.find({
        relations: ['divisions'],
-      order: { name: 'DESC' },
+      order: { name: 'ASC' },
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
@@ -72,6 +72,15 @@ export class DepartmentService {
     if (!payload?.name) {
         throw new NotFoundException('Veuillez renseigner tous les champs');
     }
+
+    // verifier si le departement existe
+    const $check_department = await this.departmentRepo.findOne({ where: {name: payload.name} });
+
+    if($check_department){
+
+      return $check_department;
+    }
+
 
     const newModule = this.departmentRepo.create({
       uuid: payload.uuid ?? uuid(),
@@ -141,7 +150,8 @@ export class DepartmentService {
 
     const existing = await this.departmentRepo.findOne({ where: { uuid } });
     if (!existing) {
-        throw new NotFoundException('Aucune correspondance retrouvée !');
+
+      throw new NotFoundException('Aucune correspondance retrouvée !');
     }
 
     existing.name = name;
