@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException,ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -21,7 +21,11 @@ import { TransactionWithDetails } from './types/transaction-with-details.type';
 import axios from 'axios';
 import * as ExcelJS from 'exceljs';
 import { Response } from 'express';
-
+import { ExportJobService } from 'src/export-async/export-job.service';
+import { ExportProcessorService } from 'src/export-async/export-processor.service';
+import * as fs from 'fs';
+import * as path from 'path';
+import { ExportJobStatus } from 'src/export-async/entities/export-job.entity';
 
 @Injectable()
 export class PaymentService {
@@ -44,8 +48,8 @@ export class PaymentService {
     @InjectRepository(SubscriptionPaymentEntity)
     private subscriptionPaymentRepo: Repository<SubscriptionPaymentEntity>,
 
-
-
+    private exportJobService: ExportJobService,
+    private exportProcessorService: ExportProcessorService,
 
     @InjectRepository(User)
     private userRepo: Repository<User>,
@@ -686,177 +690,6 @@ async findTransactionsForSubGroupsExport(
   res.end();
 }
 
-/*
-  async findTransactionsForSubGroups(
-    source_uuid: string,
-    admin_uuid: string,
-    page = 1,
-    limit = 50,
-    search?: string | undefined,
-  ) {
-
-
-    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    if (!admin) {
-      throw new NotFoundException("Identifiant de l'auteur introuvable");
-    }
-    const member = await this.memberRepo.findOne({ where: { uuid: admin.member_uuid } });
-
-    if (!member) {
-      throw new NotFoundException("Identifiant du membre introuvable");
-    }
-    const sousGroups = await this.structureService.findByAllChildrens(member?.structure_uuid);
-
-
-    if (!sousGroups.length) {
-      return {
-        total: 0,
-        page,
-        limit,
-        sous_groups: [],
-        total_campaign_amount: 0,
-        data: [],
-      };
-    }
-
-
-    // 3) Query principale (paiements)
-    const qb = this.paymentRepo
-      .createQueryBuilder('p')
-      .leftJoinAndSelect('p.actor', 'actor')
-      .leftJoinAndSelect('actor.structure', 'actorStructure')
-      .leftJoinAndSelect('p.beneficiary', 'beneficiary')
-      .leftJoinAndSelect('beneficiary.structure', 'beneficiaryStructure')
-      .where('p.source_uuid = :source_uuid', { source_uuid })
-      .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups })
-      .orderBy('p.created_at', 'DESC')
-      .skip((page - 1) * limit)
-      .take(limit);
-
-    const [payments, total] = await qb.getManyAndCount();
-
-    let total_campaign_amount = 0;
-
-    const samplePayment = await this.paymentRepo.findOne({
-      where: { source_uuid },
-    });
-
-    if (samplePayment) {
-      if (samplePayment.source === PaymentSource.DONATION) {
-        const donationSum = await this.donatePaymentRepo
-          .createQueryBuilder('d')
-          .select('SUM(d.amount)', 'sum')
-          .where('d.donate_uuid = :id', { id: source_uuid })
-          .andWhere('d.status = :status', { status: GlobalStatus.SUCCESS })
-
-          .getRawOne();
-
-        total_campaign_amount = Number(donationSum?.sum ?? 0);
-      }
-
-      if (samplePayment.source === PaymentSource.SUBSCRIPTION) {
-        const subscriptionSum = await this.subscriptionPaymentRepo
-          .createQueryBuilder('s')
-          .select('SUM(s.amount)', 'sum')
-          .where('s.subscription_uuid = :id', { id: source_uuid })
-          .andWhere('s.status = :status', { status: GlobalStatus.SUCCESS })
-          .getRawOne();
-
-        total_campaign_amount = Number(subscriptionSum?.sum ?? 0);
-      }
-    }
-
-
-    const result: TransactionWithDetails[] = [];
-
-    for (const p of payments) {
-      let donation: DonatePaymentEntity | null = null;
-      let subscription: SubscriptionPaymentEntity | null = null;
-
-      if (p.source === PaymentSource.DONATION) {
-        donation = await this.donatePaymentRepo.findOne({
-          where: { payment_uuid: p.uuid },
-        });
-      }
-
-      if (p.source === PaymentSource.SUBSCRIPTION) {
-        subscription = await this.subscriptionPaymentRepo.findOne({
-          where: { payment_uuid: p.uuid },
-        });
-      }
-
-      result.push({
-        payment_uuid: p.uuid,
-        source: p.source,
-        source_uuid: p.source_uuid,
-        transaction_id: p.transaction_id,
-        payment_status: p.payment_status,
-        status: p.status,
-        created_at: p.created_at,
-
-        amount_unit: p.amount,
-        quantity: p.quantity,
-        total_amount: p.total_amount,
-
-        actor: p.actor
-          ? {
-            uuid: p.actor.uuid,
-            firstname: p.actor.firstname,
-            lastname: p.actor.lastname,
-            phone: p.actor.phone,
-            structure: p.actor.structure
-              ? { uuid: p.actor.structure.uuid, name: p.actor.structure.name }
-              : null,
-          }
-          : null,
-
-        beneficiary: p.beneficiary
-          ? {
-            uuid: p.beneficiary.uuid,
-            firstname: p.beneficiary.firstname,
-            lastname: p.beneficiary.lastname,
-            phone: p.beneficiary.phone,
-            structure: p.beneficiary.structure
-              ? {
-                uuid: p.beneficiary.structure.uuid,
-                name: p.beneficiary.structure.name,
-              }
-              : null,
-          }
-          : null,
-
-        donation: donation
-          ? {
-            uuid: donation.uuid,
-            amount: donation.amount,
-            status: donation.status,
-            quantity: donation.quantity,
-          }
-          : null,
-
-        subscription: subscription
-          ? {
-            uuid: subscription.uuid,
-            amount: subscription.amount,
-            status: subscription.status,
-            quantity: subscription.quantity,
-          }
-          : null,
-      });
-    }
-
-    return {
-      total,
-      total_campaign_amount,
-      page,
-      limit,
-      root_structure_uuid: member.structure_uuid,
-      sous_groups: sousGroups,
-      source_uuid,
-      data: result,
-    };
-  }
-*/
 
   async confirmCinetPayCallback(payload: any) {
     const { cpm_trans_id } = payload;
@@ -970,4 +803,80 @@ async findTransactionsForSubGroupsExport(
   }
 
 
+  async queueTransactionsExport(
+    source_uuid: string,
+    admin_uuid: string,
+    member_uuid: string,
+    member_structure_uuid: string,
+    status?: GlobalStatus,
+
+  ) {
+    // Créer le job
+    const job = await this.exportJobService.createJob(
+      'transactions',
+      { source_uuid, admin_uuid, status },
+      admin_uuid,
+    );
+
+    // Lancer le traitement en arrière-plan (sans await)
+    setImmediate(() => {
+      this.exportProcessorService.processTransactionsExport(job.uuid, member_uuid,member_structure_uuid)
+        .catch(error => console.error('Export error:', error));
+    });
+
+    return {
+      success: true,
+      message: 'Export en cours de traitement',
+      jobId: job.uuid,
+      checkStatusUrl: `/payments/export/status/${job.uuid}`,
+    };
+  }
+
+  async getExportJobStatus(jobId: string) {
+    const job = await this.exportJobService.getJob(jobId);
+
+    return {
+      jobId: job.uuid,
+      status: job.status,
+      progress: job.progress,
+      fileName: job.file_name,
+      downloadUrl: job.file_name ? this.exportJobService.getDownloadUrl(job.file_name) : null,
+      errorMessage: job.error_message,
+      createdAt: job.created_at,
+    };
+  }
+
+  async getUserExports(user_uuid: string) {
+    return this.exportJobService.getUserJobs(user_uuid);
+  }
+
+
+async downloadTransactionsExport(jobUuid: string, user_uuid: string) {
+  // Récupérer le job
+  const job = await this.exportJobService.getJob(jobUuid);
+
+  // Vérifier que l'utilisateur a accès à ce job
+  if (job.user_uuid !== user_uuid) {
+    throw new ForbiddenException('Vous n\'avez pas accès à ce fichier');
+  }
+
+  // Vérifier que le job est terminé
+  if (job.status !== ExportJobStatus.COMPLETED) {
+    throw new BadRequestException(`Export pas encore terminé (statut: ${job.status})`);
+  }
+
+  // Vérifier que le fichier existe
+  if (!job.file_path || !fs.existsSync(job.file_path)) {
+    throw new NotFoundException('Fichier d\'export introuvable');
+  }
+
+  // Lire le fichier
+  const buffer = fs.readFileSync(job.file_path);
+
+  return {
+    buffer,
+    filename: job.file_name,
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  };
+}
 }

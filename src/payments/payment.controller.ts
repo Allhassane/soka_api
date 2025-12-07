@@ -9,6 +9,7 @@ import {
   Request,
   Query,
   Res,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -27,6 +28,8 @@ import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 import { PaymentSource } from './dto/create-payment.dto';
 import { Response } from 'express';
+import path from 'path';
+import * as fs from 'fs';
 
 @ApiBearerAuth()
 @ApiTags('Paiements')
@@ -69,7 +72,7 @@ export class PaymentController {
     return this.paymentService.findOne(uuid, req.user.uuid);
   }
 
-
+/*
 @Get('export/subgroups')
 @ApiOperation({ summary: 'Exporter les transactions des sous-groupes en Excel' })
 @ApiQuery({
@@ -96,7 +99,132 @@ async exportTransactionsForSubGroups(
     res,
     status,
   );
+}*/
+
+
+@Get('export/subgroups')
+@ApiOperation({ summary: 'Lancer l\'export des transactions en arrière-plan' })
+async queueTransactionsExport(
+  @Query('source_uuid') source_uuid: string,
+  @Query('status') status?: GlobalStatus,
+  @Request() req?,
+) {
+  return this.paymentService.queueTransactionsExport(
+    source_uuid,
+    req.user.uuid,
+    req.user.member_uuid,
+    req.user.responsibilities[0]?.structure?.uuid,
+    status,
+  );
 }
+
+@Get('async-exports/download/:jobUuid')
+@ApiOperation({
+  summary: 'Télécharger un export de transactions terminé',
+  description: `Télécharge le fichier Excel d'un export de transactions terminé.
+  Le fichier est envoyé directement dans la réponse HTTP avec les en-têtes appropriés.
+  Fonctionne uniquement si le statut du job est 'COMPLETED'.`,
+})
+@ApiParam({
+  name: 'jobUuid',
+  description: 'UUID du job d\'export',
+  example: 'abc-123-def-456',
+  type: String,
+})
+@ApiResponse({
+  status: 200,
+  description: 'Fichier Excel téléchargé avec succès',
+  content: {
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': {
+      schema: {
+        type: 'string',
+        format: 'binary',
+      },
+    },
+  },
+  headers: {
+    'Content-Type': {
+      description: 'Type MIME du fichier Excel',
+      schema: {
+        type: 'string',
+        example: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      }
+    },
+    'Content-Disposition': {
+      description: 'Nom du fichier à télécharger',
+      schema: {
+        type: 'string',
+        example: 'attachment; filename="transactions_export_2025-12-06.xlsx"'
+      }
+    },
+    'Content-Length': {
+      description: 'Taille du fichier en octets',
+      schema: {
+        type: 'integer',
+        example: 2457600
+      }
+    }
+  }
+})
+@ApiResponse({
+  status: 400,
+  description: 'Export pas encore terminé',
+  schema: {
+    example: {
+      success: false,
+      message: 'Export pas encore terminé (statut: PROCESSING)'
+    }
+  }
+})
+@ApiResponse({
+  status: 404,
+  description: 'Job ou fichier introuvable',
+  schema: {
+    example: {
+      success: false,
+      message: 'Fichier d\'export introuvable'
+    }
+  }
+})
+@ApiResponse({
+  status: 401,
+  description: 'Non authentifié',
+})
+async downloadTransactionsExport(
+  @Param('jobUuid') jobUuid: string,
+  @Res() res: Response,
+  @Request() req,
+) {
+  try {
+    const { buffer, filename, mimeType } = await this.paymentService.downloadTransactionsExport(
+      jobUuid,
+      req.user.uuid,
+    );
+
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+  } catch (error) {
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message
+    });
+  }
+}
+
+@Get('async-export/status/:jobId')
+@ApiOperation({ summary: 'Vérifier le statut d\'un export' })
+async getExportStatus(@Param('jobId') jobId: string) {
+  return this.paymentService.getExportJobStatus(jobId);
+}
+
+@Get('async-exports/my-exports')
+@ApiOperation({ summary: 'Liste de mes exports' })
+async getMyExports(@Request() req) {
+  return this.paymentService.getUserExports(req.user.uuid);
+}
+
 
   @Put(':uuid')
   @ApiOperation({ summary: 'Modifier un paiement' })
