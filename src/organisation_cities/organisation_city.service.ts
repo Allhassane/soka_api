@@ -11,7 +11,7 @@ export class OrganisationCityService {
     @InjectRepository(OrganisationCityEntity)
     private readonly organisationCityRepo: Repository<OrganisationCityEntity>,
     private readonly logService: LogActivitiesService,
-    
+
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
   ) {}
@@ -22,7 +22,7 @@ export class OrganisationCityService {
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -41,13 +41,18 @@ export class OrganisationCityService {
         throw new NotFoundException('Veuillez renseigner tous les champs');
     }
 
+    const check_city = await this.organisationCityRepo.findOne({ where: { name: payload.name}});
+    if(check_city){
+      console.log('organisation city existe');
+      return check_city;
+    }
     const newCity = this.organisationCityRepo.create({
       name: payload.name,
       admin_uuid: admin_uuid ?? null,
     });
-    
+
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -70,7 +75,7 @@ export class OrganisationCityService {
         throw new NotFoundException('Aucune division trouvé');
     }
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -103,12 +108,12 @@ export class OrganisationCityService {
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
- 
+
 
     const existing = await this.organisationCityRepo.findOne({ where: { uuid } });
     if (!existing) {
@@ -136,7 +141,7 @@ export class OrganisationCityService {
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }

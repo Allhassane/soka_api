@@ -73,6 +73,15 @@ export class DepartmentService {
         throw new NotFoundException('Veuillez renseigner tous les champs');
     }
 
+    // verifier si le departement existe
+    const $check_department = await this.departmentRepo.findOne({ where: {name: payload.name} });
+
+    if($check_department){
+
+      return $check_department;
+    }
+
+
     const newModule = this.departmentRepo.create({
       uuid: payload.uuid ?? uuid(),
       name: payload.name,

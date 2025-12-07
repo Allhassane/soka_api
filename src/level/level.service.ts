@@ -22,8 +22,11 @@ export class LevelService {
     });
 
     if (existing) {
-      throw new ConflictException('Un niveau avec ce nom existe déjà.');
+      console.log('level existe');
+       return existing;
+     // throw new ConflictException('Un niveau avec ce nom existe déjà.');
     }
+
 
     const level = this.levelRepo.create({
       ...dto,

@@ -11,7 +11,7 @@ export class FormationService {
     @InjectRepository(FormationEntity)
     private readonly formationRepo: Repository<FormationEntity>,
     private readonly logService: LogActivitiesService,
-    
+
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
   ) {}
@@ -22,7 +22,7 @@ export class FormationService {
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -41,13 +41,19 @@ export class FormationService {
         throw new NotFoundException('Veuillez renseigner tous les champs');
     }
 
+    const check_formation = await this.formationRepo.findOne({ where: { name: payload.name}});
+    if(check_formation){
+        console.log('formation existe');
+        return check_formation;
+    }
+
     const newDivision = this.formationRepo.create({
       name: payload.name,
       admin_uuid: admin_uuid ?? null,
     });
-    
+
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -70,7 +76,7 @@ export class FormationService {
         throw new NotFoundException('Aucune division trouvé');
     }
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -104,12 +110,12 @@ export class FormationService {
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
- 
+
 
     const existing = await this.formationRepo.findOne({ where: { uuid } });
     if (!existing) {
@@ -137,7 +143,7 @@ export class FormationService {
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }

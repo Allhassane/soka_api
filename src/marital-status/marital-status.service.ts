@@ -11,7 +11,7 @@ export class MaritalStatusService {
     @InjectRepository(MaritalStatusEntity)
     private readonly divisionRepo: Repository<MaritalStatusEntity>,
     private readonly logService: LogActivitiesService,
-    
+
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
   ) {}
@@ -22,7 +22,7 @@ export class MaritalStatusService {
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -41,13 +41,19 @@ export class MaritalStatusService {
         throw new NotFoundException('Veuillez renseigner tous les champs');
     }
 
-    const newDivision = this.divisionRepo.create({
+    const check_marital = await this.divisionRepo.findOne({ where:{ name: payload.name} });
+    if(check_marital){
+      console.log('marital status existe');
+      return check_marital;
+    }
+
+    const newMarital = this.divisionRepo.create({
       name: payload.name,
       admin_uuid: admin_uuid ?? null,
     });
-    
+
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -58,7 +64,7 @@ export class MaritalStatusService {
       'Enregistrer une division'
     );
 
-    const saved = await this.divisionRepo.save(newDivision);
+    const saved = await this.divisionRepo.save(newMarital);
 
     return saved;
   }
@@ -70,7 +76,7 @@ export class MaritalStatusService {
         throw new NotFoundException('Aucune division trouvé');
     }
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
@@ -97,12 +103,12 @@ export class MaritalStatusService {
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
- 
+
 
     const existing = await this.divisionRepo.findOne({ where: { uuid } });
     if (!existing) {
@@ -130,7 +136,7 @@ export class MaritalStatusService {
     }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    
+
     if (!admin) {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
     }

@@ -16,6 +16,7 @@ import { PaymentService } from 'src/payments/payment.service';
 import axios from 'axios';
 import { PaymentStatus } from 'src/payments/entities/payment.entity';
 import { SubscriptionEntity } from 'src/subscriptions/entities/subscription.entity';
+import { StructureService } from 'src/structure/structure.service';
 
 @Injectable()
 export class SubscriptionPaymentService {
@@ -35,6 +36,7 @@ export class SubscriptionPaymentService {
     private readonly memberRepo: Repository<MemberEntity>,
 
     private readonly paymentService: PaymentService,
+
   ) { }
 
   // ============================================================
@@ -274,6 +276,7 @@ export class SubscriptionPaymentService {
 
     return payment;
   }
+
 
 
   async changeStatus(uuid: string, status: GlobalStatus, admin_uuid: string) {
