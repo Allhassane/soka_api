@@ -652,7 +652,7 @@ async findTransactionsForSubGroups(
 
       total_campaign_amount = Number(subscriptionSum?.sum ?? 0);
 
-      // ✅ Total des paiements réussis AVEC FILTRE de recherche
+      //  Total des paiements réussis AVEC FILTRE de recherche
       const successfulSubscriptionsQb = this.subscriptionPaymentRepo
         .createQueryBuilder('s')
         .innerJoin('payments', 'p', 'p.uuid = s.payment_uuid')
@@ -664,7 +664,7 @@ async findTransactionsForSubGroups(
         .andWhere('s.status = :status', { status: GlobalStatus.SUCCESS })
         .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups });
 
-      // ✅ Appliquer le même filtre de recherche
+      //  Appliquer le même filtre de recherche
       if (search && search.trim() !== '') {
         successfulSubscriptionsQb.andWhere(
           `(
@@ -1101,8 +1101,9 @@ async findTransactionsForSubGroupsExport(
     };
   }
 
-  async getUserExports(user_uuid: string) {
-    return this.exportJobService.getUserJobs(user_uuid);
+
+  async getUserExports(user_uuid: string, page: number = 1, limit: number = 20) {
+    return this.exportJobService.getUserJobs(user_uuid, page, limit);
   }
 
 

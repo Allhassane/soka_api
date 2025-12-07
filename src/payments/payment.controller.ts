@@ -190,12 +190,20 @@ async getExportStatus(@Param('jobId') jobId: string) {
   return this.paymentService.getExportJobStatus(jobId);
 }
 
-@Get('async-exports/my-exports')
-@ApiOperation({ summary: 'Liste de mes exports' })
-async getMyExports(@Request() req) {
-  return this.paymentService.getUserExports(req.user.uuid);
-}
 
+@Get('async-exports/my-exports')
+@ApiOperation({ summary: 'Liste paginée de mes exports' })
+async getMyExports(
+  @Request() req,
+  @Query('page') page: number = 1,
+  @Query('limit') limit: number = 20
+) {
+  return this.paymentService.getUserExports(
+    req.user.uuid,
+    Number(page),
+    Number(limit)
+  );
+}
 
   @Put(':uuid')
   @ApiOperation({ summary: 'Modifier un paiement' })
@@ -272,36 +280,6 @@ async getMyExports(@Request() req) {
       search,
     );
   }
-
-
-
-/*   @Get('export/subgroups')
-@ApiOperation({ summary: 'Exporter les transactions des sous-groupes en Excel' })
-@ApiQuery({
-  name: 'source_uuid',
-  required: true,
-  example: 'e4bb675f-21c7-4af7-bd8e-c1d934c89e2e',
-  description: "UUID de la campagne (donation ou abonnement)",
-})
-@ApiQuery({
-  name: 'status',
-  required: false,
-  enum: GlobalStatus,
-  description: 'Filtrer par statut'
-})
-async exportTransactionsForSubGroups(
-  @Query('source_uuid') source_uuid: string,
-  @Query('status') status?: GlobalStatus,
-  @Res() Res: Response,
-  @Req() req?,
-) {
-  await this.paymentService.findTransactionsForSubGroupsExport(
-    source_uuid,
-    req.user.uuid,
-    res,
-    status,
-  );
-} */
 
 
 }

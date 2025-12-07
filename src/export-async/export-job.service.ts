@@ -55,12 +55,27 @@ export class ExportJobService {
     return job;
   }
 
-  async getUserJobs(user_uuid: string, limit = 20): Promise<ExportJobEntity[]> {
-    return this.exportJobRepo.find({
+  async getUserJobs(user_uuid: string, page: number = 1, limit: number = 20) {
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await this.exportJobRepo.findAndCount({
       where: { user_uuid },
       order: { created_at: 'DESC' },
       take: limit,
+      skip: skip,
     });
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        hasNextPage: page < Math.ceil(total / limit),
+        hasPreviousPage: page > 1,
+      },
+    };
   }
 
   getDownloadUrl(fileName: string): string {
