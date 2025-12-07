@@ -23,7 +23,7 @@ export class CountryService {
       select: ['name'],
     });
 
-    const existingNames = new Set(existingCountries.map((c) => c.name.trim().toUpperCase()));
+    //const existingNames = new Set(existingCountries.map((c) => c.name.trim().toUpperCase()));
 
     const paysList = [
       { name: 'AFGHANISTAN', capital: 'KABOUL', continent: 'ASIE', status: 'enable' },
@@ -230,19 +230,26 @@ export class CountryService {
     ];
 
     // Filtrer pour insérer uniquement ceux qui n’existent pas encore
-    const toInsert = paysList.filter(
+    /*const toInsert = paysList.filter(
       (p) => !existingNames.has(p.name.trim().toUpperCase())
-    );
+    );*/
 
-    if (toInsert.length === 0) {
+    /*if (toInsert.length === 0) {
       console.log('Aucun pays à insérer. La base est déjà à jour.');
+      return;
+    }*/
+
+    const count = await this.countryRepo.count();
+
+    if (count > 0) {
+      console.log('La table contient déjà des pays.');
       return;
     }
 
     // Insertion sécurisée, sans doublons
-    await this.countryRepo.insert(toInsert);
+    await this.countryRepo.insert(paysList);
 
-    console.log(`${toInsert.length} nouveaux pays insérés.`);
+    console.log(`${paysList.length} nouveaux pays insérés.`);
   }
 
 

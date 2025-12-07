@@ -29,6 +29,4 @@ export class CountryEntity extends DateTimeEntity {
 
   @Column({ type: 'varchar', length: 36, default: 'enable' })
   status: string;
-
-
 }
