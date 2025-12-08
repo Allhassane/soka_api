@@ -528,6 +528,7 @@ export class PaymentService {
 async findTransactionsForSubGroups(
   source_uuid: string,
   admin_uuid: string,
+  structure_uuid: string,
   page = 1,
   limit = 50,
   search?: string | undefined,
@@ -542,7 +543,7 @@ async findTransactionsForSubGroups(
   if (!member) {
     throw new NotFoundException("Identifiant du membre introuvable");
   }
-  const sousGroups = await this.structureService.findByAllChildrens(member?.structure_uuid);
+  const sousGroups = await this.structureService.findByAllChildrens(structure_uuid);
 
   if (!sousGroups.length) {
     return {
