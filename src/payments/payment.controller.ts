@@ -275,6 +275,7 @@ async getMyExports(
     return this.paymentService.findTransactionsForSubGroups(
       source_uuid,
       req.user.uuid, // admin uuid
+      req.user.responsibilities[0]?.structure?.uuid,
       +page,
       +limit,
       search,
