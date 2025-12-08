@@ -90,7 +90,7 @@ export class StructureTreeService {
     private levelRepository: Repository<LevelEntity>,
 
     private exportJobService: ExportJobService,
-     private exportProcessorService: ExportProcessorService,
+    private exportProcessorService: ExportProcessorService,
 
   ) { }
 
@@ -1105,6 +1105,7 @@ export class StructureTreeService {
   async getBeneficiaryByConnectedUser(
     memberUuid: string | null,
     structureUuid: string | null,
+    levelUuid: string | null,
     filterParams?: {
       search?: string;
       gender?: 'homme' | 'femme';
@@ -1126,6 +1127,51 @@ export class StructureTreeService {
 
     if (!member || !structureUuid) {
       throw new NotFoundException('Structure du membre non trouvée');
+    }
+
+    if (!levelUuid) {
+      throw new NotFoundException('niveau du membre non trouvée')
+    }
+
+    const check_level = await this.levelRepository.findOne({ where: { uuid: levelUuid } });
+
+
+    // Pour les niveaux <= 3, retourner uniquement les infos du membre connecté
+    if (check_level && check_level.order <= 3) {
+      // Récupérer les informations complètes du membre avec les jointures
+      const memberInfo = await this.memberRepository
+        .createQueryBuilder('m')
+        .leftJoin('structures', 's', 's.uuid = m.structure_uuid')
+        .leftJoin('departments', 'd', 'd.uuid = m.department_uuid')
+        .leftJoin('divisions', 'div', 'div.uuid = m.division_uuid')
+        .select([
+          'm.uuid AS uuid',
+          'm.matricule AS matricule',
+          'm.firstname AS firstname',
+          'm.lastname AS lastname',
+          'm.gender AS gender',
+          'm.birth_date AS birth_date',
+          'm.phone AS phone',
+          'm.email AS email',
+          'm.structure_uuid AS structure_uuid',
+          's.name AS structure_name',
+          'm.department_uuid AS department_uuid',
+          'd.name AS department_name',
+          'm.division_uuid AS division_uuid',
+          'div.name AS division_name',
+          'm.has_gohonzon AS has_gohonzon',
+          'm.membership_date AS membership_date',
+        ])
+        .where('m.uuid = :memberUuid', { memberUuid })
+        .andWhere('m.deleted_at IS NULL')
+        .getRawOne();
+
+      if (!memberInfo) {
+        throw new NotFoundException('Membre non trouvé');
+      }
+
+      // Retourner dans un tableau pour respecter le type de retour
+      return [memberInfo];
     }
 
     // Récupérer toutes les sous-structures accessibles
@@ -2010,294 +2056,301 @@ export class StructureTreeService {
   }
 
   async downloadMembersExport(jobUuid: string, user_uuid: string) {
-  const job = await this.exportJobService.getJob(jobUuid);
+    const job = await this.exportJobService.getJob(jobUuid);
 
-  if (job.user_uuid !== user_uuid) {
-    throw new ForbiddenException('Vous n\'avez pas accès à ce fichier');
+    if (job.user_uuid !== user_uuid) {
+      throw new ForbiddenException('Vous n\'avez pas accès à ce fichier');
+    }
+
+    if (job.status !== ExportJobStatus.COMPLETED) {
+      throw new BadRequestException(`Export pas encore terminé (statut: ${job.status})`);
+    }
+
+    if (!job.file_path || !fs.existsSync(job.file_path)) {
+      throw new NotFoundException('Fichier d\'export introuvable');
+    }
+
+    const buffer = fs.readFileSync(job.file_path);
+
+    return {
+      buffer,
+      filename: job.file_name,
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    };
   }
 
-  if (job.status !== ExportJobStatus.COMPLETED) {
-    throw new BadRequestException(`Export pas encore terminé (statut: ${job.status})`);
+  async getExportJobStatus(jobId: string) {
+    const job = await this.exportJobService.getJob(jobId);
+
+    return {
+      jobId: job.uuid,
+      status: job.status,
+      progress: job.progress,
+      fileName: job.file_name,
+      downloadUrl: job.file_name ? `/members/async-exports/download/${job.uuid}` : null,
+      errorMessage: job.error_message,
+      createdAt: job.created_at,
+    };
   }
 
-  if (!job.file_path || !fs.existsSync(job.file_path)) {
-    throw new NotFoundException('Fichier d\'export introuvable');
-  }
-
-  const buffer = fs.readFileSync(job.file_path);
-
-  return {
-    buffer,
-    filename: job.file_name,
-    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  };
-}
-
-async getExportJobStatus(jobId: string) {
-  const job = await this.exportJobService.getJob(jobId);
-
-  return {
-    jobId: job.uuid,
-    status: job.status,
-    progress: job.progress,
-    fileName: job.file_name,
-    downloadUrl: job.file_name ? `/members/async-exports/download/${job.uuid}` : null,
-    errorMessage: job.error_message,
-    createdAt: job.created_at,
-  };
-}
-
-// src/member/member.service.ts ou payment.service.ts
+  // src/member/member.service.ts ou payment.service.ts
 
 
-async queueMembersExport(
-  member_uuid: string,
-  structure_uuid: string,
-  filterParams: any,
-  user_uuid: string,
-) {
-  // Créer le job
-  const job = await this.exportJobService.createJob(
-    'members',
-    {
-      member_uuid,
-      structure_uuid,
-      filterParams
-    },
-    user_uuid,
-  );
-
-  // ✅ Lancer le traitement en arrière-plan AVEC le workbook
-  setImmediate(async () => {
-    try {
-      // Gestion des filtres de structure
-      let baseStructureUuid = structure_uuid;
-
-      if (filterParams?.region_uuid) baseStructureUuid = filterParams.region_uuid;
-      if (filterParams?.centre_uuid) baseStructureUuid = filterParams.centre_uuid;
-      if (filterParams?.chapitre_uuid) baseStructureUuid = filterParams.chapitre_uuid;
-      if (filterParams?.district_uuid) baseStructureUuid = filterParams.district_uuid;
-      if (filterParams?.groupe_uuid) baseStructureUuid = filterParams.groupe_uuid;
-
-      await this.exportJobService.updateJobProgress(job.uuid, 30);
-
-      // ✅ Générer le workbook ICI (dans le même service)
-      const workbook = await this.generateMembersWorkbook(
+  async queueMembersExport(
+    member_uuid: string,
+    structure_uuid: string,
+    filterParams: any,
+    user_uuid: string,
+  ) {
+    // Créer le job
+    const job = await this.exportJobService.createJob(
+      'members',
+      {
         member_uuid,
-        baseStructureUuid,
-        filterParams,
-      );
-
-      await this.exportJobService.updateJobProgress(job.uuid, 60);
-
-      // ✅ Passer le workbook au processor
-      await this.exportProcessorService.processMembersExport(job.uuid, workbook);
-
-    } catch (error) {
-      console.error('Export members error:', error);
-      await this.exportJobService.updateJobStatus(
-        job.uuid,
-        ExportJobStatus.FAILED,
-        error.message
-      );
-    }
-  });
-
-  return {
-    success: true,
-    message: 'Export des membres en cours de traitement',
-    jobId: job.uuid,
-    checkStatusUrl: `/members/export/status/${job.uuid}`,
-  };
-}
-
-// Méthode existante qui utilise generateMembersWorkbook
-async asyncExportMembersToExcel(
-  memberUuid: string,
-  structureUuid: string,
-  res: Response,
-  filterParams?: any,
-): Promise<void> {
-  const workbook = await this.generateMembersWorkbook(
-    memberUuid,
-    structureUuid,
-    filterParams,
-  );
-
-  const fileName = `membres_export_${new Date().toISOString().split('T')[0]}.xlsx`;
-
-  res.setHeader(
-    'Content-Type',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-  );
-  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-
-  await workbook.xlsx.write(res);
-  res.end();
-}
-
-
-
-// ... vos autres imports et code existant
-
-// Ajoutez cette méthode dans StructureTreeService
-async generateMembersWorkbook(
-  memberUuid: string,
-  structureUuid: string,
-  filterParams?: {
-    search?: string;
-    gender?: 'homme' | 'femme';
-    has_gohonzon?: boolean;
-    region_uuid?: string;
-    centre_uuid?: string;
-    chapitre_uuid?: string;
-    district_uuid?: string;
-    groupe_uuid?: string;
-    department_uuid?: string;
-    division_uuid?: string;
-  }
-): Promise<ExcelJS.Workbook> {
-  // Vérifier que l'utilisateur a un member_uuid
-  if (!memberUuid) {
-    throw new NotFoundException('Utilisateur non associé à un membre');
-  }
-
-  const member = await this.memberRepository.findOne({
-    where: { uuid: memberUuid },
-  });
-
-  if (!member || !structureUuid) {
-    throw new NotFoundException('Structure du membre non trouvée');
-  }
-
-  // Récupérer toutes les sous-structures accessibles
-  const allStructureUuids = await this.getAllSubStructureUuids(structureUuid);
-
-  // Construire la requête de base pour les membres
-  let membersQuery = this.memberRepository
-    .createQueryBuilder('m')
-    .leftJoin('structures', 's', 's.uuid = m.structure_uuid')
-    .leftJoin('departments', 'd', 'd.uuid = m.department_uuid')
-    .leftJoin('divisions', 'div', 'div.uuid = m.division_uuid')
-    .select([
-      'm.uuid AS uuid',
-      'm.matricule AS matricule',
-      'm.firstname AS firstname',
-      'm.lastname AS lastname',
-      'm.gender AS gender',
-      'm.birth_date AS birth_date',
-      'm.phone AS phone',
-      'm.email AS email',
-      'm.structure_uuid AS structure_uuid',
-      's.name AS structure_name',
-      'm.department_uuid AS department_uuid',
-      'd.name AS department_name',
-      'm.division_uuid AS division_uuid',
-      'div.name AS division_name',
-      'm.has_gohonzon AS has_gohonzon',
-      'm.membership_date AS membership_date',
-    ])
-    .where('m.structure_uuid IN (:...uuids)', { uuids: allStructureUuids })
-    .andWhere('m.deleted_at IS NULL');
-
-  // Appliquer les filtres
-  if (filterParams?.search) {
-    membersQuery = membersQuery.andWhere(
-      "(LOWER(m.firstname) LIKE LOWER(:search) OR LOWER(m.lastname) LIKE LOWER(:search) OR LOWER(m.matricule) LIKE LOWER(:search) OR LOWER(m.phone) LIKE LOWER(:search) OR LOWER(m.email) LIKE LOWER(:search))",
-      { search: `%${filterParams.search}%` }
+        structure_uuid,
+        filterParams
+      },
+      user_uuid,
     );
-  }
 
-  if (filterParams?.gender) {
-    membersQuery = membersQuery.andWhere('m.gender = :gender', {
-      gender: filterParams.gender
+    //  Lancer le traitement en arrière-plan AVEC le workbook
+    setImmediate(async () => {
+      try {
+        // Gestion des filtres de structure
+        let baseStructureUuid = structure_uuid;
+
+        if (filterParams?.region_uuid) baseStructureUuid = filterParams.region_uuid;
+        if (filterParams?.centre_uuid) baseStructureUuid = filterParams.centre_uuid;
+        if (filterParams?.chapitre_uuid) baseStructureUuid = filterParams.chapitre_uuid;
+        if (filterParams?.district_uuid) baseStructureUuid = filterParams.district_uuid;
+        if (filterParams?.groupe_uuid) baseStructureUuid = filterParams.groupe_uuid;
+
+        await this.exportJobService.updateJobProgress(job.uuid, 30);
+
+        //  Générer le workbook ICI (dans le même service)
+        const workbook = await this.generateMembersWorkbook(
+          member_uuid,
+          baseStructureUuid,
+          filterParams,
+        );
+
+        await this.exportJobService.updateJobProgress(job.uuid, 60);
+
+        //  Passer le workbook au processor
+        await this.exportProcessorService.processMembersExport(job.uuid, workbook);
+
+      } catch (error) {
+        console.error('Export members error:', error);
+        await this.exportJobService.updateJobStatus(
+          job.uuid,
+          ExportJobStatus.FAILED,
+          error.message
+        );
+      }
     });
+
+    return {
+      success: true,
+      message: 'Export des membres en cours de traitement',
+      jobId: job.uuid,
+      checkStatusUrl: `/members/export/status/${job.uuid}`,
+    };
   }
 
-  if (filterParams?.has_gohonzon !== undefined) {
-    membersQuery = membersQuery.andWhere('m.has_gohonzon = :hasGohonzon', {
-      hasGohonzon: filterParams.has_gohonzon
-    });
+  // Méthode existante qui utilise generateMembersWorkbook
+  async asyncExportMembersToExcel(
+    memberUuid: string,
+    structureUuid: string,
+    res: Response,
+    filterParams?: any,
+  ): Promise<void> {
+    const workbook = await this.generateMembersWorkbook(
+      memberUuid,
+      structureUuid,
+      filterParams,
+    );
+
+    const fileName = `membres_export_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+    await workbook.xlsx.write(res);
+    res.end();
   }
 
-  if (filterParams?.department_uuid) {
-    membersQuery = membersQuery.andWhere('m.department_uuid = :deptUuid', {
-      deptUuid: filterParams.department_uuid
-    });
-  }
 
-  if (filterParams?.division_uuid) {
-    membersQuery = membersQuery.andWhere('m.division_uuid = :divUuid', {
-      divUuid: filterParams.division_uuid
-    });
-  }
 
-  // Récupérer tous les membres (sans pagination)
-  const members = await membersQuery
-    .orderBy('m.firstname', 'ASC')
-    .addOrderBy('m.lastname', 'ASC')
-    .getRawMany();
+  // ... vos autres imports et code existant
 
-  // Récupérer les responsabilités des membres
-  const memberUuids = members.map(m => m.uuid);
-  let memberResponsibilities: any[] = [];
-
-  if (memberUuids.length > 0) {
-    memberResponsibilities = await this.memberRepository
-      .createQueryBuilder('m')
-      .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
-      .innerJoin('responsibilities', 'r', 'r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL')
-      .leftJoin('levels', 'l', 'l.uuid = r.level_uuid')
-      .select([
-        'm.uuid AS member_uuid',
-        'r.uuid AS responsibility_uuid',
-        'r.name AS responsibility_name',
-        'r.level_uuid AS level_uuid',
-        'l.name AS level_name',
-        'l.order AS level_order',
-      ])
-      .where('m.uuid IN (:...uuids)', { uuids: memberUuids })
-      .andWhere('m.deleted_at IS NULL')
-      .getRawMany();
-  }
-
-  // Grouper les responsabilités par membre
-  const responsibilitiesMap = new Map<string, any[]>();
-  for (const mr of memberResponsibilities) {
-    if (!responsibilitiesMap.has(mr.member_uuid)) {
-      responsibilitiesMap.set(mr.member_uuid, []);
+  // Ajoutez cette méthode dans StructureTreeService
+  async generateMembersWorkbook(
+    memberUuid: string,
+    structureUuid: string,
+    filterParams?: {
+      search?: string;
+      gender?: 'homme' | 'femme';
+      has_gohonzon?: boolean;
+      region_uuid?: string;
+      centre_uuid?: string;
+      chapitre_uuid?: string;
+      district_uuid?: string;
+      groupe_uuid?: string;
+      department_uuid?: string;
+      division_uuid?: string;
     }
-    responsibilitiesMap.get(mr.member_uuid)!.push({
-      uuid: mr.responsibility_uuid,
-      name: mr.responsibility_name,
-      level_uuid: mr.level_uuid,
-      level_name: mr.level_name,
-      level_order: mr.level_order,
+  ): Promise<ExcelJS.Workbook> {
+    // Vérifier que l'utilisateur a un member_uuid
+    if (!memberUuid) {
+      throw new NotFoundException('Utilisateur non associé à un membre');
+    }
+
+    const member = await this.memberRepository.findOne({
+      where: { uuid: memberUuid },
     });
-  }
 
-  // Construire les structure_tree pour chaque membre
-  const memberStructureTreeMap = new Map<string, any>();
+    if (!member || !structureUuid) {
+      throw new NotFoundException('Structure du membre non trouvée');
+    }
 
-  for (const m of members) {
-    if (!m.structure_uuid) continue;
+    // Récupérer toutes les sous-structures accessibles
+    const allStructureUuids = await this.getAllSubStructureUuids(structureUuid);
 
-    const memberResponsibilitiesList = responsibilitiesMap.get(m.uuid) || [];
+    // Construire la requête de base pour les membres
+    let membersQuery = this.memberRepository
+      .createQueryBuilder('m')
+      .leftJoin('structures', 's', 's.uuid = m.structure_uuid')
+      .leftJoin('departments', 'd', 'd.uuid = m.department_uuid')
+      .leftJoin('divisions', 'div', 'div.uuid = m.division_uuid')
+      .select([
+        'm.uuid AS uuid',
+        'm.matricule AS matricule',
+        'm.firstname AS firstname',
+        'm.lastname AS lastname',
+        'm.gender AS gender',
+        'm.birth_date AS birth_date',
+        'm.phone AS phone',
+        'm.email AS email',
+        'm.structure_uuid AS structure_uuid',
+        's.name AS structure_name',
+        'm.department_uuid AS department_uuid',
+        'd.name AS department_name',
+        'm.division_uuid AS division_uuid',
+        'div.name AS division_name',
+        'm.has_gohonzon AS has_gohonzon',
+        'm.membership_date AS membership_date',
+      ])
+      .where('m.structure_uuid IN (:...uuids)', { uuids: allStructureUuids })
+      .andWhere('m.deleted_at IS NULL');
 
-    if (memberResponsibilitiesList.length > 0) {
-      const validResponsibilities = memberResponsibilitiesList.filter(r => r.level_order !== null);
+    // Appliquer les filtres
+    if (filterParams?.search) {
+      membersQuery = membersQuery.andWhere(
+        "(LOWER(m.firstname) LIKE LOWER(:search) OR LOWER(m.lastname) LIKE LOWER(:search) OR LOWER(m.matricule) LIKE LOWER(:search) OR LOWER(m.phone) LIKE LOWER(:search) OR LOWER(m.email) LIKE LOWER(:search))",
+        { search: `%${filterParams.search}%` }
+      );
+    }
 
-      if (validResponsibilities.length > 0) {
-        const highestLevelOrder = Math.min(
-          ...validResponsibilities.map(r => parseInt(r.level_order))
-        );
+    if (filterParams?.gender) {
+      membersQuery = membersQuery.andWhere('m.gender = :gender', {
+        gender: filterParams.gender
+      });
+    }
 
-        const tree = await this.getStructureTreeForResponsible(
-          m.structure_uuid,
-          highestLevelOrder
-        );
+    if (filterParams?.has_gohonzon !== undefined) {
+      membersQuery = membersQuery.andWhere('m.has_gohonzon = :hasGohonzon', {
+        hasGohonzon: filterParams.has_gohonzon
+      });
+    }
 
-        memberStructureTreeMap.set(m.uuid, tree);
+    if (filterParams?.department_uuid) {
+      membersQuery = membersQuery.andWhere('m.department_uuid = :deptUuid', {
+        deptUuid: filterParams.department_uuid
+      });
+    }
+
+    if (filterParams?.division_uuid) {
+      membersQuery = membersQuery.andWhere('m.division_uuid = :divUuid', {
+        divUuid: filterParams.division_uuid
+      });
+    }
+
+    // Récupérer tous les membres (sans pagination)
+    const members = await membersQuery
+      .orderBy('m.firstname', 'ASC')
+      .addOrderBy('m.lastname', 'ASC')
+      .getRawMany();
+
+    // Récupérer les responsabilités des membres
+    const memberUuids = members.map(m => m.uuid);
+    let memberResponsibilities: any[] = [];
+
+    if (memberUuids.length > 0) {
+      memberResponsibilities = await this.memberRepository
+        .createQueryBuilder('m')
+        .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
+        .innerJoin('responsibilities', 'r', 'r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL')
+        .leftJoin('levels', 'l', 'l.uuid = r.level_uuid')
+        .select([
+          'm.uuid AS member_uuid',
+          'r.uuid AS responsibility_uuid',
+          'r.name AS responsibility_name',
+          'r.level_uuid AS level_uuid',
+          'l.name AS level_name',
+          'l.order AS level_order',
+        ])
+        .where('m.uuid IN (:...uuids)', { uuids: memberUuids })
+        .andWhere('m.deleted_at IS NULL')
+        .getRawMany();
+    }
+
+    // Grouper les responsabilités par membre
+    const responsibilitiesMap = new Map<string, any[]>();
+    for (const mr of memberResponsibilities) {
+      if (!responsibilitiesMap.has(mr.member_uuid)) {
+        responsibilitiesMap.set(mr.member_uuid, []);
+      }
+      responsibilitiesMap.get(mr.member_uuid)!.push({
+        uuid: mr.responsibility_uuid,
+        name: mr.responsibility_name,
+        level_uuid: mr.level_uuid,
+        level_name: mr.level_name,
+        level_order: mr.level_order,
+      });
+    }
+
+    // Construire les structure_tree pour chaque membre
+    const memberStructureTreeMap = new Map<string, any>();
+
+    for (const m of members) {
+      if (!m.structure_uuid) continue;
+
+      const memberResponsibilitiesList = responsibilitiesMap.get(m.uuid) || [];
+
+      if (memberResponsibilitiesList.length > 0) {
+        const validResponsibilities = memberResponsibilitiesList.filter(r => r.level_order !== null);
+
+        if (validResponsibilities.length > 0) {
+          const highestLevelOrder = Math.min(
+            ...validResponsibilities.map(r => parseInt(r.level_order))
+          );
+
+          const tree = await this.getStructureTreeForResponsible(
+            m.structure_uuid,
+            highestLevelOrder
+          );
+
+          memberStructureTreeMap.set(m.uuid, tree);
+        } else {
+          const tree = await this.getStructureTreeForResponsible(
+            m.structure_uuid,
+            999
+          );
+          memberStructureTreeMap.set(m.uuid, tree);
+        }
       } else {
         const tree = await this.getStructureTreeForResponsible(
           m.structure_uuid,
@@ -2305,131 +2358,124 @@ async generateMembersWorkbook(
         );
         memberStructureTreeMap.set(m.uuid, tree);
       }
-    } else {
-      const tree = await this.getStructureTreeForResponsible(
-        m.structure_uuid,
-        999
-      );
-      memberStructureTreeMap.set(m.uuid, tree);
-    }
-  }
-
-  // Fonction helper pour extraire les level_names et les structure_names (en sautant le premier niveau)
-  const flattenStructureTree = (tree: any, skipFirst = true): { levelNames: string[], structureNames: string[] } => {
-    const levelNames: string[] = [];
-    const structureNames: string[] = [];
-
-    if (tree) {
-      if (!skipFirst) {
-        levelNames.push(tree.level_name || '');
-        structureNames.push(tree.name || '');
-      }
-
-      if (tree.children && tree.children.length > 0) {
-        tree.children.forEach((child: any) => {
-          const childResults = flattenStructureTree(child, false);
-          levelNames.push(...childResults.levelNames);
-          structureNames.push(...childResults.structureNames);
-        });
-      }
     }
 
-    return { levelNames, structureNames };
-  };
+    // Fonction helper pour extraire les level_names et les structure_names (en sautant le premier niveau)
+    const flattenStructureTree = (tree: any, skipFirst = true): { levelNames: string[], structureNames: string[] } => {
+      const levelNames: string[] = [];
+      const structureNames: string[] = [];
 
-  // Récupérer un arbre exemple pour déterminer les noms de niveaux (en sautant le premier)
-  const sampleTree = memberStructureTreeMap.values().next().value;
-  const { levelNames: structureLevelNames } = sampleTree ? flattenStructureTree(sampleTree, true) : { levelNames: [] };
+      if (tree) {
+        if (!skipFirst) {
+          levelNames.push(tree.level_name || '');
+          structureNames.push(tree.name || '');
+        }
 
-  // Créer le workbook Excel
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet('Membres');
+        if (tree.children && tree.children.length > 0) {
+          tree.children.forEach((child: any) => {
+            const childResults = flattenStructureTree(child, false);
+            levelNames.push(...childResults.levelNames);
+            structureNames.push(...childResults.structureNames);
+          });
+        }
+      }
 
-  // Définir les colonnes de base
-  const baseColumns = [
-    { header: 'Matricule', key: 'matricule', width: 15 },
-    { header: 'Nom', key: 'firstname', width: 20 },
-    { header: 'Prénom', key: 'lastname', width: 20 },
-    { header: 'Genre', key: 'gender', width: 10 },
-    { header: 'Date de naissance', key: 'birth_date', width: 15 },
-    { header: 'Téléphone', key: 'phone', width: 15 },
-    { header: 'Email', key: 'email', width: 25 },
-    { header: 'Département', key: 'department_name', width: 20 },
-    { header: 'Division', key: 'division_name', width: 20 },
-    { header: 'Gohonzon', key: 'has_gohonzon', width: 12 },
-    { header: 'Date adhésion', key: 'membership_date', width: 15 },
-    { header: 'Responsabilités', key: 'responsibilities', width: 40 },
-  ];
-
-  // Ajouter les colonnes pour la structure tree
-  const structureTreeColumns: { header: string; key: string; width: number }[] = [];
-
-  structureLevelNames.forEach((levelName: string, index: number) => {
-    structureTreeColumns.push({
-      header: levelName || `Structure Niveau ${index + 1}`,
-      key: `structure_level_${index}`,
-      width: 25,
-    });
-  });
-
-  worksheet.columns = [...baseColumns, ...structureTreeColumns];
-
-  // Styliser l'en-tête
-  worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  worksheet.getRow(1).fill = {
-    type: 'pattern',
-    pattern: 'solid',
-    fgColor: { argb: 'FF4472C4' },
-  };
-  worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
-
-  // Ajouter les données
-  members.forEach(member => {
-    const responsibilities = responsibilitiesMap.get(member.uuid) || [];
-    const responsibilitiesText = responsibilities
-      .map(r => `${r.name} (${r.level_name})`)
-      .join(', ');
-
-    const tree = memberStructureTreeMap.get(member.uuid);
-    const { structureNames: treeFlattened } = tree ? flattenStructureTree(tree, true) : { structureNames: [] };
-
-    const rowData: any = {
-      matricule: member.matricule || '',
-      lastname: member.lastname || '',
-      firstname: member.firstname || '',
-      gender: member.gender || '',
-      birth_date: member.birth_date ? new Date(member.birth_date).toLocaleDateString('fr-FR') : '',
-      phone: member.phone || '',
-      email: member.email || '',
-      department_name: member.department_name || '',
-      division_name: member.division_name || '',
-      has_gohonzon: member.has_gohonzon ? 'Oui' : 'Non',
-      membership_date: member.membership_date ? new Date(member.membership_date).toLocaleDateString('fr-FR') : '',
-      responsibilities: responsibilitiesText || '',
+      return { levelNames, structureNames };
     };
 
+    // Récupérer un arbre exemple pour déterminer les noms de niveaux (en sautant le premier)
+    const sampleTree = memberStructureTreeMap.values().next().value;
+    const { levelNames: structureLevelNames } = sampleTree ? flattenStructureTree(sampleTree, true) : { levelNames: [] };
+
+    // Créer le workbook Excel
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Membres');
+
+    // Définir les colonnes de base
+    const baseColumns = [
+      { header: 'Matricule', key: 'matricule', width: 15 },
+      { header: 'Nom', key: 'firstname', width: 20 },
+      { header: 'Prénom', key: 'lastname', width: 20 },
+      { header: 'Genre', key: 'gender', width: 10 },
+      { header: 'Date de naissance', key: 'birth_date', width: 15 },
+      { header: 'Téléphone', key: 'phone', width: 15 },
+      { header: 'Email', key: 'email', width: 25 },
+      { header: 'Département', key: 'department_name', width: 20 },
+      { header: 'Division', key: 'division_name', width: 20 },
+      { header: 'Gohonzon', key: 'has_gohonzon', width: 12 },
+      { header: 'Date adhésion', key: 'membership_date', width: 15 },
+      { header: 'Responsabilités', key: 'responsibilities', width: 40 },
+    ];
+
+    // Ajouter les colonnes pour la structure tree
+    const structureTreeColumns: { header: string; key: string; width: number }[] = [];
+
     structureLevelNames.forEach((levelName: string, index: number) => {
-      rowData[`structure_level_${index}`] = treeFlattened[index] || '';
+      structureTreeColumns.push({
+        header: levelName || `Structure Niveau ${index + 1}`,
+        key: `structure_level_${index}`,
+        width: 25,
+      });
     });
 
-    worksheet.addRow(rowData);
-  });
+    worksheet.columns = [...baseColumns, ...structureTreeColumns];
 
-  // Appliquer des bordures
-  worksheet.eachRow((row, rowNumber) => {
-    row.eachCell((cell) => {
-      cell.border = {
-        top: { style: 'thin' },
-        left: { style: 'thin' },
-        bottom: { style: 'thin' },
-        right: { style: 'thin' },
+    // Styliser l'en-tête
+    worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    worksheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4472C4' },
+    };
+    worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    // Ajouter les données
+    members.forEach(member => {
+      const responsibilities = responsibilitiesMap.get(member.uuid) || [];
+      const responsibilitiesText = responsibilities
+        .map(r => `${r.name} (${r.level_name})`)
+        .join(', ');
+
+      const tree = memberStructureTreeMap.get(member.uuid);
+      const { structureNames: treeFlattened } = tree ? flattenStructureTree(tree, true) : { structureNames: [] };
+
+      const rowData: any = {
+        matricule: member.matricule || '',
+        lastname: member.lastname || '',
+        firstname: member.firstname || '',
+        gender: member.gender || '',
+        birth_date: member.birth_date ? new Date(member.birth_date).toLocaleDateString('fr-FR') : '',
+        phone: member.phone || '',
+        email: member.email || '',
+        department_name: member.department_name || '',
+        division_name: member.division_name || '',
+        has_gohonzon: member.has_gohonzon ? 'Oui' : 'Non',
+        membership_date: member.membership_date ? new Date(member.membership_date).toLocaleDateString('fr-FR') : '',
+        responsibilities: responsibilitiesText || '',
       };
-    });
-  });
 
-  //  Retourner le workbook au lieu de l'envoyer via res
-  return workbook;
-}
+      structureLevelNames.forEach((levelName: string, index: number) => {
+        rowData[`structure_level_${index}`] = treeFlattened[index] || '';
+      });
+
+      worksheet.addRow(rowData);
+    });
+
+    // Appliquer des bordures
+    worksheet.eachRow((row, rowNumber) => {
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      });
+    });
+
+    //  Retourner le workbook au lieu de l'envoyer via res
+    return workbook;
+  }
 
 
 }

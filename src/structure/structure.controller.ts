@@ -230,6 +230,8 @@ async downloadMembersExport(
       return this.structureTreeService.getBeneficiaryByConnectedUser(
         user.member_uuid,
         user.responsibilities[0]?.structure?.uuid,
+        user.responsibilities[0]?.level_uuid,
+
         {
           search,
           gender,
