@@ -40,7 +40,7 @@ export class LocationService {
 
     if (predictions.length === 0) return [];
 
-    // 2️⃣ Optimisation : récupérer les détails des coordonnées avec un seul appel batch si possible
+    // Optimisation : récupérer les détails des coordonnées avec un seul appel batch si possible
     const results: LocationResult[] = [];
 
     for (const p of predictions) {
@@ -66,4 +66,6 @@ export class LocationService {
 
     return results;
   }
+
+  
 }
