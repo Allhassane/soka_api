@@ -59,17 +59,20 @@ export class MemberTravelService {
         return memberTravel;
     }
 
-    async delete(uuid: string) {
-        const memberTravel = await this.memberTravelRepository.findOne({ where: { uuid } });
+   async delete(uuid: string) {
+      const memberTravel = await this.memberTravelRepository.findOne({
+          where: { uuid: uuid }
+      });
 
-        if(!memberTravel){
-            throw new NotFoundException('Voyage non trouvé');
-        }
+      if(!memberTravel){
+          throw new NotFoundException('Voyage non trouvé');
+      }
 
-        await this.memberTravelRepository.softDelete(uuid);
+      // Utilisez l'objet entier ou l'UUID dans le where
+      await this.memberTravelRepository.delete({ uuid: uuid });
 
-        return {
-            message: 'Voyage supprimé avec succès',
-        };
-    }
+      return {
+          message: 'Voyage supprimé avec succès',
+      };
+  }
 }
