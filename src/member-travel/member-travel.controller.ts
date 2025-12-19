@@ -12,7 +12,7 @@ import { CreateMemberTravelDto } from './dtos/create-member-travel.dto';
 @UseGuards(JwtAuthGuard)
 export class MemberTravelController {
     constructor(private readonly memberTravelService: MemberTravelService) {}
-    
+
     @Post()
     @ApiOperation({ summary: 'Créer un voyage membre' })
     @ApiResponse({ status: 200, description: 'Voyage membre créé avec succès.' })
@@ -43,6 +43,7 @@ export class MemberTravelController {
     @ApiResponse({ status: 200, description: 'Voyage membre supprimé.' })
     @ApiResponse({ status: 404, description: 'Voyage membre non trouvé.' })
     delete(@Param('uuid') uuid: string) {
+      console.log(uuid);
         return this.memberTravelService.delete(uuid);
     }
 }
