@@ -6,6 +6,9 @@ import {
   Get,
   Headers as RequestHeaders,
   UnauthorizedException,
+  Patch,
+  Param,
+  Body,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
@@ -14,6 +17,7 @@ import { LoginDto } from './dtos/login.dto';
 import { JwtAuthGuard } from './guards/auth.guard';
 import { User } from 'src/users/entities/user.entity';
 import { SuccessMessage } from 'src/shared/decorators/success-message.decorator';
+import { ResetPasswordDto } from './dtos/reset-password.dto';
 
 @ApiTags('Authentification')
 @Controller('auth')
@@ -48,4 +52,13 @@ export class AuthController {
       'Déconnexion (JWT est stateless, supprimer le token coté client pour déconnexion)',
   })
   logout() {}
+
+
+  @Patch('reset-password/:uuid')
+async resetPassword(
+  @Param('uuid') uuid: string,
+  @Body() resetPasswordDto: ResetPasswordDto,
+) {
+  return this.authService.resetPassword(uuid, resetPasswordDto.newPassword);
+}
 }

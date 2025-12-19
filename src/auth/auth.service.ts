@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UserService } from '../users/user.service';
@@ -26,6 +26,10 @@ export class AuthService {
     private structureRepository: Repository<StructureEntity>,
     @InjectRepository(LevelEntity)
     private levelRepository: Repository<LevelEntity>,
+
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
+
   ) {}
 
   async validateUser(
@@ -305,184 +309,6 @@ export class AuthService {
 }
 
 
-/*
-  async login(user: User) {
-    const payload: JwtPayload = {
-      sub: user.id,
-      uuid: user.uuid,
-      member_uuid: user.member_uuid ?? null,
-      ...(user.email ? { email: user.email } : {}),
-      ...(user.phone_number ? { phone_number: user.phone_number } : {}),
-    };
-
-    const token = this.jwtService.sign(payload);
-    const decoded = this.jwtService.decode(token) as null | { exp?: number };
-
-    // Récupération des rôles de l'utilisateur
-    const roles = await this.userService.findUserRoles(user.uuid);
-
-    // Récupération des permissions globales liées au rôle de l'utilisateur
-    let globalPermissions: any[] = [];
-    let permissionsSource: 'user_role' | 'responsibility_role' | 'none' = 'none';
-
-    if (roles && roles.length > 0) {
-      const firstRole = roles[0];
-      const rolePermData = await this.roleService.findGlobalPermissions(firstRole.role_uuid);
-      globalPermissions = rolePermData.permissions || [];
-      if (globalPermissions.length > 0) {
-        permissionsSource = 'user_role';
-      }
-    }
-
-    // Récupération des informations du membre associé
-    let memberInfo: any = null;
-
-    if (user.member_uuid) {
-      const member = await this.memberRepository.findOne({
-        where: { uuid: user.member_uuid },
-      });
-
-      if (member) {
-        // Récupérer la structure du membre
-        let structureInfo: any = null;
-        let structureTree: any = null;
-
-        if (member.structure_uuid) {
-          const structure = await this.structureRepository.findOne({
-            where: { uuid: member.structure_uuid },
-          });
-
-          if (structure) {
-            let level: LevelEntity | null = null;
-            if (structure.level_uuid) {
-              level = await this.levelRepository.findOne({
-                where: { uuid: structure.level_uuid },
-              });
-            }
-
-            structureInfo = {
-              uuid: structure.uuid,
-              name: structure.name,
-              level_uuid: structure.level_uuid ?? null,
-              level_name: level?.name || 'Inconnu',
-            };
-          }
-        }
-
-        // Récupérer les responsabilités du membre avec le rôle associé
-        const responsibilities = await this.memberRepository
-          .createQueryBuilder('m')
-          .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
-          .innerJoin('responsibilities', 'r', 'r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL')
-          .leftJoin('levels', 'l', 'l.uuid = r.level_uuid')
-          .select([
-            'r.uuid AS responsibility_uuid',
-            'r.name AS responsibility_name',
-            'r.level_uuid AS level_uuid',
-            'l.name AS level_name',
-            'l.order AS level_order',
-            'r.role_uuid AS role_uuid',
-          ])
-          .where('m.uuid = :memberUuid', { memberUuid: user.member_uuid })
-          .andWhere('m.deleted_at IS NULL')
-          .getRawMany();
-
-        // Si l'utilisateur n'a pas de permissions et qu'il a des responsabilités,
-        // utiliser les permissions du rôle lié à sa responsabilité
-        if (globalPermissions.length === 0 && responsibilities.length > 0) {
-          const sortedResponsibilities = responsibilities
-            .filter(r => r.role_uuid)
-            .sort((a, b) => {
-              const orderA = a.level_order ? parseInt(a.level_order) : 999;
-              const orderB = b.level_order ? parseInt(b.level_order) : 999;
-              return orderA - orderB;
-            });
-
-          if (sortedResponsibilities.length > 0) {
-            const highestResponsibility = sortedResponsibilities[0];
-
-            const rolePermData = await this.roleService.findGlobalPermissions(
-              highestResponsibility.role_uuid
-            );
-
-            globalPermissions = rolePermData.permissions || [];
-
-            if (globalPermissions.length > 0) {
-              permissionsSource = 'responsibility_role';
-            }
-          }
-        }
-
-        // Si le membre est responsable, récupérer l'arbre de sa structure
-        if (responsibilities.length > 0 && member.structure_uuid) {
-          const validResponsibilities = responsibilities.filter(r => r.level_order !== null);
-
-          if (validResponsibilities.length > 0) {
-            const highestLevelOrder = Math.min(
-              ...validResponsibilities.map(r => parseInt(r.level_order))
-            );
-
-            structureTree = await this.getStructureTreeForResponsible(
-              member.structure_uuid,
-              highestLevelOrder
-            );
-          }
-        }
-
-        // Fonction pour trouver une structure par son level_uuid dans l'arbre
-        const findStructureByLevelUuid = (tree: any, levelUuid: string): { uuid: string; name: string } | null => {
-          if (!tree) return null;
-
-          if (tree.level_uuid === levelUuid) {
-            return { uuid: tree.uuid, name: tree.name };
-          }
-
-          if (tree.children && tree.children.length > 0) {
-            for (const child of tree.children) {
-              const found = findStructureByLevelUuid(child, levelUuid);
-              if (found) return found;
-            }
-          }
-
-          return null;
-        };
-
-        memberInfo = {
-          member_uuid: member.uuid,
-          firstname: member.firstname,
-          lastname: member.lastname,
-          fullname: `${member.firstname} ${member.lastname}`,
-          structure: structureInfo,
-          is_responsible: responsibilities.length > 0,
-          responsibilities: responsibilities.map(r => ({
-            uuid: r.responsibility_uuid,
-            name: r.responsibility_name,
-            level_uuid: r.level_uuid,
-            level_name: r.level_name,
-            structure: findStructureByLevelUuid(structureTree, r.level_uuid),
-          })),
-          structure_tree: structureTree,
-        };
-      }
-    }
-
-    return {
-      user: {
-        id: user.id,
-        uuid: user.uuid,
-        email: user.email ?? null,
-        phone_number: user.phone_number,
-        member: memberInfo,
-        roles,
-        global_permissions: globalPermissions,
-        permissions_source: permissionsSource,
-      },
-      access_token: token,
-      expires_in: typeof decoded?.exp === 'number' ? decoded.exp : null,
-    };
-  }
-*/
-
 /**
  * Récupère l'arbre de structure pour un responsable, filtré par son niveau
  */
@@ -491,6 +317,7 @@ export class AuthService {
  * - Remonte jusqu'à la racine (NATIONAL)
  * - Descend jusqu'au niveau de sa responsabilité
  */
+
   private async getStructureTreeForResponsible(
     structureUuid: string,
     responsibleLevelOrder: number
@@ -658,6 +485,7 @@ export class AuthService {
 
     return filterTree(rootStructure, pathToRoot, responsibleLevelOrder);
   }
+
   async getAuthenticatedUser(token: string): Promise<Omit<User, 'password'>> {
     try {
       const decoded: unknown = this.jwtService.verify(token);
@@ -685,4 +513,31 @@ export class AuthService {
       throw new UnauthorizedException('Token invalide ou expiré');
     }
   }
+
+  async resetPassword(uuid: string, newPassword: string) {
+  // 1. Récupérer l'utilisateur
+  const user = await this.userRepository.findOne({
+    where: { uuid: uuid },
+  });
+
+  if (!user) {
+    throw new NotFoundException('Utilisateur non trouvé');
+  }
+
+  // Hasher le nouveau mot de passe
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+  // Mettre à jour le mot de passe
+  await this.userRepository.update(
+    { uuid: user.uuid },
+    {
+      password: hashedPassword,
+    }
+  );
+
+  return {
+    message: 'Mot de passe modifié avec succès',
+  };
+}
+
 }
