@@ -2184,10 +2184,7 @@ export class StructureTreeService {
 
 
 
-  // ... vos autres imports et code existant
-
-  // Ajoutez cette méthode dans StructureTreeService
-  async generateMembersWorkbook(
+async generateMembersWorkbook(
     memberUuid: string,
     structureUuid: string,
     filterParams?: {
@@ -2225,14 +2222,36 @@ export class StructureTreeService {
       .leftJoin('structures', 's', 's.uuid = m.structure_uuid')
       .leftJoin('departments', 'd', 'd.uuid = m.department_uuid')
       .leftJoin('divisions', 'div', 'div.uuid = m.division_uuid')
+      .leftJoin('civilities', 'c', 'c.uuid = m.civility_uuid')
+      .leftJoin('marital_status', 'ms', 'ms.uuid = m.marital_status_uuid')
+      .leftJoin('countries', 'ctry', 'ctry.uuid = m.country_uuid')
+      .leftJoin('cities', 'city', 'city.uuid = m.city_uuid')
+      .leftJoin('formations', 'f', 'f.uuid = m.formation_uuid')
+      .leftJoin('jobs', 'j', 'j.uuid = m.job_uuid')
+      .leftJoin('organisation_cities', 'oc', 'oc.uuid = m.organisation_city_uuid')
       .select([
         'm.uuid AS uuid',
         'm.matricule AS matricule',
         'm.firstname AS firstname',
         'm.lastname AS lastname',
+        'm.civility_uuid AS civility_uuid',
+        'c.name AS civility_name',
+        'm.marital_status_uuid AS marital_status_uuid',
+        'ms.name AS marital_status_name',
+        'm.country_uuid AS country_uuid',
+        'ctry.name AS country_name',
+        'm.city_uuid AS city_uuid',
+        'city.name AS city_name',
+        'm.formation_uuid AS formation_uuid',
+        'f.name AS formation_name',
+        'm.job_uuid AS job_uuid',
+        'j.name AS job_name',
+        'm.organisation_city_uuid AS organisation_city_uuid',
+        'oc.name AS organisation_city',
         'm.gender AS gender',
         'm.birth_date AS birth_date',
         'm.phone AS phone',
+        'm.phone_whatsapp AS phone_whatsapp',
         'm.email AS email',
         'm.structure_uuid AS structure_uuid',
         's.name AS structure_name',
@@ -2242,6 +2261,18 @@ export class StructureTreeService {
         'div.name AS division_name',
         'm.has_gohonzon AS has_gohonzon',
         'm.membership_date AS membership_date',
+        'm.sokahan_byakuren AS sokahan_byakuren',
+        'm.spouse_name AS spouse_name',
+        'm.spouse_member AS spouse_member',
+        'm.childrens AS childrens',
+        'm.tutor_name AS tutor_name',
+        'm.tutor_phone AS tutor_phone',
+        'm.has_tokusso AS has_tokusso',
+        'm.date_tokusso AS date_tokusso',
+        'm.has_omamori AS has_omamori',
+        'm.date_omamori AS date_omamori',
+        'm.longitude AS longitude',
+        'm.latitude AS latitude',
       ])
       .where('m.structure_uuid IN (:...uuids)', { uuids: allStructureUuids })
       .andWhere('m.deleted_at IS NULL');
@@ -2307,6 +2338,46 @@ export class StructureTreeService {
         .getRawMany();
     }
 
+    // Récupérer les accessoires des membres
+    let memberAccessories: any[] = [];
+
+    if (memberUuids.length > 0) {
+      memberAccessories = await this.memberRepository
+        .createQueryBuilder('m')
+        .innerJoin('member_accessories', 'ma', 'ma.member_uuid = m.uuid AND ma.deleted_at IS NULL')
+        .innerJoin('accessories', 'acc', 'acc.uuid = ma.accessory_uuid AND acc.deleted_at IS NULL')
+        .select([
+          'm.uuid AS member_uuid',
+          'acc.uuid AS accessory_uuid',
+          'acc.name AS accessory_name',
+        ])
+        .where('m.uuid IN (:...uuids)', { uuids: memberUuids })
+        .andWhere('m.deleted_at IS NULL')
+        .getRawMany();
+    }
+
+    // Récupérer les voyages des membres
+    let memberTravels: any[] = [];
+
+    if (memberUuids.length > 0) {
+      memberTravels = await this.memberRepository
+        .createQueryBuilder('m')
+        .innerJoin('member_travels', 'mt', 'mt.member_uuid = m.uuid AND mt.deleted_at IS NULL')
+        .leftJoin('countries', 'tc', 'tc.uuid = mt.country_uuid')
+        .select([
+          'm.uuid AS member_uuid',
+          'mt.uuid AS travel_uuid',
+          'mt.country_uuid AS travel_country_uuid',
+          'tc.name AS travel_country_name',
+          'mt.traveled_at AS traveled_at',
+          'mt.about AS travel_about',
+        ])
+        .where('m.uuid IN (:...uuids)', { uuids: memberUuids })
+        .andWhere('m.deleted_at IS NULL')
+        .orderBy('mt.traveled_at', 'DESC') // Les voyages les plus récents en premier
+        .getRawMany();
+    }
+
     // Grouper les responsabilités par membre
     const responsibilitiesMap = new Map<string, any[]>();
     for (const mr of memberResponsibilities) {
@@ -2319,6 +2390,33 @@ export class StructureTreeService {
         level_uuid: mr.level_uuid,
         level_name: mr.level_name,
         level_order: mr.level_order,
+      });
+    }
+
+    // Grouper les accessoires par membre
+    const accessoriesMap = new Map<string, any[]>();
+    for (const ma of memberAccessories) {
+      if (!accessoriesMap.has(ma.member_uuid)) {
+        accessoriesMap.set(ma.member_uuid, []);
+      }
+      accessoriesMap.get(ma.member_uuid)!.push({
+        uuid: ma.accessory_uuid,
+        name: ma.accessory_name,
+      });
+    }
+
+    // Grouper les voyages par membre
+    const travelsMap = new Map<string, any[]>();
+    for (const mt of memberTravels) {
+      if (!travelsMap.has(mt.member_uuid)) {
+        travelsMap.set(mt.member_uuid, []);
+      }
+      travelsMap.get(mt.member_uuid)!.push({
+        uuid: mt.travel_uuid,
+        country_uuid: mt.travel_country_uuid,
+        country_name: mt.travel_country_name,
+        traveled_at: mt.traveled_at,
+        about: mt.travel_about,
       });
     }
 
@@ -2394,17 +2492,40 @@ export class StructureTreeService {
     // Définir les colonnes de base
     const baseColumns = [
       { header: 'Matricule', key: 'matricule', width: 15 },
-      { header: 'Nom', key: 'firstname', width: 20 },
-      { header: 'Prénom', key: 'lastname', width: 20 },
+      { header: 'Nom', key: 'lastname', width: 20 },
+      { header: 'Prénom', key: 'firstname', width: 20 },
       { header: 'Genre', key: 'gender', width: 10 },
       { header: 'Date de naissance', key: 'birth_date', width: 15 },
+      { header: 'Lieu de naissance', key: 'birth_city', width: 15 },
+      { header: 'Civilité', key: 'civility_name', width: 15 },
+      { header: 'Situation matrimoniale', key: 'marital_status_name', width: 15 },
+      { header: 'Nom du conjoint', key: 'spouse_name', width: 20 },
+      { header: 'Membre de la famille', key: 'spouse_member', width: 15 },
+      { header: 'Nombre d\'enfants', key: 'childrens', width: 15 },
+      { header: 'Pays', key: 'country_name', width: 15 },
+      { header: 'Ville', key: 'city_name', width: 15 },
+      { header: 'Formation', key: 'formation_name', width: 20 },
+      { header: 'Profession', key: 'job_name', width: 20 },
       { header: 'Téléphone', key: 'phone', width: 15 },
+      { header: 'WhatsApp', key: 'phone_whatsapp', width: 15 },
+      { header: 'Nom du tuteur', key: 'tutor_name', width: 20 },
+      { header: 'Téléphone du tuteur', key: 'tutor_phone', width: 15 },
+      { header: 'Ville de l\'organisation', key: 'organisation_city', width: 20 },
+      { header: 'Accessoires', key: 'accessories', width: 30 },
+      { header: 'Voyages', key: 'travels', width: 40 },
       { header: 'Email', key: 'email', width: 25 },
       { header: 'Département', key: 'department_name', width: 20 },
       { header: 'Division', key: 'division_name', width: 20 },
       { header: 'Gohonzon', key: 'has_gohonzon', width: 12 },
       { header: 'Date adhésion', key: 'membership_date', width: 15 },
+      { header: 'Sokahan Byakuren', key: 'sokahan_byakuren', width: 15 },
+      { header: 'Tokusso', key: 'has_tokusso', width: 12 },
+      { header: 'Date Tokusso', key: 'date_tokusso', width: 15 },
+      { header: 'Omamori', key: 'has_omamori', width: 12 },
+      { header: 'Date Omamori', key: 'date_omamori', width: 15 },
       { header: 'Responsabilités', key: 'responsibilities', width: 40 },
+      { header: 'Longitude', key: 'longitude', width: 15 },
+      { header: 'Latitude', key: 'latitude', width: 15 },
     ];
 
     // Ajouter les colonnes pour la structure tree
@@ -2436,6 +2557,22 @@ export class StructureTreeService {
         .map(r => `${r.name} (${r.level_name})`)
         .join(', ');
 
+      const accessories = accessoriesMap.get(member.uuid) || [];
+      const accessoriesText = accessories
+        .map(a => a.name)
+        .join(', ');
+
+      // Récupérer les voyages du membre
+      const travels = travelsMap.get(member.uuid) || [];
+      const travelsText = travels
+        .map(t => {
+          const date = t.traveled_at ? new Date(t.traveled_at).toLocaleDateString('fr-FR') : '';
+          const country = t.country_name || 'Pays inconnu';
+          const about = t.about ? ` (${t.about})` : '';
+          return `${country} - ${date}${about}`;
+        })
+        .join(' | ');
+
       const tree = memberStructureTreeMap.get(member.uuid);
       const { structureNames: treeFlattened } = tree ? flattenStructureTree(tree, true) : { structureNames: [] };
 
@@ -2444,14 +2581,37 @@ export class StructureTreeService {
         lastname: member.lastname || '',
         firstname: member.firstname || '',
         gender: member.gender || '',
+        civility_name: member.civility_name || '',
+        marital_status_name: member.marital_status_name || '',
+        spouse_name: member.spouse_name || '',
+        spouse_member: member.spouse_member || '',
+        childrens: member.childrens || '',
+        country_name: member.country_name || '',
+        city_name: member.city_name || '',
+        formation_name: member.formation_name || '',
+        job_name: member.job_name || '',
+        organisation_city: member.organisation_city || '',
         birth_date: member.birth_date ? new Date(member.birth_date).toLocaleDateString('fr-FR') : '',
+        birth_city: member.city_name || '',
         phone: member.phone || '',
+        phone_whatsapp: member.phone_whatsapp || '',
+        tutor_name: member.tutor_name || '',
+        tutor_phone: member.tutor_phone || '',
+        longitude: member.longitude || '',
+        latitude: member.latitude || '',
         email: member.email || '',
         department_name: member.department_name || '',
         division_name: member.division_name || '',
+        sokahan_byakuren: member.sokahan_byakuren ? 'Oui' : 'Non',
         has_gohonzon: member.has_gohonzon ? 'Oui' : 'Non',
+        has_tokusso: member.has_tokusso ? 'Oui' : 'Non',
+        date_tokusso: member.date_tokusso ? new Date(member.date_tokusso).toLocaleDateString('fr-FR') : '',
+        has_omamori: member.has_omamori ? 'Oui' : 'Non',
+        date_omamori: member.date_omamori ? new Date(member.date_omamori).toLocaleDateString('fr-FR') : '',
         membership_date: member.membership_date ? new Date(member.membership_date).toLocaleDateString('fr-FR') : '',
         responsibilities: responsibilitiesText || '',
+        accessories: accessoriesText || '',
+        travels: travelsText || '',
       };
 
       structureLevelNames.forEach((levelName: string, index: number) => {
@@ -2473,9 +2633,7 @@ export class StructureTreeService {
       });
     });
 
-    //  Retourner le workbook au lieu de l'envoyer via res
     return workbook;
   }
-
 
 }
