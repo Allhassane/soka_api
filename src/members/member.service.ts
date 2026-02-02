@@ -35,6 +35,7 @@ import { MemberList } from 'src/shared/interfaces/member.interface';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ok } from 'assert';
 import { MemberResponsibilityService } from 'src/⁠member-responsibility/⁠member-responsibility.service';
+import { StructureTreeService } from 'src/structure/structure-tree.service';
 
 @Injectable()
 export class MemberService {
@@ -92,8 +93,9 @@ export class MemberService {
     private readonly structureService: StructureService,
 
     @Inject(forwardRef(() => MemberResponsibilityService))
-    private readonly memberResponsibilityService: MemberResponsibilityService
+    private readonly memberResponsibilityService: MemberResponsibilityService,
 
+    private structureTreeService: StructureTreeService,
 
   ) {}
 
@@ -421,7 +423,7 @@ export class MemberService {
   }
 
 
-  async findAll(
+/*   async findAll(
     admin_uuid: string,
     page: number = 1,
     limit: number = 15,
@@ -457,8 +459,90 @@ export class MemberService {
       },
       data: results,
     };
+  } */
+
+
+async findAll(
+  admin_uuid: string,
+  page: number = 1,
+  limit: number = 15,
+  filters: {
+    region_uuid?: string;
+    centre_uuid?: string;
+    chapitre_uuid?: string;
+    district_uuid?: string;
+    groupe_uuid?: string;
+    department_uuid?: string;
+    division_uuid?: string;
+  } = {},
+): Promise<any> {
+  const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+  if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
+
+  const skip = (page - 1) * limit;
+
+  // Déterminer la structure cible selon les filtres (même logique que getMemberStatsByConnectedUser)
+  const targetStructureUuid =
+    filters.groupe_uuid ||
+    filters.district_uuid ||
+    filters.chapitre_uuid ||
+    filters.centre_uuid ||
+    filters.region_uuid ||
+    null;
+
+  // Construire la requête
+  let query = this.memberRepo
+    .createQueryBuilder('m')
+    .leftJoinAndSelect('m.member_accessories', 'ma')
+    .where('m.deleted_at IS NULL');
+
+  // Si une structure est ciblée, récupérer ses sous-structures et filtrer
+  if (targetStructureUuid) {
+    const subStructureUuids = await this.structureTreeService.getAllSubStructureUuids(targetStructureUuid);
+    query = query.andWhere('m.structure_uuid IN (:...structureUuids)', {
+      structureUuids: subStructureUuids,
+    });
   }
 
+  // Filtres department et division : ces champs existent bien sur le membre
+  if (filters.department_uuid) {
+    query = query.andWhere('m.department_uuid = :department_uuid', {
+      department_uuid: filters.department_uuid,
+    });
+  }
+
+  if (filters.division_uuid) {
+    query = query.andWhere('m.division_uuid = :division_uuid', {
+      division_uuid: filters.division_uuid,
+    });
+  }
+
+  const [results, total] = await query
+    .orderBy('m.firstname', 'ASC')
+    .skip(skip)
+    .take(limit)
+    .getManyAndCount();
+
+  await this.logService.logAction(
+    'members-findAll',
+    admin.id,
+    `Récupération des membres (page ${page}, limit ${limit})`,
+  );
+
+  return {
+    success: true,
+    message: 'Liste paginée récupérée avec succès',
+    meta: {
+      current_page: page,
+      limit,
+      total_items: total,
+      total_pages: Math.ceil(total / limit),
+      has_next: page * limit < total,
+      has_prev: page > 1,
+    },
+    data: results,
+  };
+}
 
     /** Trouver un membre par UUID */
   async findOne(uuid: string, admin_uuid: string): Promise<MemberEntity> {
@@ -767,12 +851,12 @@ async getStatsByStructure(uuid: string, admin_uuid: string) {
     relations: ['division'],
   });
 
-  
+
   const jeunes_sans_division = await this.memberRepo.count({
     where: {
       structure_uuid: In(sous_groupes),
       department: { name: 'JEUNESSE' },
-      division: IsNull(), 
+      division: IsNull(),
     },
     relations: ['department', 'division'],
   });
@@ -878,6 +962,6 @@ async getAllMembersGroupedByStats(uuid: string, admin_uuid: string) {
     },
   };
 }
-  
+
 
 }

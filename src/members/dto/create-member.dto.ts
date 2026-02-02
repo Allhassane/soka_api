@@ -84,6 +84,12 @@ export class CreateMemberDto {
   @IsUUID()
   city_uuid?: string;
 
+
+  @ApiPropertyOptional({ description: 'Location' })
+  @IsOptional()
+  @IsString()
+  location?: string;
+
   @ApiPropertyOptional({ description: 'Nom du quartier ou localité' })
   @IsOptional()
   @IsString()

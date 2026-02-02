@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException,ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import { PaymentEntity, PaymentStatus } from './entities/payment.entity';
 import { CreatePaymentDto, PaymentSource } from './dto/create-payment.dto';
@@ -26,6 +26,7 @@ import { ExportProcessorService } from 'src/export-async/export-processor.servic
 import * as fs from 'fs';
 import * as path from 'path';
 import { ExportJobStatus } from 'src/export-async/entities/export-job.entity';
+import { filter } from 'rxjs';
 
 @Injectable()
 export class PaymentService {
@@ -803,6 +804,7 @@ async findTransactionsForSubGroupsExport(
     throw new NotFoundException("Aucun sous-groupe trouvé");
   }
 
+  console.log('Sous-groupes pour export:', sousGroups);
   // Query principale SANS pagination
   const qb = this.paymentRepo
     .createQueryBuilder('p')
@@ -1073,10 +1075,36 @@ async findTransactionsForSubGroupsExport(
       { source_uuid, admin_uuid, status },
       admin_uuid,
     );
+    let source_name = '';
+    const filterParams = { source_uuid, status };
+    if (source_uuid) {
+      // Essayer de trouver dans les donations
+      const sourceDonate = await this.donationRepo.findOne({
+        where: { uuid: source_uuid }
+      });
 
+      if (sourceDonate) {
+        source_name = `zaimu_${this.sanitizeFileName(sourceDonate.name)}`;
+      } else {
+        // Seulement si pas trouvé dans donations, chercher dans subscriptions
+        const sourceSubscription = await this.subscriptionRepo.findOne({
+          where: { uuid: source_uuid }
+        });
+
+        if (sourceSubscription) {
+          source_name = `souscription_${this.sanitizeFileName(sourceSubscription.name)}`;
+        }
+      }
+    }
+
+    //console.log('Source name for export file:', source_name,source_uuid);
+
+    let file_name = await this.generateTransactionExportFileName(source_name,member_structure_uuid,filterParams);
+    //console.log('Nom de fichier généré pour l\'export :', file_name);
     // Lancer le traitement en arrière-plan (sans await)
     setImmediate(() => {
-      this.exportProcessorService.processTransactionsExport(job.uuid, member_uuid,member_structure_uuid)
+      //console.log('Démarrage du traitement d\'export en arrière-plan pour le job', file_name);
+      this.exportProcessorService.processTransactionsExport(job.uuid, member_uuid,member_structure_uuid,file_name)
         .catch(error => console.error('Export error:', error));
     });
 
@@ -1108,32 +1136,82 @@ async findTransactionsForSubGroupsExport(
   }
 
 
-async downloadTransactionsExport(jobUuid: string, user_uuid: string) {
-  // Récupérer le job
-  const job = await this.exportJobService.getJob(jobUuid);
+  async downloadTransactionsExport(jobUuid: string, user_uuid: string) {
+    // Récupérer le job
+    const job = await this.exportJobService.getJob(jobUuid);
 
-  // Vérifier que l'utilisateur a accès à ce job
-  if (job.user_uuid !== user_uuid) {
-    throw new ForbiddenException('Vous n\'avez pas accès à ce fichier');
+    // Vérifier que l'utilisateur a accès à ce job
+    if (job.user_uuid !== user_uuid) {
+      throw new ForbiddenException('Vous n\'avez pas accès à ce fichier');
+    }
+
+    // Vérifier que le job est terminé
+    if (job.status !== ExportJobStatus.COMPLETED) {
+      throw new BadRequestException(`Export pas encore terminé (statut: ${job.status})`);
+    }
+
+    // Vérifier que le fichier existe
+    if (!job.file_path || !fs.existsSync(job.file_path)) {
+      throw new NotFoundException('Fichier d\'export introuvable');
+    }
+
+    // Lire le fichier
+    const buffer = fs.readFileSync(job.file_path);
+
+    return {
+      buffer,
+      filename: job.file_name,
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    };
   }
 
-  // Vérifier que le job est terminé
-  if (job.status !== ExportJobStatus.COMPLETED) {
-    throw new BadRequestException(`Export pas encore terminé (statut: ${job.status})`);
+
+  private async generateTransactionExportFileName(source_name: string, structure_uuid: string, filterParams: any): Promise<string> {
+      const timestamp = new Date().toISOString().split('T')[0];
+      const parts: string[] = ['export_transactions_membres'];
+
+      // Déterminer la structure de base (ordre de priorité du plus spécifique au plus général)
+      const baseStructureUuid =
+        filterParams?.groupe_uuid ||
+        filterParams?.district_uuid ||
+        filterParams?.chapitre_uuid ||
+        filterParams?.centre_uuid ||
+        filterParams?.region_uuid ||
+        structure_uuid;
+
+      // Récupérer toutes les structures nécessaires en une seule requête
+      const structureUuids = [
+        structure_uuid,
+        filterParams?.region_uuid,
+        filterParams?.centre_uuid,
+        filterParams?.chapitre_uuid,
+        filterParams?.district_uuid,
+        filterParams?.groupe_uuid,
+      ].filter(Boolean);
+
+      const structures = await this.structureService.findWithLevel(structureUuids);
+
+      // Construire le nom de fichier
+      const baseStructure = structures.find(s => s.uuid === baseStructureUuid);
+
+      if (baseStructure) {
+        // Ajouter niveau et nom de la structure de base
+        if (baseStructure.level) {
+          parts.push(this.sanitizeFileName(baseStructure.level.name));
+        }
+        parts.push(this.sanitizeFileName(baseStructure.name));
+      }
+
+      // Ajouter date
+      parts.push(timestamp);
+      //console.log('source du fichier export :', source_name);
+      return `${source_name}_${parts.join('_')}.xlsx`;
   }
 
-  // Vérifier que le fichier existe
-  if (!job.file_path || !fs.existsSync(job.file_path)) {
-    throw new NotFoundException('Fichier d\'export introuvable');
+  private sanitizeFileName(name: string): string {
+    return name
+      .replace(/[^a-zA-Z0-9]/g, '_')
+      .replace(/_+/g, '_')
+      .toLowerCase();
   }
-
-  // Lire le fichier
-  const buffer = fs.readFileSync(job.file_path);
-
-  return {
-    buffer,
-    filename: job.file_name,
-    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  };
-}
 }

@@ -86,6 +86,9 @@ export class MemberEntity extends DateTimeEntity {
   @Column({ type: 'varchar', length: 100, nullable: true, collation: 'utf8mb4_unicode_ci' })
   spouse_name: string;
 
+  @Column({ type: 'varchar', length: 100, nullable: true, collation: 'utf8mb4_unicode_ci' })
+  location: string;
+
   @Column({ type: 'boolean', default: false })
   spouse_member: boolean;
 

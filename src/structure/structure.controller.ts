@@ -10,6 +10,7 @@ import {
   Query,
   Req,
   Res,
+  Request,
 } from '@nestjs/common';
 import { CreateStructureDto } from './dto/create-structure.dto';
 import { StructureService } from './structure.service';
@@ -25,7 +26,7 @@ import {
 } from '@nestjs/swagger';
 import { UpdateStructureDto } from './dto/update-structure.dto';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
-import { PaginationMemberParams, StructureTreeService } from './structure-tree.service';
+import { MemberStatsFilters, PaginationMemberParams, StructureTreeService } from './structure-tree.service';
 import { StructureTreeNodeDto } from './dto/tree.dto';
 
 @ApiTags('Structures')
@@ -281,6 +282,116 @@ async downloadMembersExport(
       }
     );
   }
+
+@Post('stats/export/:category')
+@UseGuards(JwtAuthGuard)
+@ApiOperation({
+  summary: 'Exporter les membres par catégorie de statistiques',
+  description: 'Génère un fichier Excel contenant la liste des membres selon la catégorie choisie (total, hommes, femmes, départements, divisions)'
+})
+@ApiParam({
+  name: 'category',
+  enum: ['total', 'hommes', 'femmes', 'dept_hommes', 'dept_femmes', 'dept_jeunesse', 'div_jeune_homme', 'div_jeune_femme', 'div_avenir'],
+  description: 'Catégorie de membres à exporter',
+  example: 'total',
+  required: true
+})
+@ApiBody({
+  description: 'Filtres optionnels pour affiner la recherche',
+  schema: {
+    type: 'object',
+    properties: {
+      region_uuid: {
+        type: 'string',
+        description: 'UUID de la région',
+        example: '550e8400-e29b-41d4-a716-446655440000'
+      },
+      centre_uuid: {
+        type: 'string',
+        description: 'UUID du centre',
+        example: '550e8400-e29b-41d4-a716-446655440001'
+      },
+      chapitre_uuid: {
+        type: 'string',
+        description: 'UUID du chapitre',
+        example: '550e8400-e29b-41d4-a716-446655440002'
+      },
+      district_uuid: {
+        type: 'string',
+        description: 'UUID du district',
+        example: '550e8400-e29b-41d4-a716-446655440003'
+      },
+      groupe_uuid: {
+        type: 'string',
+        description: 'UUID du groupe',
+        example: '550e8400-e29b-41d4-a716-446655440004'
+      },
+      department_uuid: {
+        type: 'string',
+        description: 'UUID du département',
+        example: '550e8400-e29b-41d4-a716-446655440005'
+      },
+      division_uuid: {
+        type: 'string',
+        description: 'UUID de la division',
+        example: '550e8400-e29b-41d4-a716-446655440006'
+      }
+    }
+  }
+})
+@ApiResponse({
+  status: 200,
+  description: 'Export lancé avec succès',
+  schema: {
+    type: 'object',
+    properties: {
+      success: {
+        type: 'boolean',
+        example: true
+      },
+      message: {
+        type: 'string',
+        example: 'Export en cours de traitement'
+      },
+      jobId: {
+        type: 'string',
+        example: '550e8400-e29b-41d4-a716-446655440000'
+      },
+      checkStatusUrl: {
+        type: 'string',
+        example: '/export/status/550e8400-e29b-41d4-a716-446655440000'
+      }
+    }
+  }
+})
+@ApiResponse({
+  status: 401,
+  description: 'Non autorisé - Token JWT manquant ou invalide'
+})
+@ApiResponse({
+  status: 404,
+  description: 'Membre ou structure non trouvé(e)'
+})
+@ApiResponse({
+  status: 400,
+  description: 'Catégorie invalide'
+})
+@ApiBearerAuth()
+async exportStatCategory(
+  @Param('category') category: string,
+  @Body() filters: MemberStatsFilters,
+  @Request() req,
+) {
+  const memberUuid = req.user.member_uuid;
+  const user = req.user;
+  const responsibilityStructureUuid = user.responsibilities[0]?.structure?.uuid;
+  return this.structureTreeService.exportMembersByStatCategory(
+    memberUuid,
+    responsibilityStructureUuid,
+    category as any,
+    filters
+  );
+}
 
   @Get('tree')
   @ApiOperation({

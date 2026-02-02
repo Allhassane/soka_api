@@ -69,7 +69,7 @@ export class MemberTravelService {
       }
 
       // Utilisez l'objet entier ou l'UUID dans le where
-      await this.memberTravelRepository.delete({ uuid: uuid });
+      await this.memberTravelRepository.softDelete({ uuid: uuid });
 
       return {
           message: 'Voyage supprimé avec succès',

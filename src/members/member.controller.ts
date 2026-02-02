@@ -13,7 +13,7 @@ import { VerifyPhoneNumberDto } from './dto/verify-phone.dto';
 export class MemberController {
   constructor(private readonly membreService: MemberService) {}
 
-  @Get()
+ /*  @Get()
   @ApiOperation({ summary: 'Liste paginée des membres' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(
@@ -24,7 +24,45 @@ export class MemberController {
     const admin_uuid = req.user.uuid as string;
     return this.membreService.findAll(admin_uuid, Number(page), Number(limit));
   }
+ */
 
+
+@Get()
+@UseGuards(JwtAuthGuard)
+@ApiOperation({ summary: 'Liste paginée des membres' })
+@ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
+@ApiQuery({ name: 'page', required: false, type: Number })
+@ApiQuery({ name: 'limit', required: false, type: Number })
+@ApiQuery({ name: 'region_uuid', required: false, type: String })
+@ApiQuery({ name: 'centre_uuid', required: false, type: String })
+@ApiQuery({ name: 'chapitre_uuid', required: false, type: String })
+@ApiQuery({ name: 'district_uuid', required: false, type: String })
+@ApiQuery({ name: 'groupe_uuid', required: false, type: String })
+@ApiQuery({ name: 'department_uuid', required: false, type: String })
+@ApiQuery({ name: 'division_uuid', required: false, type: String })
+async findAll(
+  @Request() req,
+  @Query('page') page: number = 1,
+  @Query('limit') limit: number = 15,
+  @Query('region_uuid') region_uuid?: string,
+  @Query('centre_uuid') centre_uuid?: string,
+  @Query('chapitre_uuid') chapitre_uuid?: string,
+  @Query('district_uuid') district_uuid?: string,
+  @Query('groupe_uuid') groupe_uuid?: string,
+  @Query('department_uuid') department_uuid?: string,
+  @Query('division_uuid') division_uuid?: string,
+) {
+  const admin_uuid = req.user.uuid as string;
+  return this.membreService.findAll(admin_uuid, Number(page), Number(limit), {
+    region_uuid,
+    centre_uuid,
+    chapitre_uuid,
+    district_uuid,
+    groupe_uuid,
+    department_uuid,
+    division_uuid,
+  });
+}
 
   @Get('structures')
   @ApiOperation({ summary: 'Récupérer tous les membres en fonction du user connecté par son UUID' })
