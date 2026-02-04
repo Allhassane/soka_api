@@ -55,10 +55,10 @@ export class AuthController {
 
 
   @Patch('reset-password/:uuid')
-async resetPassword(
-  @Param('uuid') uuid: string,
-  @Body() resetPasswordDto: ResetPasswordDto,
-) {
-  return this.authService.resetPassword(uuid, resetPasswordDto.newPassword);
-}
+  async resetPassword(
+    @Param('uuid') uuid: string,
+    @Body() resetPasswordDto: ResetPasswordDto,
+  ) {
+    return this.authService.resetPassword(uuid, resetPasswordDto.newPassword);
+  }
 }

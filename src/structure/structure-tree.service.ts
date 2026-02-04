@@ -2691,6 +2691,7 @@ export class StructureTreeService {
   }
 
   async exportMembersByStatCategory(
+    user_uuid: string,
     memberUuid: string,
     responsibility_structure_uuid: string,
     category: 'total' | 'hommes' | 'femmes' | 'dept_hommes' | 'dept_femmes' | 'dept_jeunesse' | 'div_jeune_homme' | 'div_jeune_femme' | 'div_avenir',
@@ -3045,7 +3046,7 @@ export class StructureTreeService {
         category,
         filters
       },
-      memberUuid,
+      user_uuid,
     );
 
     // Lancer l'export en arrière-plan

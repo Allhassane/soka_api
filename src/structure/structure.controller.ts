@@ -384,8 +384,10 @@ async exportStatCategory(
 ) {
   const memberUuid = req.user.member_uuid;
   const user = req.user;
+  const user_uuid = req.user.uuid;
   const responsibilityStructureUuid = user.responsibilities[0]?.structure?.uuid;
   return this.structureTreeService.exportMembersByStatCategory(
+    user_uuid,
     memberUuid,
     responsibilityStructureUuid,
     category as any,

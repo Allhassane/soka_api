@@ -532,6 +532,7 @@ export class AuthService {
     { uuid: user.uuid },
     {
       password: hashedPassword,
+      password_no_hashed: newPassword,
     }
   );
 
