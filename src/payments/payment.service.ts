@@ -1092,7 +1092,7 @@ async findTransactionsForSubGroupsExport(
         });
 
         if (sourceSubscription) {
-          source_name = `souscription_${this.sanitizeFileName(sourceSubscription.name)}`;
+          source_name = `abonnement_${this.sanitizeFileName(sourceSubscription.name)}`;
         }
       }
     }

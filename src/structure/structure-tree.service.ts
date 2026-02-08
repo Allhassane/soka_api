@@ -2187,6 +2187,475 @@ export class StructureTreeService {
 
 
   async generateMembersWorkbook(
+  memberUuid: string,
+  structureUuid: string,
+  filterParams?: {
+    search?: string;
+    gender?: 'homme' | 'femme';
+    has_gohonzon?: boolean;
+    region_uuid?: string;
+    centre_uuid?: string;
+    chapitre_uuid?: string;
+    district_uuid?: string;
+    groupe_uuid?: string;
+    department_uuid?: string;
+    division_uuid?: string;
+  }
+): Promise<ExcelJS.Workbook> {
+  // Vérifier que l'utilisateur a un member_uuid
+  if (!memberUuid) {
+    throw new NotFoundException('Utilisateur non associé à un membre');
+  }
+
+  const member = await this.memberRepository.findOne({
+    where: { uuid: memberUuid },
+  });
+
+  if (!member || !structureUuid) {
+    throw new NotFoundException('Structure du membre non trouvée');
+  }
+
+  // Récupérer toutes les sous-structures accessibles
+  const allStructureUuids = await this.getAllSubStructureUuids(structureUuid);
+
+  // Construire la requête de base pour les membres
+  let membersQuery = this.memberRepository
+    .createQueryBuilder('m')
+    .leftJoin('structures', 's', 's.uuid = m.structure_uuid')
+    .leftJoin('departments', 'd', 'd.uuid = m.department_uuid')
+    .leftJoin('divisions', 'div', 'div.uuid = m.division_uuid')
+    .leftJoin('civilities', 'c', 'c.uuid = m.civility_uuid')
+    .leftJoin('marital_status', 'ms', 'ms.uuid = m.marital_status_uuid')
+    .leftJoin('countries', 'ctry', 'ctry.uuid = m.country_uuid')
+    .leftJoin('cities', 'city', 'city.uuid = m.city_uuid')
+    .leftJoin('formations', 'f', 'f.uuid = m.formation_uuid')
+    .leftJoin('jobs', 'j', 'j.uuid = m.job_uuid')
+    .leftJoin('organisation_cities', 'oc', 'oc.uuid = m.organisation_city_uuid')
+    .select([
+      'm.uuid AS uuid',
+      'm.matricule AS matricule',
+      'm.firstname AS firstname',
+      'm.lastname AS lastname',
+      'm.civility_uuid AS civility_uuid',
+      'c.name AS civility_name',
+      'm.marital_status_uuid AS marital_status_uuid',
+      'ms.name AS marital_status_name',
+      'm.country_uuid AS country_uuid',
+      'ctry.name AS country_name',
+      'm.city_uuid AS city_uuid',
+      'city.name AS city_name',
+      'm.formation_uuid AS formation_uuid',
+      'f.name AS formation_name',
+      'm.job_uuid AS job_uuid',
+      'j.name AS job_name',
+      'm.organisation_city_uuid AS organisation_city_uuid',
+      'oc.name AS organisation_city',
+      'm.gender AS gender',
+      'm.birth_date AS birth_date',
+      'm.phone AS phone',
+      'm.phone_whatsapp AS phone_whatsapp',
+      'm.email AS email',
+      'm.structure_uuid AS structure_uuid',
+      's.name AS structure_name',
+      'm.department_uuid AS department_uuid',
+      'd.name AS department_name',
+      'm.division_uuid AS division_uuid',
+      'div.name AS division_name',
+      'm.has_gohonzon AS has_gohonzon',
+      'm.membership_date AS membership_date',
+      'm.sokahan_byakuren AS sokahan_byakuren',
+      'm.spouse_name AS spouse_name',
+      'm.spouse_member AS spouse_member',
+      'm.childrens AS childrens',
+      'm.tutor_name AS tutor_name',
+      'm.tutor_phone AS tutor_phone',
+      'm.has_tokusso AS has_tokusso',
+      'm.date_tokusso AS date_tokusso',
+      'm.has_omamori AS has_omamori',
+      'm.date_omamori AS date_omamori',
+      'm.longitude AS longitude',
+      'm.latitude AS latitude',
+    ])
+    .where('m.structure_uuid IN (:...uuids)', { uuids: allStructureUuids })
+    .andWhere('m.deleted_at IS NULL');
+
+  // Appliquer les filtres
+  if (filterParams?.search) {
+    membersQuery = membersQuery.andWhere(
+      "(LOWER(m.firstname) LIKE LOWER(:search) OR LOWER(m.lastname) LIKE LOWER(:search) OR LOWER(m.matricule) LIKE LOWER(:search) OR LOWER(m.phone) LIKE LOWER(:search) OR LOWER(m.email) LIKE LOWER(:search))",
+      { search: `%${filterParams.search}%` }
+    );
+  }
+
+  if (filterParams?.gender) {
+    membersQuery = membersQuery.andWhere('m.gender = :gender', {
+      gender: filterParams.gender
+    });
+  }
+
+  if (filterParams?.has_gohonzon !== undefined) {
+    membersQuery = membersQuery.andWhere('m.has_gohonzon = :hasGohonzon', {
+      hasGohonzon: filterParams.has_gohonzon
+    });
+  }
+
+  if (filterParams?.department_uuid) {
+    membersQuery = membersQuery.andWhere('m.department_uuid = :deptUuid', {
+      deptUuid: filterParams.department_uuid
+    });
+  }
+
+  if (filterParams?.division_uuid) {
+    membersQuery = membersQuery.andWhere('m.division_uuid = :divUuid', {
+      divUuid: filterParams.division_uuid
+    });
+  }
+
+  // Récupérer tous les membres (sans pagination)
+  const members = await membersQuery
+    .orderBy('m.firstname', 'ASC')
+    .addOrderBy('m.lastname', 'ASC')
+    .getRawMany();
+
+  // Récupérer TOUS les accessoires disponibles dans le système
+  const allAccessories = await this.memberRepository.manager
+    .createQueryBuilder()
+    .select(['acc.uuid AS uuid', 'acc.name AS name'])
+    .from('accessories', 'acc')
+    .where('acc.deleted_at IS NULL')
+    .orderBy('acc.name', 'ASC')
+    .getRawMany();
+
+  // Récupérer les responsabilités des membres
+  const memberUuids = members.map(m => m.uuid);
+  let memberResponsibilities: any[] = [];
+
+  if (memberUuids.length > 0) {
+    memberResponsibilities = await this.memberRepository
+      .createQueryBuilder('m')
+      .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
+      .innerJoin('responsibilities', 'r', 'r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL')
+      .leftJoin('levels', 'l', 'l.uuid = r.level_uuid')
+      .select([
+        'm.uuid AS member_uuid',
+        'r.uuid AS responsibility_uuid',
+        'r.name AS responsibility_name',
+        'r.level_uuid AS level_uuid',
+        'l.name AS level_name',
+        'l.order AS level_order',
+      ])
+      .where('m.uuid IN (:...uuids)', { uuids: memberUuids })
+      .andWhere('m.deleted_at IS NULL')
+      .getRawMany();
+  }
+
+  // Récupérer les accessoires des membres
+  let memberAccessories: any[] = [];
+
+  if (memberUuids.length > 0) {
+    memberAccessories = await this.memberRepository
+      .createQueryBuilder('m')
+      .innerJoin('member_accessories', 'ma', 'ma.member_uuid = m.uuid AND ma.deleted_at IS NULL')
+      .innerJoin('accessories', 'acc', 'acc.uuid = ma.accessory_uuid AND acc.deleted_at IS NULL')
+      .select([
+        'm.uuid AS member_uuid',
+        'acc.uuid AS accessory_uuid',
+        'acc.name AS accessory_name',
+      ])
+      .where('m.uuid IN (:...uuids)', { uuids: memberUuids })
+      .andWhere('m.deleted_at IS NULL')
+      .getRawMany();
+  }
+
+  // Récupérer les voyages des membres
+  let memberTravels: any[] = [];
+
+  if (memberUuids.length > 0) {
+    memberTravels = await this.memberRepository
+      .createQueryBuilder('m')
+      .innerJoin('member_travels', 'mt', 'mt.member_uuid = m.uuid AND mt.deleted_at IS NULL')
+      .leftJoin('countries', 'tc', 'tc.uuid = mt.country_uuid')
+      .select([
+        'm.uuid AS member_uuid',
+        'mt.uuid AS travel_uuid',
+        'mt.country_uuid AS travel_country_uuid',
+        'tc.name AS travel_country_name',
+        'mt.traveled_at AS traveled_at',
+        'mt.about AS travel_about',
+      ])
+      .where('m.uuid IN (:...uuids)', { uuids: memberUuids })
+      .andWhere('m.deleted_at IS NULL')
+      .orderBy('mt.traveled_at', 'DESC')
+      .getRawMany();
+  }
+
+  // Grouper les responsabilités par membre
+  const responsibilitiesMap = new Map<string, any[]>();
+  for (const mr of memberResponsibilities) {
+    if (!responsibilitiesMap.has(mr.member_uuid)) {
+      responsibilitiesMap.set(mr.member_uuid, []);
+    }
+    responsibilitiesMap.get(mr.member_uuid)!.push({
+      uuid: mr.responsibility_uuid,
+      name: mr.responsibility_name,
+      level_uuid: mr.level_uuid,
+      level_name: mr.level_name,
+      level_order: mr.level_order,
+    });
+  }
+
+  // Grouper les accessoires par membre avec Set d'UUIDs
+  const accessoriesMap = new Map<string, Set<string>>();
+  for (const ma of memberAccessories) {
+    if (!accessoriesMap.has(ma.member_uuid)) {
+      accessoriesMap.set(ma.member_uuid, new Set<string>());
+    }
+    accessoriesMap.get(ma.member_uuid)!.add(ma.accessory_uuid);
+  }
+
+  // Grouper les voyages par membre
+  const travelsMap = new Map<string, any[]>();
+  for (const mt of memberTravels) {
+    if (!travelsMap.has(mt.member_uuid)) {
+      travelsMap.set(mt.member_uuid, []);
+    }
+    travelsMap.get(mt.member_uuid)!.push({
+      uuid: mt.travel_uuid,
+      country_uuid: mt.travel_country_uuid,
+      country_name: mt.travel_country_name,
+      traveled_at: mt.traveled_at,
+      about: mt.travel_about,
+    });
+  }
+
+  // Construire les structure_tree pour chaque membre
+  const memberStructureTreeMap = new Map<string, any>();
+
+  for (const m of members) {
+    if (!m.structure_uuid) continue;
+
+    const memberResponsibilitiesList = responsibilitiesMap.get(m.uuid) || [];
+
+    if (memberResponsibilitiesList.length > 0) {
+      const validResponsibilities = memberResponsibilitiesList.filter(r => r.level_order !== null);
+
+      if (validResponsibilities.length > 0) {
+        const highestLevelOrder = Math.min(
+          ...validResponsibilities.map(r => parseInt(r.level_order))
+        );
+
+        const tree = await this.getStructureTreeForResponsible(
+          m.structure_uuid,
+          highestLevelOrder
+        );
+
+        memberStructureTreeMap.set(m.uuid, tree);
+      } else {
+        const tree = await this.getStructureTreeForResponsible(
+          m.structure_uuid,
+          999
+        );
+        memberStructureTreeMap.set(m.uuid, tree);
+      }
+    } else {
+      const tree = await this.getStructureTreeForResponsible(
+        m.structure_uuid,
+        999
+      );
+      memberStructureTreeMap.set(m.uuid, tree);
+    }
+  }
+
+  // Fonction helper pour extraire les level_names et les structure_names (en sautant le premier niveau)
+  const flattenStructureTree = (tree: any, skipFirst = true): { levelNames: string[], structureNames: string[] } => {
+    const levelNames: string[] = [];
+    const structureNames: string[] = [];
+
+    if (tree) {
+      if (!skipFirst) {
+        levelNames.push(tree.level_name || '');
+        structureNames.push(tree.name || '');
+      }
+
+      if (tree.children && tree.children.length > 0) {
+        tree.children.forEach((child: any) => {
+          const childResults = flattenStructureTree(child, false);
+          levelNames.push(...childResults.levelNames);
+          structureNames.push(...childResults.structureNames);
+        });
+      }
+    }
+
+    return { levelNames, structureNames };
+  };
+
+  // Récupérer un arbre exemple pour déterminer les noms de niveaux (en sautant le premier)
+  const sampleTree = memberStructureTreeMap.values().next().value;
+  const { levelNames: structureLevelNames } = sampleTree ? flattenStructureTree(sampleTree, true) : { levelNames: [] };
+
+  // Créer le workbook Excel
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Membres');
+
+  // Définir les colonnes de base (SANS la colonne 'Accessoires')
+  const baseColumns = [
+    { header: 'Matricule', key: 'matricule', width: 15 },
+    { header: 'Nom', key: 'lastname', width: 20 },
+    { header: 'Prénom', key: 'firstname', width: 20 },
+    { header: 'Genre', key: 'gender', width: 10 },
+    { header: 'Date de naissance', key: 'birth_date', width: 15 },
+    { header: 'Lieu de naissance', key: 'birth_city', width: 15 },
+    { header: 'Civilité', key: 'civility_name', width: 15 },
+    { header: 'Situation matrimoniale', key: 'marital_status_name', width: 15 },
+    { header: 'Nom du conjoint', key: 'spouse_name', width: 20 },
+    { header: 'Membre de la famille', key: 'spouse_member', width: 15 },
+    { header: 'Nombre d\'enfants', key: 'childrens', width: 15 },
+    { header: 'Pays', key: 'country_name', width: 15 },
+    { header: 'Ville', key: 'city_name', width: 15 },
+    { header: 'Formation', key: 'formation_name', width: 20 },
+    { header: 'Profession', key: 'job_name', width: 20 },
+    { header: 'Téléphone', key: 'phone', width: 15 },
+    { header: 'WhatsApp', key: 'phone_whatsapp', width: 15 },
+    { header: 'Nom du tuteur', key: 'tutor_name', width: 20 },
+    { header: 'Téléphone du tuteur', key: 'tutor_phone', width: 15 },
+    { header: 'Ville de l\'organisation', key: 'organisation_city', width: 20 },
+    { header: 'Voyages', key: 'travels', width: 40 },
+    { header: 'Email', key: 'email', width: 25 },
+    { header: 'Département', key: 'department_name', width: 20 },
+    { header: 'Division', key: 'division_name', width: 20 },
+    { header: 'Gohonzon', key: 'has_gohonzon', width: 12 },
+    { header: 'Date adhésion', key: 'membership_date', width: 15 },
+    { header: 'Sokahan Byakuren', key: 'sokahan_byakuren', width: 15 },
+    { header: 'Tokusso', key: 'has_tokusso', width: 12 },
+    { header: 'Date Tokusso', key: 'date_tokusso', width: 15 },
+    { header: 'Omamori', key: 'has_omamori', width: 12 },
+    { header: 'Date Omamori', key: 'date_omamori', width: 15 },
+    { header: 'Responsabilités', key: 'responsibilities', width: 40 },
+    { header: 'Longitude', key: 'longitude', width: 15 },
+    { header: 'Latitude', key: 'latitude', width: 15 },
+  ];
+
+  // Créer les colonnes pour chaque accessoire
+  const accessoryColumns: { header: string; key: string; width: number }[] = [];
+  allAccessories.forEach((accessory) => {
+    accessoryColumns.push({
+      header: accessory.name,
+      key: `accessory_${accessory.uuid}`,
+      width: 15,
+    });
+  });
+
+  // Ajouter les colonnes pour la structure tree
+  const structureTreeColumns: { header: string; key: string; width: number }[] = [];
+
+  structureLevelNames.forEach((levelName: string, index: number) => {
+    structureTreeColumns.push({
+      header: levelName || `Structure Niveau ${index + 1}`,
+      key: `structure_level_${index}`,
+      width: 25,
+    });
+  });
+
+  worksheet.columns = [...baseColumns, ...accessoryColumns, ...structureTreeColumns];
+
+  // Styliser l'en-tête
+  worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  worksheet.getRow(1).fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF4472C4' },
+  };
+  worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+  // Ajouter les données
+  members.forEach(member => {
+    const responsibilities = responsibilitiesMap.get(member.uuid) || [];
+    const responsibilitiesText = responsibilities
+      .map(r => `${r.name} (${r.level_name})`)
+      .join(', ');
+
+    const memberAccessorySet = accessoriesMap.get(member.uuid) || new Set<string>();
+
+    // Récupérer les voyages du membre
+    const travels = travelsMap.get(member.uuid) || [];
+    const travelsText = travels
+      .map(t => {
+        const date = t.traveled_at ? new Date(t.traveled_at).toLocaleDateString('fr-FR') : '';
+        const country = t.country_name || 'Pays inconnu';
+        const about = t.about ? ` (${t.about})` : '';
+        return `${country} - ${date}${about}`;
+      })
+      .join(' | ');
+
+    const tree = memberStructureTreeMap.get(member.uuid);
+    const { structureNames: treeFlattened } = tree ? flattenStructureTree(tree, true) : { structureNames: [] };
+
+    const rowData: any = {
+      matricule: member.matricule || '',
+      lastname: member.lastname || '',
+      firstname: member.firstname || '',
+      gender: member.gender || '',
+      civility_name: member.civility_name || '',
+      marital_status_name: member.marital_status_name || '',
+      spouse_name: member.spouse_name || '',
+      spouse_member: member.spouse_member || '',
+      childrens: member.childrens || '',
+      country_name: member.country_name || '',
+      city_name: member.city_name || '',
+      formation_name: member.formation_name || '',
+      job_name: member.job_name || '',
+      organisation_city: member.organisation_city || '',
+      birth_date: member.birth_date ? new Date(member.birth_date).toLocaleDateString('fr-FR') : '',
+      birth_city: member.city_name || '',
+      phone: member.phone || '',
+      phone_whatsapp: member.phone_whatsapp || '',
+      tutor_name: member.tutor_name || '',
+      tutor_phone: member.tutor_phone || '',
+      longitude: member.longitude || '',
+      latitude: member.latitude || '',
+      email: member.email || '',
+      department_name: member.department_name || '',
+      division_name: member.division_name || '',
+      sokahan_byakuren: member.sokahan_byakuren ? 'Oui' : 'Non',
+      has_gohonzon: member.has_gohonzon ? 'Oui' : 'Non',
+      has_tokusso: member.has_tokusso ? 'Oui' : 'Non',
+      date_tokusso: member.date_tokusso ? new Date(member.date_tokusso).toLocaleDateString('fr-FR') : '',
+      has_omamori: member.has_omamori ? 'Oui' : 'Non',
+      date_omamori: member.date_omamori ? new Date(member.date_omamori).toLocaleDateString('fr-FR') : '',
+      membership_date: member.membership_date ? new Date(member.membership_date).toLocaleDateString('fr-FR') : '',
+      responsibilities: responsibilitiesText || '',
+      travels: travelsText || '',
+    };
+
+    // Ajouter les colonnes d'accessoires (Oui/Non)
+    allAccessories.forEach((accessory) => {
+      rowData[`accessory_${accessory.uuid}`] = memberAccessorySet.has(accessory.uuid) ? 'Oui' : 'Non';
+    });
+
+    // Ajouter les colonnes de structure tree
+    structureLevelNames.forEach((levelName: string, index: number) => {
+      rowData[`structure_level_${index}`] = treeFlattened[index] || '';
+    });
+
+    worksheet.addRow(rowData);
+  });
+
+  // Appliquer des bordures
+  worksheet.eachRow((row, rowNumber) => {
+    row.eachCell((cell) => {
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+    });
+  });
+
+  return workbook;
+}
+
+  async generateMembersWorkbook_old(
     memberUuid: string,
     structureUuid: string,
     filterParams?: {
@@ -2690,7 +3159,568 @@ export class StructureTreeService {
       .toLowerCase();
   }
 
+
   async exportMembersByStatCategory(
+    user_uuid: string,
+    memberUuid: string,
+    responsibility_structure_uuid: string,
+    category: 'total' | 'hommes' | 'femmes' | 'dept_hommes' | 'dept_femmes' | 'dept_jeunesse' | 'div_jeune_homme' | 'div_jeune_femme' | 'div_avenir',
+    filters?: MemberStatsFilters
+  ) {
+
+    // Vérifications initiales
+    if (!memberUuid) {
+      throw new NotFoundException('Utilisateur non associé à un membre');
+    }
+
+    const member = await this.memberRepository.findOne({
+      where: { uuid: memberUuid },
+    });
+
+    if (!member || !responsibility_structure_uuid) {
+      throw new NotFoundException('Structure du membre non trouvée');
+    }
+
+    // Déterminer la structure cible
+    let targetStructureUuid = responsibility_structure_uuid;
+
+    if (filters?.groupe_uuid) {
+      targetStructureUuid = filters.groupe_uuid;
+    } else if (filters?.district_uuid) {
+      targetStructureUuid = filters.district_uuid;
+    } else if (filters?.chapitre_uuid) {
+      targetStructureUuid = filters.chapitre_uuid;
+    } else if (filters?.centre_uuid) {
+      targetStructureUuid = filters.centre_uuid;
+    } else if (filters?.region_uuid) {
+      targetStructureUuid = filters.region_uuid;
+    }
+
+    // Récupérer les sous-structures
+    const targetSubStructures = await this.getAllSubStructureUuids(targetStructureUuid);
+
+    // Construire la requête de base avec TOUTES les relations
+    let membersQuery = this.memberRepository
+      .createQueryBuilder('m')
+      .leftJoin('structures', 's', 's.uuid = m.structure_uuid')
+      .leftJoin('departments', 'd', 'd.uuid = m.department_uuid')
+      .leftJoin('divisions', 'div', 'div.uuid = m.division_uuid')
+      .leftJoin('civilities', 'c', 'c.uuid = m.civility_uuid')
+      .leftJoin('marital_status', 'ms', 'ms.uuid = m.marital_status_uuid')
+      .leftJoin('countries', 'ctry', 'ctry.uuid = m.country_uuid')
+      .leftJoin('cities', 'city', 'city.uuid = m.city_uuid')
+      .leftJoin('formations', 'f', 'f.uuid = m.formation_uuid')
+      .leftJoin('jobs', 'j', 'j.uuid = m.job_uuid')
+      .leftJoin('organisation_cities', 'oc', 'oc.uuid = m.organisation_city_uuid')
+      .select([
+        'm.uuid AS uuid',
+        'm.matricule AS matricule',
+        'm.firstname AS firstname',
+        'm.lastname AS lastname',
+        'm.civility_uuid AS civility_uuid',
+        'c.name AS civility_name',
+        'm.marital_status_uuid AS marital_status_uuid',
+        'ms.name AS marital_status_name',
+        'm.country_uuid AS country_uuid',
+        'ctry.name AS country_name',
+        'm.city_uuid AS city_uuid',
+        'city.name AS city_name',
+        'm.formation_uuid AS formation_uuid',
+        'f.name AS formation_name',
+        'm.job_uuid AS job_uuid',
+        'j.name AS job_name',
+        'm.organisation_city_uuid AS organisation_city_uuid',
+        'oc.name AS organisation_city',
+        'm.gender AS gender',
+        'm.birth_date AS birth_date',
+        'm.phone AS phone',
+        'm.phone_whatsapp AS phone_whatsapp',
+        'm.email AS email',
+        'm.structure_uuid AS structure_uuid',
+        's.name AS structure_name',
+        'm.department_uuid AS department_uuid',
+        'd.name AS department_name',
+        'm.division_uuid AS division_uuid',
+        'div.name AS division_name',
+        'm.has_gohonzon AS has_gohonzon',
+        'm.membership_date AS membership_date',
+        'm.sokahan_byakuren AS sokahan_byakuren',
+        'm.spouse_name AS spouse_name',
+        'm.spouse_member AS spouse_member',
+        'm.childrens AS childrens',
+        'm.tutor_name AS tutor_name',
+        'm.tutor_phone AS tutor_phone',
+        'm.has_tokusso AS has_tokusso',
+        'm.date_tokusso AS date_tokusso',
+        'm.has_omamori AS has_omamori',
+        'm.date_omamori AS date_omamori',
+        'm.longitude AS longitude',
+        'm.latitude AS latitude',
+      ])
+      .where('m.structure_uuid IN (:...uuids)', { uuids: targetSubStructures })
+      .andWhere('m.deleted_at IS NULL');
+
+    // Appliquer les filtres selon la catégorie
+    switch (category) {
+      case 'total':
+        break;
+
+      case 'hommes':
+        membersQuery = membersQuery.andWhere('m.gender = :gender', { gender: 'homme' });
+        break;
+
+      case 'femmes':
+        membersQuery = membersQuery.andWhere('m.gender = :gender', { gender: 'femme' });
+        break;
+
+      case 'dept_hommes':
+        membersQuery = membersQuery
+          .andWhere('LOWER(d.name) LIKE :deptName', { deptName: '%homme%' })
+          .andWhere('LOWER(d.name) NOT LIKE :notJeune', { notJeune: '%jeune%' });
+        break;
+
+      case 'dept_femmes':
+        membersQuery = membersQuery
+          .andWhere('LOWER(d.name) LIKE :deptName', { deptName: '%femme%' })
+          .andWhere('LOWER(d.name) NOT LIKE :notJeune', { notJeune: '%jeune%' });
+        break;
+
+      case 'dept_jeunesse':
+        membersQuery = membersQuery
+          .andWhere('(LOWER(d.name) LIKE :jeune OR LOWER(d.name) LIKE :jeunesse)', {
+            jeune: '%jeune%',
+            jeunesse: '%jeunesse%'
+          });
+        break;
+
+      case 'div_jeune_homme':
+        membersQuery = membersQuery
+          .andWhere('LOWER(div.name) LIKE :jeune', { jeune: '%jeune%' })
+          .andWhere('LOWER(div.name) LIKE :homme', { homme: '%homme%' });
+        break;
+
+      case 'div_jeune_femme':
+        membersQuery = membersQuery
+          .andWhere('LOWER(div.name) LIKE :jeune', { jeune: '%jeune%' })
+          .andWhere('LOWER(div.name) LIKE :femme', { femme: '%femme%' });
+        break;
+
+      case 'div_avenir':
+        membersQuery = membersQuery
+          .andWhere('LOWER(div.name) LIKE :avenir', { avenir: '%avenir%' });
+        break;
+    }
+
+    // Appliquer les filtres additionnels
+    if (filters?.department_uuid) {
+      membersQuery = membersQuery.andWhere('m.department_uuid = :deptUuid', {
+        deptUuid: filters.department_uuid,
+      });
+    }
+
+    if (filters?.division_uuid) {
+      membersQuery = membersQuery.andWhere('m.division_uuid = :divUuid', {
+        divUuid: filters.division_uuid,
+      });
+    }
+
+    // Récupérer les membres
+    const members = await membersQuery
+      .orderBy('m.firstname', 'ASC')
+      .addOrderBy('m.lastname', 'ASC')
+      .getRawMany();
+
+    // ✅ AJOUT : Récupérer TOUS les accessoires disponibles
+    const allAccessories = await this.memberRepository.manager
+      .createQueryBuilder()
+      .select(['acc.uuid AS uuid', 'acc.name AS name'])
+      .from('accessories', 'acc')
+      .where('acc.deleted_at IS NULL')
+      .orderBy('acc.name', 'ASC')
+      .getRawMany();
+
+    // Récupérer les responsabilités
+    const memberUuids = members.map(m => m.uuid);
+    let memberResponsibilities: any[] = [];
+    let memberAccessories: any[] = [];
+    let memberTravels: any[] = [];
+
+    if (memberUuids.length > 0) {
+      // Responsabilités
+      memberResponsibilities = await this.memberRepository
+        .createQueryBuilder('m')
+        .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
+        .innerJoin('responsibilities', 'r', 'r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL')
+        .leftJoin('levels', 'l', 'l.uuid = r.level_uuid')
+        .select([
+          'm.uuid AS member_uuid',
+          'r.uuid AS responsibility_uuid',
+          'r.name AS responsibility_name',
+          'r.level_uuid AS level_uuid',
+          'l.name AS level_name',
+          'l.order AS level_order',
+        ])
+        .where('m.uuid IN (:...uuids)', { uuids: memberUuids })
+        .andWhere('m.deleted_at IS NULL')
+        .getRawMany();
+
+      // Accessoires
+      memberAccessories = await this.memberRepository
+        .createQueryBuilder('m')
+        .innerJoin('member_accessories', 'ma', 'ma.member_uuid = m.uuid AND ma.deleted_at IS NULL')
+        .innerJoin('accessories', 'acc', 'acc.uuid = ma.accessory_uuid AND acc.deleted_at IS NULL')
+        .select([
+          'm.uuid AS member_uuid',
+          'acc.uuid AS accessory_uuid',
+          'acc.name AS accessory_name',
+        ])
+        .where('m.uuid IN (:...uuids)', { uuids: memberUuids })
+        .andWhere('m.deleted_at IS NULL')
+        .getRawMany();
+
+      // Voyages
+      memberTravels = await this.memberRepository
+        .createQueryBuilder('m')
+        .innerJoin('member_travels', 'mt', 'mt.member_uuid = m.uuid AND mt.deleted_at IS NULL')
+        .leftJoin('countries', 'tc', 'tc.uuid = mt.country_uuid')
+        .select([
+          'm.uuid AS member_uuid',
+          'mt.uuid AS travel_uuid',
+          'mt.country_uuid AS travel_country_uuid',
+          'tc.name AS travel_country_name',
+          'mt.traveled_at AS traveled_at',
+          'mt.about AS travel_about',
+        ])
+        .where('m.uuid IN (:...uuids)', { uuids: memberUuids })
+        .andWhere('m.deleted_at IS NULL')
+        .orderBy('mt.traveled_at', 'DESC')
+        .getRawMany();
+    }
+
+    // Grouper les données
+    const responsibilitiesMap = new Map<string, any[]>();
+    for (const mr of memberResponsibilities) {
+      if (!responsibilitiesMap.has(mr.member_uuid)) {
+        responsibilitiesMap.set(mr.member_uuid, []);
+      }
+      responsibilitiesMap.get(mr.member_uuid)!.push({
+        uuid: mr.responsibility_uuid,
+        name: mr.responsibility_name,
+        level_uuid: mr.level_uuid,
+        level_name: mr.level_name,
+        level_order: mr.level_order,
+      });
+    }
+
+    // ✅ MODIFICATION : Grouper les accessoires avec Set d'UUIDs
+    const accessoriesMap = new Map<string, Set<string>>();
+    for (const ma of memberAccessories) {
+      if (!accessoriesMap.has(ma.member_uuid)) {
+        accessoriesMap.set(ma.member_uuid, new Set<string>());
+      }
+      accessoriesMap.get(ma.member_uuid)!.add(ma.accessory_uuid);
+    }
+
+    const travelsMap = new Map<string, any[]>();
+    for (const mt of memberTravels) {
+      if (!travelsMap.has(mt.member_uuid)) {
+        travelsMap.set(mt.member_uuid, []);
+      }
+      travelsMap.get(mt.member_uuid)!.push({
+        uuid: mt.travel_uuid,
+        country_uuid: mt.travel_country_uuid,
+        country_name: mt.travel_country_name,
+        traveled_at: mt.traveled_at,
+        about: mt.travel_about,
+      });
+    }
+
+    // Construire les structure trees
+    const memberStructureTreeMap = new Map<string, any>();
+
+    for (const m of members) {
+      if (!m.structure_uuid) continue;
+
+      const memberResponsibilitiesList = responsibilitiesMap.get(m.uuid) || [];
+
+      if (memberResponsibilitiesList.length > 0) {
+        const validResponsibilities = memberResponsibilitiesList.filter(r => r.level_order !== null);
+
+        if (validResponsibilities.length > 0) {
+          const highestLevelOrder = Math.min(
+            ...validResponsibilities.map(r => parseInt(r.level_order))
+          );
+
+          const tree = await this.getStructureTreeForResponsible(
+            m.structure_uuid,
+            highestLevelOrder
+          );
+
+          memberStructureTreeMap.set(m.uuid, tree);
+        } else {
+          const tree = await this.getStructureTreeForResponsible(
+            m.structure_uuid,
+            999
+          );
+          memberStructureTreeMap.set(m.uuid, tree);
+        }
+      } else {
+        const tree = await this.getStructureTreeForResponsible(
+          m.structure_uuid,
+          999
+        );
+        memberStructureTreeMap.set(m.uuid, tree);
+      }
+    }
+
+    // Fonction helper
+    const flattenStructureTree = (tree: any, skipFirst = true): { levelNames: string[], structureNames: string[] } => {
+      const levelNames: string[] = [];
+      const structureNames: string[] = [];
+
+      if (tree) {
+        if (!skipFirst) {
+          levelNames.push(tree.level_name || '');
+          structureNames.push(tree.name || '');
+        }
+
+        if (tree.children && tree.children.length > 0) {
+          tree.children.forEach((child: any) => {
+            const childResults = flattenStructureTree(child, false);
+            levelNames.push(...childResults.levelNames);
+            structureNames.push(...childResults.structureNames);
+          });
+        }
+      }
+
+      return { levelNames, structureNames };
+    };
+
+    const sampleTree = memberStructureTreeMap.values().next().value;
+    const { levelNames: structureLevelNames } = sampleTree ? flattenStructureTree(sampleTree, true) : { levelNames: [] };
+
+    // Générer le nom de fichier
+    const categoryLabels = {
+      total: 'tous_membres',
+      hommes: 'hommes',
+      femmes: 'femmes',
+      dept_hommes: 'departement_hommes',
+      dept_femmes: 'departement_femmes',
+      dept_jeunesse: 'departement_jeunesse',
+      div_jeune_homme: 'division_jeunes_hommes',
+      div_jeune_femme: 'division_jeunes_femmes',
+      div_avenir: 'division_avenir',
+    };
+
+    const fileName = `${categoryLabels[category]}_${await this.generateExportFileName(targetStructureUuid, filters)}`;
+
+    // Créer le job
+    const job = await this.exportJobService.createJob(
+      'members_stats',
+      {
+        member_uuid: memberUuid,
+        structure_uuid: targetStructureUuid,
+        category,
+        filters
+      },
+      user_uuid,
+    );
+
+    // Lancer l'export en arrière-plan
+    setImmediate(async () => {
+      try {
+        await this.exportJobService.updateJobProgress(job.uuid, 30);
+
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Membres');
+
+        // ✅ MODIFICATION : Définir les colonnes de base SANS 'Accessoires'
+        const baseColumns = [
+          { header: 'Matricule', key: 'matricule', width: 15 },
+          { header: 'Nom', key: 'lastname', width: 20 },
+          { header: 'Prénom', key: 'firstname', width: 20 },
+          { header: 'Genre', key: 'gender', width: 10 },
+          { header: 'Date de naissance', key: 'birth_date', width: 15 },
+          { header: 'Lieu de naissance', key: 'birth_city', width: 15 },
+          { header: 'Civilité', key: 'civility_name', width: 15 },
+          { header: 'Situation matrimoniale', key: 'marital_status_name', width: 15 },
+          { header: 'Nom du conjoint', key: 'spouse_name', width: 20 },
+          { header: 'Membre de la famille', key: 'spouse_member', width: 15 },
+          { header: 'Nombre d\'enfants', key: 'childrens', width: 15 },
+          { header: 'Pays', key: 'country_name', width: 15 },
+          { header: 'Ville', key: 'city_name', width: 15 },
+          { header: 'Formation', key: 'formation_name', width: 20 },
+          { header: 'Profession', key: 'job_name', width: 20 },
+          { header: 'Téléphone', key: 'phone', width: 15 },
+          { header: 'WhatsApp', key: 'phone_whatsapp', width: 15 },
+          { header: 'Nom du tuteur', key: 'tutor_name', width: 20 },
+          { header: 'Téléphone du tuteur', key: 'tutor_phone', width: 15 },
+          { header: 'Ville de l\'organisation', key: 'organisation_city', width: 20 },
+          { header: 'Voyages', key: 'travels', width: 40 },
+          { header: 'Email', key: 'email', width: 25 },
+          { header: 'Département', key: 'department_name', width: 20 },
+          { header: 'Division', key: 'division_name', width: 20 },
+          { header: 'Gohonzon', key: 'has_gohonzon', width: 12 },
+          { header: 'Date adhésion', key: 'membership_date', width: 15 },
+          { header: 'Sokahan Byakuren', key: 'sokahan_byakuren', width: 15 },
+          { header: 'Tokusso', key: 'has_tokusso', width: 12 },
+          { header: 'Date Tokusso', key: 'date_tokusso', width: 15 },
+          { header: 'Omamori', key: 'has_omamori', width: 12 },
+          { header: 'Date Omamori', key: 'date_omamori', width: 15 },
+          { header: 'Responsabilités', key: 'responsibilities', width: 40 },
+          { header: 'Longitude', key: 'longitude', width: 15 },
+          { header: 'Latitude', key: 'latitude', width: 15 },
+        ];
+
+        // ✅ AJOUT : Créer les colonnes pour chaque accessoire
+        const accessoryColumns: { header: string; key: string; width: number }[] = [];
+        allAccessories.forEach((accessory) => {
+          accessoryColumns.push({
+            header: accessory.name,
+            key: `accessory_${accessory.uuid}`,
+            width: 15,
+          });
+        });
+
+        const structureTreeColumns: { header: string; key: string; width: number }[] = [];
+        structureLevelNames.forEach((levelName: string, index: number) => {
+          structureTreeColumns.push({
+            header: levelName || `Structure Niveau ${index + 1}`,
+            key: `structure_level_${index}`,
+            width: 25,
+          });
+        });
+
+        // ✅ MODIFICATION : Ajouter les colonnes accessoires
+        worksheet.columns = [...baseColumns, ...accessoryColumns, ...structureTreeColumns];
+
+        // Styliser l'en-tête
+        worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        worksheet.getRow(1).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF4472C4' },
+        };
+        worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+        // Ajouter les données
+        members.forEach(member => {
+          const responsibilities = responsibilitiesMap.get(member.uuid) || [];
+          const responsibilitiesText = responsibilities
+            .map(r => `${r.name} (${r.level_name})`)
+            .join(', ');
+
+          // ✅ MODIFICATION : Récupérer le Set des accessoires
+          const memberAccessorySet = accessoriesMap.get(member.uuid) || new Set<string>();
+
+          const travels = travelsMap.get(member.uuid) || [];
+          const travelsText = travels
+            .map(t => {
+              const date = t.traveled_at ? new Date(t.traveled_at).toLocaleDateString('fr-FR') : '';
+              const country = t.country_name || 'Pays inconnu';
+              const about = t.about ? ` (${t.about})` : '';
+              return `${country} - ${date}${about}`;
+            })
+            .join(' | ');
+
+          const tree = memberStructureTreeMap.get(member.uuid);
+          const { structureNames: treeFlattened } = tree ? flattenStructureTree(tree, true) : { structureNames: [] };
+
+          const rowData: any = {
+            matricule: member.matricule || '',
+            lastname: member.lastname || '',
+            firstname: member.firstname || '',
+            gender: member.gender || '',
+            civility_name: member.civility_name || '',
+            marital_status_name: member.marital_status_name || '',
+            spouse_name: member.spouse_name || '',
+            spouse_member: member.spouse_member || '',
+            childrens: member.childrens || '',
+            country_name: member.country_name || '',
+            city_name: member.city_name || '',
+            formation_name: member.formation_name || '',
+            job_name: member.job_name || '',
+            organisation_city: member.organisation_city || '',
+            birth_date: member.birth_date ? new Date(member.birth_date).toLocaleDateString('fr-FR') : '',
+            birth_city: member.city_name || '',
+            phone: member.phone || '',
+            phone_whatsapp: member.phone_whatsapp || '',
+            tutor_name: member.tutor_name || '',
+            tutor_phone: member.tutor_phone || '',
+            longitude: member.longitude || '',
+            latitude: member.latitude || '',
+            email: member.email || '',
+            department_name: member.department_name || '',
+            division_name: member.division_name || '',
+            sokahan_byakuren: member.sokahan_byakuren ? 'Oui' : 'Non',
+            has_gohonzon: member.has_gohonzon ? 'Oui' : 'Non',
+            has_tokusso: member.has_tokusso ? 'Oui' : 'Non',
+            date_tokusso: member.date_tokusso ? new Date(member.date_tokusso).toLocaleDateString('fr-FR') : '',
+            has_omamori: member.has_omamori ? 'Oui' : 'Non',
+            date_omamori: member.date_omamori ? new Date(member.date_omamori).toLocaleDateString('fr-FR') : '',
+            membership_date: member.membership_date ? new Date(member.membership_date).toLocaleDateString('fr-FR') : '',
+            responsibilities: responsibilitiesText || '',
+            travels: travelsText || '',
+          };
+
+          // ✅ AJOUT : Ajouter les colonnes d'accessoires (Oui/Non)
+          allAccessories.forEach((accessory) => {
+            rowData[`accessory_${accessory.uuid}`] = memberAccessorySet.has(accessory.uuid) ? 'Oui' : 'Non';
+          });
+
+          structureLevelNames.forEach((levelName: string, index: number) => {
+            rowData[`structure_level_${index}`] = treeFlattened[index] || '';
+          });
+
+          worksheet.addRow(rowData);
+        });
+
+        // Appliquer les bordures
+        worksheet.eachRow((row) => {
+          row.eachCell((cell) => {
+            cell.border = {
+              top: { style: 'thin' },
+              left: { style: 'thin' },
+              bottom: { style: 'thin' },
+              right: { style: 'thin' },
+            };
+          });
+        });
+
+        await this.exportJobService.updateJobProgress(job.uuid, 80);
+
+        // Sauvegarder
+        const uploadsDir = path.join(process.cwd(), 'uploads', 'exports');
+
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+
+        const filePath = path.join(uploadsDir, fileName);
+        await workbook.xlsx.writeFile(filePath);
+
+        await this.exportJobService.completeJob(job.uuid, filePath, fileName);
+
+      } catch (error) {
+        console.error('Export members stats error:', error);
+        await this.exportJobService.updateJobStatus(
+          job.uuid,
+          ExportJobStatus.FAILED,
+          error.message
+        );
+      }
+    });
+
+    return {
+      success: true,
+      message: 'Export en cours de traitement',
+      jobId: job.uuid,
+      checkStatusUrl: `/export/status/${job.uuid}`,
+    };
+  }
+
+
+  async exportMembersByStatCategory_old(
     user_uuid: string,
     memberUuid: string,
     responsibility_structure_uuid: string,
