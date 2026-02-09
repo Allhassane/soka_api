@@ -1641,7 +1641,7 @@ export class StructureTreeService {
     });
 
     // Générer le fichier Excel
-    const fileName = `membres_export_${new Date().toISOString().split('T')[0]}.xlsx`;
+    const fileName = `${new Date().toISOString().split('T')[0]}.xlsx`;
 
     // Envoyer directement au client
     res.setHeader(
@@ -2172,7 +2172,7 @@ export class StructureTreeService {
       filterParams,
     );
 
-    const fileName = `membres_export_${new Date().toISOString().split('T')[0]}.xlsx`;
+    const fileName = `${new Date().toISOString().split('T')[0]}.xlsx`;
 
     res.setHeader(
       'Content-Type',
@@ -2592,8 +2592,8 @@ export class StructureTreeService {
 
     const rowData: any = {
       matricule: member.matricule || '',
-      lastname: member.lastname || '',
       firstname: member.firstname || '',
+      lastname: member.lastname || '',
       gender: member.gender || '',
       civility_name: member.civility_name || '',
       marital_status_name: member.marital_status_name || '',
@@ -3107,7 +3107,7 @@ export class StructureTreeService {
     return workbook;
   }
 
-  private async generateExportFileName(structure_uuid: string, filterParams: any): Promise<string> {
+  private async generateExportFileName_(structure_uuid: string, filterParams: any): Promise<string> {
     const timestamp = new Date().toISOString().split('T')[0];
     const parts: string[] = ['export_membres'];
 
@@ -3159,6 +3159,76 @@ export class StructureTreeService {
       .toLowerCase();
   }
 
+  private async generateExportFileName(structure_uuid: string, filterParams: any): Promise<string> {
+    const timestamp = new Date().toISOString().split('T')[0];
+    const parts: string[] = ['export'];
+
+    // Déterminer la structure cible (ordre de priorité du plus spécifique au plus général)
+    const targetStructureUuid =
+      filterParams?.groupe_uuid ||
+      filterParams?.district_uuid ||
+      filterParams?.chapitre_uuid ||
+      filterParams?.centre_uuid ||
+      filterParams?.region_uuid ||
+      structure_uuid;
+
+    // Récupérer la structure cible avec toute sa hiérarchie
+    const targetStructure = await this.structureRepository.findOne({
+      where: { uuid: targetStructureUuid },
+      relations: ['level', 'parent', 'parent.level', 'parent.parent', 'parent.parent.level'],
+    });
+
+    if (!targetStructure) {
+      parts.push(timestamp);
+      return `${parts.join('_')}.xlsx`;
+    }
+
+    // Construire le chemin hiérarchique complet
+    const hierarchyPath = await this.buildHierarchyPath(targetStructure);
+
+    // Ajouter chaque niveau au nom du fichier
+    hierarchyPath.forEach(structure => {
+      if (structure.level) {
+        parts.push(this.sanitizeFileName(structure.level.name));
+      }
+      parts.push(this.sanitizeFileName(structure.name));
+    });
+
+    // Ajouter la date
+    parts.push(timestamp);
+
+    return `${parts.join('_')}.xlsx`;
+  }
+
+  /**
+   * Construit le chemin hiérarchique complet d'une structure
+   * Retourne un tableau ordonné de la racine vers la structure cible
+   */
+  private async buildHierarchyPath(structure: StructureEntity): Promise<StructureEntity[]> {
+    const path: StructureEntity[] = [];
+    let currentStructure: StructureEntity | null = structure;
+
+    // Remonter la hiérarchie
+    while (currentStructure) {
+      path.unshift(currentStructure); // Ajouter au début pour avoir l'ordre racine -> feuille
+
+      if (currentStructure.parent) {
+        // Si parent déjà chargé via relations
+        currentStructure = currentStructure.parent;
+      } else if (currentStructure.parent_uuid) {
+        // Sinon charger le parent
+        currentStructure = await this.structureRepository.findOne({
+          where: { uuid: currentStructure.parent_uuid },
+          relations: ['level'],
+        });
+      } else {
+        // Pas de parent, on est à la racine
+        currentStructure = null;
+      }
+    }
+
+    return path;
+  }
 
   async exportMembersByStatCategory(
     user_uuid: string,
@@ -3330,7 +3400,7 @@ export class StructureTreeService {
       .addOrderBy('m.lastname', 'ASC')
       .getRawMany();
 
-    // ✅ AJOUT : Récupérer TOUS les accessoires disponibles
+    //  AJOUT : Récupérer TOUS les accessoires disponibles
     const allAccessories = await this.memberRepository.manager
       .createQueryBuilder()
       .select(['acc.uuid AS uuid', 'acc.name AS name'])
@@ -3412,7 +3482,7 @@ export class StructureTreeService {
       });
     }
 
-    // ✅ MODIFICATION : Grouper les accessoires avec Set d'UUIDs
+    //  MODIFICATION : Grouper les accessoires avec Set d'UUIDs
     const accessoriesMap = new Map<string, Set<string>>();
     for (const ma of memberAccessories) {
       if (!accessoriesMap.has(ma.member_uuid)) {
@@ -3534,7 +3604,7 @@ export class StructureTreeService {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Membres');
 
-        // ✅ MODIFICATION : Définir les colonnes de base SANS 'Accessoires'
+        //  MODIFICATION : Définir les colonnes de base SANS 'Accessoires'
         const baseColumns = [
           { header: 'Matricule', key: 'matricule', width: 15 },
           { header: 'Nom', key: 'lastname', width: 20 },
@@ -3572,7 +3642,7 @@ export class StructureTreeService {
           { header: 'Latitude', key: 'latitude', width: 15 },
         ];
 
-        // ✅ AJOUT : Créer les colonnes pour chaque accessoire
+        //  AJOUT : Créer les colonnes pour chaque accessoire
         const accessoryColumns: { header: string; key: string; width: number }[] = [];
         allAccessories.forEach((accessory) => {
           accessoryColumns.push({
@@ -3591,8 +3661,12 @@ export class StructureTreeService {
           });
         });
 
-        // ✅ MODIFICATION : Ajouter les colonnes accessoires
-        worksheet.columns = [...baseColumns, ...accessoryColumns, ...structureTreeColumns];
+        // AJOUT : Colonne UUID à la fin
+      const uuidColumn = [
+        { header: 'UUID', key: 'uuid', width: 40 }
+      ];
+        //  MODIFICATION : Ajouter les colonnes accessoires
+        worksheet.columns = [...baseColumns, ...accessoryColumns, ...structureTreeColumns, ...uuidColumn];
 
         // Styliser l'en-tête
         worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -3610,7 +3684,7 @@ export class StructureTreeService {
             .map(r => `${r.name} (${r.level_name})`)
             .join(', ');
 
-          // ✅ MODIFICATION : Récupérer le Set des accessoires
+          //  MODIFICATION : Récupérer le Set des accessoires
           const memberAccessorySet = accessoriesMap.get(member.uuid) || new Set<string>();
 
           const travels = travelsMap.get(member.uuid) || [];
@@ -3663,7 +3737,7 @@ export class StructureTreeService {
             travels: travelsText || '',
           };
 
-          // ✅ AJOUT : Ajouter les colonnes d'accessoires (Oui/Non)
+          //  AJOUT : Ajouter les colonnes d'accessoires (Oui/Non)
           allAccessories.forEach((accessory) => {
             rowData[`accessory_${accessory.uuid}`] = memberAccessorySet.has(accessory.uuid) ? 'Oui' : 'Non';
           });
@@ -3671,7 +3745,7 @@ export class StructureTreeService {
           structureLevelNames.forEach((levelName: string, index: number) => {
             rowData[`structure_level_${index}`] = treeFlattened[index] || '';
           });
-
+          rowData['uuid'] = member.uuid; // Ajouter l'UUID pour référence (peut être masqué dans Excel)
           worksheet.addRow(rowData);
         });
 
