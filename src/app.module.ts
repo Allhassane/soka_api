@@ -1,0 +1,124 @@
+import { Module } from '@nestjs/common';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { AppConfigService } from './config/config.service';
+import { RoleModule } from './roles/role.module';
+import { UserModule } from './users/user.module';
+import { AuthModule } from './auth/auth.module';
+import { LevelModule } from './level/level.module';
+import { LogActivitiesModule } from './log-activities/log-activities.module';
+import { ModuleModule } from './module/module.module';
+import { PermissionModule } from './permission/permission.module';
+import { RolePermissionController } from './role-permission/role-permission.controller';
+import { RolePermissionService } from './role-permission/role-permission.service';
+import { RolePermissionModule } from './role-permission/role-permission.module';
+import { MailerModule } from '@nestjs-modules/mailer';
+import { CommitteeModule } from './committees/committee.module';
+import { DepartmentModule } from './departments/department.module';
+import { DivisionModule } from './divisions/division.module';
+import { CityModule } from './cities/city.module';
+import { CivilityModule } from './civilities/civility.module';
+import { FormationModule } from './formations/formation.module';
+import { StructureModule } from './structure/structure.module';
+import { MemberResponsibilityModule } from './⁠member-responsibility/⁠member-responsibility.module';
+import { UserRole } from './user-roles/entities/user-roles.entity';
+import { UserRoleModule } from './user-roles/user-roles.module';
+import { AccessoryModule } from './accessories/accessory.module';
+import { MemberAccessoryModule } from './member-accessories/member-accessories.module';
+import { MemberModule } from './members/member.module';
+import { JobModule } from './jobs/job.module';
+import { CountryModule } from './countries/country.module';
+import { MaritalStatusModule } from './marital-status/marital-status.module';
+import { ResponsibilityModule } from './responsibilities/reponsibility.module';
+import { OrganisationCityModule } from './organisation_cities/organisation_city.module';
+
+//import { PermissionsModule } from './permissions/permission.module';
+import { DonateModule } from './donate/donate.module';
+import { SubscriptionModule } from './subscriptions/subscription.module';
+import { PaymentModule } from './payments/payment.module';
+import { MigrationModule } from './migration/migration.module';
+import { DonatePaymentModule } from './donate-payment/donate-payment.module';
+import { MemberTravelModule } from './member-travel/member-travel.module';
+import { SubscriptionPaymentModule } from './subscription-payment/subscription-payment.module';
+import { CinetpayCallbackController } from './payments/cinetpay.controller';
+import { StatistiqueModule } from './statistique/statistique.module';
+
+import { ConfigModule } from '@nestjs/config';
+import { LocationModule } from './location/location.module';
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+
+    TypeOrmModule.forRootAsync({
+      inject: [AppConfigService],
+      useFactory: (config: AppConfigService) => ({
+        type: 'mysql', //postgres
+        host: config.dbHost,
+        port: config.dbPort,
+        username: config.dbUser,
+        password: config.dbPassword,
+        database: config.dbName,
+        autoLoadEntities: true,
+        synchronize: !config.isProd,
+        ...(config.isProd && {
+          entities: ['dist/**/*.entity.js'],
+          migrations: ['dist/migrations/*.js'],
+          migrationsRun: true,
+        }),
+      }),
+    }),
+    MailerModule.forRoot({
+      transport: {
+        host: process.env.MAIL_HOST,
+        port: parseInt(process.env.MAIL_PORT ?? '587', 10),
+        secure: false,
+        auth: {
+          user: process.env.MAIL_USERNAME,
+          pass: process.env.MAIL_PASSWORD,
+        },
+      },
+      defaults: {
+        from: '"SOKA no-reply" <no-reply@' + process.env.APP_DOMAIN + '>',
+      },
+    }),
+    RoleModule,
+    UserModule,
+    AuthModule,
+    UserRole,
+    UserRoleModule,
+    LogActivitiesModule,
+    ModuleModule,
+    PermissionModule,
+    RolePermissionModule,
+    LevelModule,
+    CommitteeModule,
+    DepartmentModule,
+    DivisionModule,
+    CityModule,
+    CivilityModule,
+    FormationModule,
+    StructureModule,
+    MemberResponsibilityModule,
+    AccessoryModule,
+    MemberAccessoryModule,
+    MemberModule,
+    JobModule,
+    CountryModule,
+    MaritalStatusModule,
+    ResponsibilityModule,
+    DonateModule,
+    OrganisationCityModule,
+    SubscriptionModule,
+    PaymentModule,
+    MigrationModule,
+    DonatePaymentModule,
+    MemberTravelModule,
+    SubscriptionPaymentModule,
+    StatistiqueModule,
+    LocationModule
+  ],
+  controllers: [AppController, RolePermissionController,CinetpayCallbackController],
+  providers: [AppService, RolePermissionService],
+})
+export class AppModule {}

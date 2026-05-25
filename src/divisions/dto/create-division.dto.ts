@@ -1,0 +1,56 @@
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export class CreateDivisionDto {
+    @ApiProperty({
+    description: 'UUID de la division',
+    example: '2fe9da24-88a3-4193-b37d-278885dff993',
+  })
+  @IsString()
+  @IsOptional()
+  @MaxLength(150)
+  uuid?: string;
+
+  @ApiProperty({
+    description: 'Département uuid',
+    example: 'Département Homme',
+  })
+  @IsString()
+  @IsOptional()
+  @MaxLength(150)
+  department_uuid?: string | null;
+
+  @ApiProperty({
+    description: 'Nom de la division',
+    example: 'Division Afrix',
+  })
+  @IsString()
+  @IsNotEmpty({ message: 'Le nom de la division est requise' })
+  @MaxLength(150)
+  name: string;
+
+  @ApiPropertyOptional({
+    description: 'Genre',
+    example: 'homme',
+  })
+  @IsString()
+  @IsNotEmpty({ message: 'le genre est requis' })
+  gender: 'mixte' | 'homme' | 'femme';
+
+  @ApiPropertyOptional({
+    description: 'Description de la division',
+    example: 'Division pour gérer les activités !',
+  })
+  @IsString()
+  @IsOptional()
+  @MaxLength(255)
+  description?: string;
+
+  @ApiPropertyOptional({
+    description: 'Statut de la division',
+    example: 'enable',
+  })
+  @IsString()
+  @IsOptional()
+  status?: 'enable';
+}

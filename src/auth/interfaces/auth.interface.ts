@@ -1,0 +1,32 @@
+import { Role } from 'src/roles/entities/role.entity';
+
+export interface AuthCredentialsDto {
+  sub: number;
+  email?: string | null;
+  phone_number?: string;
+  member_uuid?: string | null;
+  firstname?: string | null;
+  lastname?: string | null;
+  full_name?: string | null;
+  avatar_url?: string | null;
+  responsibilities?: {
+    uuid: string;
+    name: string;
+    level_uuid: string;
+    level_name: string;
+    structure: {
+      uuid: string;
+      name: string;
+    } | null;
+  }[];
+  roles?: Role[];
+}
+
+export interface JwtPayload extends AuthCredentialsDto {
+  uuid: string;
+}
+
+export interface DecodedJwt extends AuthCredentialsDto {
+  iat?: number;
+  exp?: number;
+}

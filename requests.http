@@ -1,0 +1,12 @@
+### organisation ###
+GET http://localhost:3000/api/organisation-cities
+
+### create-organisation-city ###
+POST http://localhost:3000/api/organisation-cities
+Content-Type: application/json
+
+  {
+    "name": "Abobo"
+  }
+### organisation-city ###
+GET http://localhost:3000/api/organisation-cities/{id}

@@ -1,0 +1,32 @@
+import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
+import { Entity, PrimaryGeneratedColumn, Column, BeforeInsert, BeforeUpdate} from 'typeorm';
+
+function slugify(s: string) {
+  return s
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036F]/g, '') // accents
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)+/g, '');
+}
+
+@Entity({ name: 'countries' })
+export class CountryEntity extends DateTimeEntity {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ type: 'char', length: 36, unique: true, default: () => '(UUID())' })
+  uuid: string;
+
+  @Column()
+  name: string;
+
+  @Column({type: 'char', length: 191, nullable: true})
+  captial?: string;
+
+  @Column({type: 'char', length: 191, nullable: true})
+  continent?: string;
+
+  @Column({ type: 'varchar', length: 36, default: 'enable' })
+  status: string;
+}
