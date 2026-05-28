@@ -13,7 +13,9 @@ import { LevelService } from 'src/level/level.service';
 import { v4 as uuidv4 } from 'uuid';
 import { MemberEntity } from 'src/members/entities/member.entity';
 import { LevelEntity } from 'src/level/entities/level.entity';
-
+import { CommitteeResponseDto } from './dto/committee-response.dto';
+import { MemberResponsibilityEntity } from 'src/⁠member-responsibility/entities/member-responsibility.entity';
+import { ResponsibilityEntity } from 'src/responsibilities/entities/responsibility.entity';
 @Injectable()
 export class StructureService {
   constructor(
@@ -26,6 +28,12 @@ export class StructureService {
 
     private readonly logService: LogActivitiesService,
     private readonly levelService: LevelService,
+
+    @InjectRepository(MemberResponsibilityEntity)
+    private memberRespRepo: Repository<MemberResponsibilityEntity>,
+
+    @InjectRepository(ResponsibilityEntity)
+    private responsibilityRepo: Repository<ResponsibilityEntity>,
 
   ) {}
 
@@ -396,5 +404,93 @@ export class StructureService {
 
     return filterTree(rootStructure, pathToRoot, responsibleLevelOrder);
   }
+
+
+async getCommitteeByStructure(structureUuid: string) {
+
+  // 1. Structure
+  const structure = await this.structureRepo.findOne({
+    where: { uuid: structureUuid },
+    relations: ['level', 'parent'],
+  });
+
+  if (!structure) {
+    throw new NotFoundException('Structure non trouvée');
+  }
+
+  // 2. Responsables (directement depuis member_responsibility)
+  const memberResponsibilities = await this.memberRespRepo
+    .createQueryBuilder('mr')
+    .innerJoinAndSelect('mr.member', 'm')
+    .innerJoinAndSelect('mr.responsibility', 'r')
+    .where('mr.structure_uuid = :uuid', { uuid: structureUuid }) 
+    .andWhere('mr.member_id IS NOT NULL')
+    .andWhere('mr.responsibility_id IS NOT NULL')
+    .getMany();
+
+  // 3. Filtrer pour éviter les null (clé du problème)
+  const validMR = memberResponsibilities.filter(
+    mr => mr.member && mr.responsibility
+  );
+
+  // 4. Construire responsables
+  const responsibles = validMR.map(mr => ({
+    responsibility: {
+      uuid: mr.responsibility!.uuid,
+      name: mr.responsibility!.name,
+      slug: mr.responsibility!.slug,
+      gender: mr.responsibility!.gender,
+    },
+    member: {
+      uuid: mr.member!.uuid,
+      firstname: mr.member!.firstname,
+      lastname: mr.member!.lastname,
+      picture: mr.member!.picture,
+      phone: mr.member!.phone,
+      phone_whatsapp: mr.member!.phone_whatsapp,
+      email: mr.member!.email,
+    },
+  }));
+
+  // 5. Toutes les responsabilités (référentiel)
+  const allResponsibilities = await this.responsibilityRepo.find();
+
+  // 6. Responsabilités occupées
+  const occupiedIds = new Set(
+    validMR.map(mr => mr.responsibility!.id)
+  );
+
+  // 7. Responsabilités vacantes
+  const vacant_responsibilities = allResponsibilities
+    .filter(r => !occupiedIds.has(r.id))
+    .map(r => ({
+      uuid: r.uuid,
+      name: r.name,
+      slug: r.slug,
+      gender: r.gender,
+    }));
+
+  // 8. Retour final
+  return {
+    structure: {
+      uuid: structure.uuid,
+      name: structure.name,
+      level: structure.level
+        ? {
+            uuid: structure.level.uuid,
+            name: structure.level.name,
+          }
+        : null,
+      parent: structure.parent
+        ? {
+            uuid: structure.parent.uuid,
+            name: structure.parent.name,
+          }
+        : null,
+    },
+    responsibles,
+    vacant_responsibilities,
+  };
+}
 
 }

@@ -644,6 +644,18 @@ async exportStatCategory(
   }
 
 
+  @Get('my-committee')
+  @UseGuards(JwtAuthGuard)
+  async myCommittee(@Req() req) {
+    const user = req.user;
+    console.log(user);
 
+    return this.structureService.getCommitteeByStructure(user.structure_uuid);
+  }
+
+  @Get(':uuid/committee')
+  async getCommittee(@Param('uuid') uuid: string) {
+    return this.structureService.getCommitteeByStructure(uuid);
+  }
 
 }

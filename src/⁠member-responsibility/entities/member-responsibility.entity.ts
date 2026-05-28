@@ -2,6 +2,7 @@ import { IsNotEmpty, IsOptional } from 'class-validator';
 import { MemberEntity } from 'src/members/entities/member.entity';
 import { ResponsibilityEntity } from 'src/responsibilities/entities/responsibility.entity';
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
+import { StructureEntity } from 'src/structure/entities/structure.entity';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -52,4 +53,19 @@ export class MemberResponsibilityEntity extends DateTimeEntity {
   @Column({ type: 'varchar', length: 36, nullable: true })
   @IsOptional()
   admin_uuid?: string;
+
+  @ManyToOne(
+    () => StructureEntity,
+    (structure) => structure.id,
+    {
+      nullable: true,
+      onDelete: 'SET NULL',
+    },
+  )
+  @JoinColumn({ name: 'structure_id', referencedColumnName: 'id' })
+  structure?: StructureEntity | null;
+
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  @IsOptional()
+  structure_uuid?: string;
 }

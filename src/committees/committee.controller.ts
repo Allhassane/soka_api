@@ -58,4 +58,8 @@ export class CommitteeController {
     const admin_uuid = req.user.uuid as string;
     return this.committeeService.delete(uuid,admin_uuid);
   }
+
+
+
+
 }

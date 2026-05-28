@@ -116,7 +116,8 @@ import { LocationModule } from './location/location.module';
     MemberTravelModule,
     SubscriptionPaymentModule,
     StatistiqueModule,
-    LocationModule
+    LocationModule,
+
   ],
   controllers: [AppController, RolePermissionController,CinetpayCallbackController],
   providers: [AppService, RolePermissionService],

@@ -2,6 +2,7 @@ import { IsNotEmpty, IsOptional } from 'class-validator';
 import { LevelEntity } from 'src/level/entities/level.entity';
 import { Role } from 'src/roles/entities/role.entity';
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
+import { MemberResponsibilityEntity } from 'src/⁠member-responsibility/entities/member-responsibility.entity';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -10,6 +11,7 @@ import {
   BeforeUpdate,
   ManyToOne,
   JoinColumn,
+  OneToMany,
 } from 'typeorm';
 
 function slugify(s: string) {
@@ -68,9 +70,13 @@ export class ResponsibilityEntity extends DateTimeEntity {
   @JoinColumn({ name: 'role_id', referencedColumnName: 'id' })
   role?: Role;
 
+  @OneToMany(() => MemberResponsibilityEntity, (mr) => mr.responsibility)
+  memberResponsibilities: MemberResponsibilityEntity[];
+
   @BeforeInsert()
   @BeforeUpdate()
   generateSlug() {
     if (this.name) this.slug = slugify(this.name);
   }
 }
+

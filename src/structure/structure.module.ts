@@ -13,7 +13,6 @@ import { MemberResponsibilityEntity } from 'src/⁠member-responsibility/entitie
 import { ResponsibilityEntity } from 'src/responsibilities/entities/responsibility.entity';
 import { AuthService } from 'src/auth/auth.service';
 import { ExportJobModule } from 'src/export-async/export-job.module';
-
 @Module({
   imports: [
     TypeOrmModule.forFeature([StructureEntity,MemberEntity,LevelEntity,MemberResponsibilityEntity,ResponsibilityEntity,]),

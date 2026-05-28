@@ -14,6 +14,7 @@ import { StructureTreeService } from 'src/structure/structure-tree.service';
 import { StatistiqueService } from './statistique.service';
 import { User } from 'src/users/entities/user.entity';
 import { ExportJobModule } from 'src/export-async/export-job.module';
+import { StructureModule } from 'src/structure/structure.module';
 
 @Module({
   imports: [
@@ -23,16 +24,20 @@ import { ExportJobModule } from 'src/export-async/export-job.module';
       LevelEntity,
       MemberResponsibilityEntity,
       ResponsibilityEntity,
-      User
+      User,
     ]),
+    StructureModule,
     LogActivitiesModule,
     UserModule,
     LevelModule,
-    forwardRef(() => ExportJobModule), // ✅ Ajouter ceci
+    forwardRef(() => ExportJobModule),
 
   ],
   controllers: [StatistiqueController],
-  providers: [StructureService,StructureTreeService,StatistiqueService],
-  exports: [StatistiqueService,StructureService,StructureTreeService]
+  providers: [StatistiqueService],
+  exports: [StatistiqueService]
+
+  // providers: [StructureService,StructureTreeService,StatistiqueService],
+  // exports: [StatistiqueService,StructureService,StructureTreeService]
 })
 export class StatistiqueModule {}
