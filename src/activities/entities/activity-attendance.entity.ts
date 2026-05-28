@@ -28,7 +28,7 @@ export class ActivityAttendanceEntity extends DateTimeEntity {
   }
 
   @Index()
-  @Column({ type: 'varchar', length: 36 })
+  @Column({ type: 'char', length: 36 })
   activity_uuid: string;
 
   @ManyToOne(() => ActivityEntity, (a) => a.attendances, { nullable: false })
@@ -36,10 +36,10 @@ export class ActivityAttendanceEntity extends DateTimeEntity {
   activity: ActivityEntity;
 
   @Index()
-  @Column({ type: 'varchar', length: 36 })
+  @Column({ type: 'char', length: 36 })
   member_uuid: string;
 
-  @ManyToOne(() => MemberEntity, { nullable: false })
+  @ManyToOne(() => MemberEntity, { nullable: false, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'member_uuid', referencedColumnName: 'uuid' })
   member: MemberEntity;
 
@@ -49,7 +49,7 @@ export class ActivityAttendanceEntity extends DateTimeEntity {
   @Column({ type: 'datetime', nullable: true })
   arrived_at: Date | null;
 
-  @Column({ type: 'varchar', length: 36 })
+  @Column({ type: 'char', length: 36 })
   marked_by_admin_uuid: string;
 
   @Column({ type: 'text', nullable: true })

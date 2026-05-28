@@ -44,7 +44,7 @@ export class JournalDistributionEntity extends DateTimeEntity {
   }
 
   @Index()
-  @Column({ type: 'varchar', length: 36 })
+  @Column({ type: 'char', length: 36 })
   edition_uuid: string;
 
   @ManyToOne(() => JournalEditionEntity, { nullable: false })
@@ -52,7 +52,7 @@ export class JournalDistributionEntity extends DateTimeEntity {
   edition: JournalEditionEntity;
 
   @Index()
-  @Column({ type: 'varchar', length: 36 })
+  @Column({ type: 'char', length: 36 })
   destination_uuid: string;
 
   @ManyToOne(() => JournalDestinationEntity, { nullable: false })
@@ -103,6 +103,6 @@ export class JournalDistributionEntity extends DateTimeEntity {
   @Column({ type: 'longtext', nullable: true })
   history: string;
 
-  @Column({ type: 'varchar', length: 36 })
+  @Column({ type: 'char', length: 36 })
   admin_uuid: string;
 }

@@ -32,7 +32,7 @@ export class JournalDestinationEntity extends DateTimeEntity {
   }
 
   @Index()
-  @Column({ type: 'varchar', length: 36 })
+  @Column({ type: 'char', length: 36 })
   zone_uuid: string;
 
   @ManyToOne(() => JournalZoneEntity, (z) => z.destinations, { nullable: false })
@@ -51,10 +51,10 @@ export class JournalDestinationEntity extends DateTimeEntity {
   quartier: string;
 
   /** Correspondant chargé de la distribution */
-  @Column({ type: 'varchar', length: 36, nullable: true })
+  @Column({ type: 'char', length: 36, nullable: true })
   correspondent_member_uuid: string | null;
 
-  @ManyToOne(() => MemberEntity, { nullable: true })
+  @ManyToOne(() => MemberEntity, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'correspondent_member_uuid', referencedColumnName: 'uuid' })
   correspondent: MemberEntity | null;
 
@@ -78,7 +78,7 @@ export class JournalDestinationEntity extends DateTimeEntity {
   @Column({ type: 'longtext', nullable: true })
   history: string;
 
-  @Column({ type: 'varchar', length: 36 })
+  @Column({ type: 'char', length: 36 })
   admin_uuid: string;
 
   @Column({ type: 'enum', enum: GlobalStatus, default: GlobalStatus.CREATED })

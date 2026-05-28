@@ -35,7 +35,7 @@ export class ActivityParticipantEntity extends DateTimeEntity {
   }
 
   @Index()
-  @Column({ type: 'varchar', length: 36 })
+  @Column({ type: 'char', length: 36 })
   activity_uuid: string;
 
   @ManyToOne(() => ActivityEntity, (a) => a.participants, { nullable: false })
@@ -43,10 +43,10 @@ export class ActivityParticipantEntity extends DateTimeEntity {
   activity: ActivityEntity;
 
   @Index()
-  @Column({ type: 'varchar', length: 36 })
+  @Column({ type: 'char', length: 36 })
   member_uuid: string;
 
-  @ManyToOne(() => MemberEntity, { nullable: false })
+  @ManyToOne(() => MemberEntity, { nullable: false, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'member_uuid', referencedColumnName: 'uuid' })
   member: MemberEntity;
 
@@ -58,9 +58,9 @@ export class ActivityParticipantEntity extends DateTimeEntity {
   role: ActivityParticipantRole;
 
   /** Structure du membre au moment de l'invitation (pour stats historiques) */
-  @Column({ type: 'varchar', length: 36, nullable: true })
+  @Column({ type: 'char', length: 36, nullable: true })
   structure_uuid_at_invitation: string | null;
 
-  @Column({ type: 'varchar', length: 36 })
+  @Column({ type: 'char', length: 36 })
   admin_uuid: string;
 }

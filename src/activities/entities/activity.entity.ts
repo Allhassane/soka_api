@@ -61,10 +61,10 @@ export class ActivityEntity extends DateTimeEntity {
   @Column({ type: 'longtext', nullable: true })
   organigram: string | null;
 
-  @Column({ type: 'varchar', length: 36, nullable: true })
+  @Column({ type: 'char', length: 36, nullable: true })
   structure_uuid: string | null;
 
-  @ManyToOne(() => StructureEntity, { nullable: true })
+  @ManyToOne(() => StructureEntity, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'structure_uuid', referencedColumnName: 'uuid' })
   structure: StructureEntity | null;
 
@@ -100,7 +100,7 @@ export class ActivityEntity extends DateTimeEntity {
   @Column({ type: 'longtext', nullable: true })
   history: string;
 
-  @Column({ type: 'varchar', length: 36 })
+  @Column({ type: 'char', length: 36 })
   admin_uuid: string;
 
   @Column({ type: 'enum', enum: GlobalStatus, default: GlobalStatus.CREATED })

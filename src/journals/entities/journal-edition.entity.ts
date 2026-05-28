@@ -48,10 +48,10 @@ export class JournalEditionEntity extends DateTimeEntity {
   year: number;
 
   /** Campagne d'abonnement associée (les bénéficiaires reçoivent ce journal) */
-  @Column({ type: 'varchar', length: 36, nullable: true })
+  @Column({ type: 'char', length: 36, nullable: true })
   subscription_uuid: string | null;
 
-  @ManyToOne(() => SubscriptionEntity, { nullable: true })
+  @ManyToOne(() => SubscriptionEntity, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'subscription_uuid', referencedColumnName: 'uuid' })
   subscription: SubscriptionEntity | null;
 
@@ -73,7 +73,7 @@ export class JournalEditionEntity extends DateTimeEntity {
   @Column({ type: 'longtext', nullable: true })
   history: string;
 
-  @Column({ type: 'varchar', length: 36 })
+  @Column({ type: 'char', length: 36 })
   admin_uuid: string;
 
   @Column({ type: 'enum', enum: GlobalStatus, default: GlobalStatus.CREATED })
