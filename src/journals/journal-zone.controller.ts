@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   Request,
   UseGuards,
 } from '@nestjs/common';
@@ -21,6 +22,7 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { JournalZoneService } from './journal-zone.service';
 import { CreateJournalZoneDto } from './dto/create-journal-zone.dto';
 import { UpdateJournalZoneDto } from './dto/update-journal-zone.dto';
+import { PaginationQueryDto } from 'src/shared/dtos/pagination-query.dto';
 
 @ApiBearerAuth()
 @ApiTags('Journal - Zones')
@@ -31,10 +33,11 @@ export class JournalZoneController {
 
   @Get()
   @ApiOperation({ summary: 'Liste de toutes les zones de distribution' })
-  @ApiResponse({ status: 200, description: 'Liste recuperee avec succes.' })
+  @ApiResponse({ status: 200, description: 'Retour paginé' })
   @ApiResponse({ status: 401, description: 'Non autorise.' })
-  findAll(@Request() req) {
-    return this.zoneService.findAll(req.user.uuid as string);
+  findAll(@Request() req, @Query() query: PaginationQueryDto) {
+    const { page, limit } = query;
+    return this.zoneService.findAll(req.user.uuid as string, page, limit);
   }
 
   @Post()

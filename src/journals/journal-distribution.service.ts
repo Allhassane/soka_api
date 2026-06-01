@@ -230,7 +230,7 @@ export class JournalDistributionService {
     await this.logService.logAction(
       'journal-edition-distribute',
       admin.id,
-      `Distribution lancée pour "${edition.title} N°${edition.number}" → ${results.length} destinations (${results.filter((r) => r.success).length} OK).`,
+      `Distribution lancée pour "${edition.title} N°${edition.number}" -> ${results.length} destinations (${results.filter((r) => r.success).length} OK).`,
     );
 
     return {
@@ -252,6 +252,7 @@ export class JournalDistributionService {
     const admin = await this.getAdmin(admin_uuid);
     const edition = await this.editionRepo.findOne({
       where: { uuid: edition_uuid },
+      relations: ['subscription'],
     });
     if (!edition) throw new NotFoundException('Édition introuvable');
 
@@ -279,7 +280,11 @@ export class JournalDistributionService {
       `Liste distributions édition "${edition.title} N°${edition.number}"`,
     );
 
-    return { edition, items: distribs };
+    return {
+      edition,
+      subscription: edition.subscription ?? null,
+      items: distribs,
+    };
   }
 
   /**

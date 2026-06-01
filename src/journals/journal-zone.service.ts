@@ -11,6 +11,8 @@ import { User } from '../users/entities/user.entity';
 import { CreateJournalZoneDto } from './dto/create-journal-zone.dto';
 import { UpdateJournalZoneDto } from './dto/update-journal-zone.dto';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
+import { buildPaginationMeta } from 'src/shared/helpers/pagination-meta.helper';
+import { PaginateMeta } from 'src/shared/interfaces/paginate-meta.interface';
 
 @Injectable()
 export class JournalZoneService {
@@ -30,18 +32,28 @@ export class JournalZoneService {
     return admin;
   }
 
-  async findAll(admin_uuid: string) {
+  async findAll(
+    admin_uuid: string,
+    page = 1,
+    limit = 10,
+  ): Promise<{ data: JournalZoneEntity[]; meta: Omit<PaginateMeta, 'page'> }> {
     const admin = await this.getAdmin(admin_uuid);
-    const zones = await this.zoneRepo.find({
-      order: { number: 'ASC' },
-      relations: ['destinations'],
-    });
+    const [data, total] = await this.zoneRepo
+      .createQueryBuilder('zone')
+      .leftJoinAndSelect('zone.destinations', 'destinations')
+      .orderBy('zone.number', 'ASC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
     await this.logService.logAction(
       'journal-zones-findAll',
       admin.id,
       'Récupération de la liste des zones du journal',
     );
-    return zones;
+    return {
+      data,
+      meta: buildPaginationMeta({ total, page, perPage: limit }),
+    };
   }
 
   async findOne(uuid: string, admin_uuid: string) {

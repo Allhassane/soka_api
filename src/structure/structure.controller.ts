@@ -28,6 +28,7 @@ import { UpdateStructureDto } from './dto/update-structure.dto';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { MemberStatsFilters, PaginationMemberParams, StructureTreeService } from './structure-tree.service';
 import { StructureTreeNodeDto } from './dto/tree.dto';
+import { StructurePaginationQueryDto } from './dto/structure-pagination-query.dto';
 
 @ApiTags('Structures')
 @Controller('structure')
@@ -433,14 +434,15 @@ async exportStatCategory(
   })
   @ApiResponse({
     status: 200,
-    description: 'Liste des agents récupérée avec succès',
+    description: 'Retour paginé',
   })
   @ApiResponse({
     status: 401,
     description: 'Non autorisé - Authentification requise',
   })
-  public findAll() {
-    return this.structureService.findAll();
+  public findAll(@Query() query: StructurePaginationQueryDto) {
+    const { page, limit, search } = query;
+    return this.structureService.findAll(page, limit, search);
   }
 
   @Post()

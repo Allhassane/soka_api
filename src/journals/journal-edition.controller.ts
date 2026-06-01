@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   Request,
   UseGuards,
 } from '@nestjs/common';
@@ -22,6 +23,7 @@ import { JournalEditionService } from './journal-edition.service';
 import { CreateJournalEditionDto } from './dto/create-journal-edition.dto';
 import { UpdateJournalEditionDto } from './dto/update-journal-edition.dto';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
+import { PaginationQueryDto } from 'src/shared/dtos/pagination-query.dto';
 
 @ApiBearerAuth()
 @ApiTags('Journal - Editions')
@@ -32,10 +34,11 @@ export class JournalEditionController {
 
   @Get()
   @ApiOperation({ summary: 'Liste de toutes les editions du journal' })
-  @ApiResponse({ status: 200, description: 'Liste recuperee avec succes.' })
+  @ApiResponse({ status: 200, description: 'Retour paginé' })
   @ApiResponse({ status: 401, description: 'Non autorise.' })
-  findAll(@Request() req) {
-    return this.service.findAll(req.user.uuid as string);
+  findAll(@Request() req, @Query() query: PaginationQueryDto) {
+    const { page, limit } = query;
+    return this.service.findAll(req.user.uuid as string, page, limit);
   }
 
   @Post()

@@ -15,7 +15,6 @@ import {
   ApiBody,
   ApiOperation,
   ApiParam,
-  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -23,6 +22,7 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { JournalDestinationService } from './journal-destination.service';
 import { CreateJournalDestinationDto } from './dto/create-journal-destination.dto';
 import { UpdateJournalDestinationDto } from './dto/update-journal-destination.dto';
+import { JournalDestinationPaginationQueryDto } from './dto/journal-destination-pagination-query.dto';
 
 @ApiBearerAuth()
 @ApiTags('Journal - Destinations')
@@ -36,11 +36,11 @@ export class JournalDestinationController {
     summary: 'Liste des destinations (centres/chapitres)',
     description: 'Filtre optionnel par zone via le query param zone_uuid.',
   })
-  @ApiQuery({ name: 'zone_uuid', required: false, description: 'UUID de la zone pour filtrer' })
-  @ApiResponse({ status: 200, description: 'Liste recuperee avec succes.' })
+  @ApiResponse({ status: 200, description: 'Retour paginé' })
   @ApiResponse({ status: 401, description: 'Non autorise.' })
-  findAll(@Request() req, @Query('zone_uuid') zone_uuid?: string) {
-    return this.service.findAll(req.user.uuid as string, zone_uuid);
+  findAll(@Request() req, @Query() query: JournalDestinationPaginationQueryDto) {
+    const { page, limit, zone_uuid } = query;
+    return this.service.findAll(req.user.uuid as string, page, limit, zone_uuid);
   }
 
   @Post()

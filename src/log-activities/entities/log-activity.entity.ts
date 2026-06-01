@@ -9,10 +9,10 @@ export class LogActivity {
   @Column({ type: 'int', nullable: true })
   user_id?: number | null; 
 
-  @Column({ nullable: false })
+  @Column({ nullable: false, collation: 'utf8mb4_unicode_ci' })
   action: string; // obligatoire
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text', nullable: true, collation: 'utf8mb4_unicode_ci' })
   details?: string | null; 
 
   @CreateDateColumn()

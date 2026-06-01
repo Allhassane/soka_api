@@ -13,6 +13,8 @@ import { MemberEntity } from 'src/members/entities/member.entity';
 import { CreateJournalDestinationDto } from './dto/create-journal-destination.dto';
 import { UpdateJournalDestinationDto } from './dto/update-journal-destination.dto';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
+import { buildPaginationMeta } from 'src/shared/helpers/pagination-meta.helper';
+import { PaginateMeta } from 'src/shared/interfaces/paginate-meta.interface';
 
 @Injectable()
 export class JournalDestinationService {
@@ -36,21 +38,37 @@ export class JournalDestinationService {
     return admin;
   }
 
-  async findAll(admin_uuid: string, zone_uuid?: string) {
+  async findAll(
+    admin_uuid: string,
+    page = 1,
+    limit = 10,
+    zone_uuid?: string,
+  ): Promise<{ data: JournalDestinationEntity[]; meta: Omit<PaginateMeta, 'page'> }> {
     const admin = await this.getAdmin(admin_uuid);
-    const where: any = {};
-    if (zone_uuid) where.zone_uuid = zone_uuid;
-    const data = await this.destRepo.find({
-      where,
-      relations: ['zone', 'correspondent'],
-      order: { name: 'ASC' },
-    });
+    const qb = this.destRepo
+      .createQueryBuilder('destination')
+      .leftJoinAndSelect('destination.zone', 'zone')
+      .leftJoinAndSelect('destination.correspondent', 'correspondent')
+      .orderBy('destination.name', 'ASC');
+
+    if (zone_uuid) {
+      qb.andWhere('destination.zone_uuid = :zone_uuid', { zone_uuid });
+    }
+
+    const [data, total] = await qb
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
     await this.logService.logAction(
       'journal-destinations-findAll',
       admin.id,
       `Récupération des destinations${zone_uuid ? ` (zone=${zone_uuid})` : ''}`,
     );
-    return data;
+    return {
+      data,
+      meta: buildPaginationMeta({ total, page, perPage: limit }),
+    };
   }
 
   async findOne(uuid: string, admin_uuid: string) {

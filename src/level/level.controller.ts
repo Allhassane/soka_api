@@ -7,10 +7,12 @@ import {
   Delete,
   UseGuards,
   Put,
+  Query,
 } from '@nestjs/common';
 import { LevelService } from './level.service';
 import { CreateLevelDto } from './dto/create-level.dto';
 import { UpdateLevelDto } from './dto/update-level.dto';
+import { LevelPaginationQueryDto } from './dto/level-pagination-query.dto';
 import { JwtAuthGuard } from '../auth/guards/auth.guard';
 import {
   ApiTags,
@@ -30,9 +32,10 @@ export class LevelController {
 
   @Get()
   @ApiOperation({ summary: 'Lister tous les niveaux' })
-  @ApiResponse({ status: 200, description: 'Liste des niveaux.' })
-  findAllLevels() {
-    return this.levelService.findAll('all');
+  @ApiResponse({ status: 200, description: 'Retour paginé' })
+  findAllLevels(@Query() query: LevelPaginationQueryDto) {
+    const { page, limit, search } = query;
+    return this.levelService.findAll('all', page, limit, search);
   }
 
   @Post()

@@ -12,6 +12,8 @@ import { SubscriptionEntity } from 'src/subscriptions/entities/subscription.enti
 import { CreateJournalEditionDto } from './dto/create-journal-edition.dto';
 import { UpdateJournalEditionDto } from './dto/update-journal-edition.dto';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
+import { buildPaginationMeta } from 'src/shared/helpers/pagination-meta.helper';
+import { PaginateMeta } from 'src/shared/interfaces/paginate-meta.interface';
 
 /**
  * Règle métier : le délai maximum de distribution d'une édition est de 2 jours
@@ -46,18 +48,30 @@ export class JournalEditionService {
     return d;
   }
 
-  async findAll(admin_uuid: string) {
+  async findAll(
+    admin_uuid: string,
+    page = 1,
+    limit = 10,
+  ): Promise<{ data: JournalEditionEntity[]; meta: Omit<PaginateMeta, 'page'> }> {
     const admin = await this.getAdmin(admin_uuid);
-    const editions = await this.editionRepo.find({
-      order: { year: 'DESC', month: 'DESC', number: 'DESC' },
-      relations: ['subscription'],
-    });
+    const [data, total] = await this.editionRepo
+      .createQueryBuilder('edition')
+      .leftJoinAndSelect('edition.subscription', 'subscription')
+      .orderBy('edition.year', 'DESC')
+      .addOrderBy('edition.month', 'DESC')
+      .addOrderBy('edition.number', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
     await this.logService.logAction(
       'journal-editions-findAll',
       admin.id,
       'Récupération de la liste des éditions du journal',
     );
-    return editions;
+    return {
+      data,
+      meta: buildPaginationMeta({ total, page, perPage: limit }),
+    };
   }
 
   async findOne(uuid: string, admin_uuid: string) {
@@ -210,7 +224,7 @@ export class JournalEditionService {
     await this.logService.logAction(
       'journal-edition-status-change',
       admin.id,
-      `Statut édition "${updated.title} N°${updated.number}" → ${status}`,
+      `Statut édition "${updated.title} N°${updated.number}" -> ${status}`,
     );
     return updated;
   }

@@ -9,6 +9,8 @@ import { LevelEntity } from './entities/level.entity';
 import { CreateLevelDto } from './dto/create-level.dto';
 import { UpdateLevelDto } from './dto/update-level.dto';
 import { v4 as uuidv4 } from 'uuid';
+import { buildPaginationMeta } from 'src/shared/helpers/pagination-meta.helper';
+import { PaginateMeta } from 'src/shared/interfaces/paginate-meta.interface';
 @Injectable()
 export class LevelService {
   constructor(
@@ -36,7 +38,15 @@ export class LevelService {
     return this.levelRepo.save(level);
   }
 
-  async findAll(category: string) {
+  async findAll(
+    category: string,
+    page?: number,
+    limit?: number,
+    search?: string,
+  ): Promise<
+    | LevelEntity[]
+    | { data: LevelEntity[]; meta: Omit<PaginateMeta, 'page'> }
+  > {
     if (
       category !== 'responsibility' &&
       category !== 'level' &&
@@ -45,20 +55,33 @@ export class LevelService {
       throw new NotFoundException('Categorie invalide');
     }
 
-    if (category === 'all') {
-      const data = await this.levelRepo.find({
-        order: { order: 'ASC' },
-      });
+    const qb = this.levelRepo
+      .createQueryBuilder('level')
+      .orderBy('level.order', 'ASC');
 
-      return data;
-    } else {
-      const data = await this.levelRepo.find({
-        where: { category },
-        order: { order: 'ASC' },
-      });
-
-      return data;
+    if (category !== 'all') {
+      qb.andWhere('level.category = :category', { category });
     }
+
+    if (search?.trim()) {
+      qb.andWhere('level.name LIKE :search', {
+        search: `%${search.trim()}%`,
+      });
+    }
+
+    if (page !== undefined && limit !== undefined) {
+      const [data, total] = await qb
+        .skip((page - 1) * limit)
+        .take(limit)
+        .getManyAndCount();
+
+      return {
+        data,
+        meta: buildPaginationMeta({ total, page, perPage: limit }),
+      };
+    }
+
+    return qb.getMany();
   }
 
   async findOne(uuid: string) {

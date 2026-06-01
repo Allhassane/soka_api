@@ -18,3 +18,19 @@ export function buildPaginationMeta({
     perPage,
   };
 }
+
+export interface PaginatedResult<T> {
+  data: T[];
+  meta: Omit<PaginateMeta, 'page'>;
+}
+
+export function isPaginatedResult<T>(
+  value: unknown,
+): value is PaginatedResult<T> {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const candidate = value as PaginatedResult<T>;
+  return Array.isArray(candidate.data) && typeof candidate.meta === 'object';
+}
