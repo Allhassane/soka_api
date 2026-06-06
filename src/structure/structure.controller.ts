@@ -530,7 +530,55 @@ async downloadMembersExport(
     });
   }
 
+  @Get('my-committee')
+  @ApiOperation({
+    summary: 'Récupérer les responsables du comité du membre connecté',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Responsables du comité avec leurs contacts',
+  })
+  async getMyCommittee(@Req() req) {
+    const user = req.user;
+    const memberUuid = user.member_uuid;
+    const responsibilityStructureUuid = user.responsibilities?.[0]?.structure?.uuid;
 
+    const committee = await this.structureTreeService.getCommitteeResponsibles(
+      memberUuid,
+      responsibilityStructureUuid,
+    );
 
+    return {
+      success: true,
+      message: 'Responsables du comité récupérés avec succès',
+      data: committee,
+    };
+  }
+
+  @Get(':uuid/committee')
+  @ApiOperation({
+    summary: 'Récupérer les responsables du comité d\'une structure',
+  })
+  @ApiParam({
+    name: 'uuid',
+    type: String,
+    description: 'UUID de la structure',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Responsables du comité avec leurs contacts',
+  })
+  async getCommitteeByStructure(@Param('uuid') uuid: string) {
+    const committee = await this.structureTreeService.getCommitteeResponsibles(
+      undefined,
+      uuid,
+    );
+
+    return {
+      success: true,
+      message: 'Responsables du comité récupérés avec succès',
+      data: committee,
+    };
+  }
 
 }

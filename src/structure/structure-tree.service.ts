@@ -1,9 +1,11 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { StructureEntity } from './entities/structure.entity';
 import { MemberEntity } from '../members/entities/member.entity';
 import { LevelEntity } from '../level/entities/level.entity';
+import { ResponsibilityEntity } from '../responsibilities/entities/responsibility.entity';
+import { MemberResponsibilityEntity } from '../⁠member-responsibility/entities/member-responsibility.entity';
 import { ResponsibleInfo, StructureNode } from 'src/shared/interfaces/structure-node.interface';
 import { StructureMembersStats } from 'src/shared/interfaces/StructureMembersStats';
 import { AuthService } from 'src/auth/auth.service';
@@ -88,6 +90,10 @@ export class StructureTreeService {
     private memberRepository: Repository<MemberEntity>,
     @InjectRepository(LevelEntity)
     private levelRepository: Repository<LevelEntity>,
+    @InjectRepository(ResponsibilityEntity)
+    private responsibilityRepository: Repository<ResponsibilityEntity>,
+    @InjectRepository(MemberResponsibilityEntity)
+    private memberResponsibilityRepository: Repository<MemberResponsibilityEntity>,
 
     private exportJobService: ExportJobService,
     private exportProcessorService: ExportProcessorService,
@@ -2475,6 +2481,176 @@ export class StructureTreeService {
 
     //  Retourner le workbook au lieu de l'envoyer via res
     return workbook;
+  }
+
+  async getCommitteeResponsibles(
+    memberUuid?: string,
+    responsibilityStructureUuid?: string,
+  ) {
+    let targetStructure: StructureEntity | null = null;
+
+    console.log('[getCommitteeResponsibles] memberUuid:', memberUuid, 'responsibilityStructureUuid:', responsibilityStructureUuid);
+
+    if (responsibilityStructureUuid) {
+      targetStructure = await this.structureRepository.findOne({
+        where: { uuid: responsibilityStructureUuid },
+        relations: ['level', 'parent'],
+      });
+      if (!targetStructure) {
+        throw new NotFoundException('Structure non trouvée');
+      }
+    } else if (memberUuid) {
+      const member = await this.memberRepository.findOne({
+        where: { uuid: memberUuid },
+        relations: ['structure'],
+      });
+      if (!member) {
+        throw new NotFoundException('Membre non trouvé');
+      }
+      console.log('[getCommitteeResponsibles] member.structure_uuid:', member.structure_uuid);
+      if (!member.structure_uuid) {
+        throw new BadRequestException(
+          'Le membre n\'a pas de structure d\'appartenance',
+        );
+      }
+      targetStructure = await this.structureRepository.findOne({
+        where: { uuid: member.structure_uuid },
+        relations: ['level', 'parent'],
+      });
+      if (!targetStructure) {
+        throw new NotFoundException(
+          'Structure d\'appartenance non trouvée',
+        );
+      }
+    } else {
+      throw new BadRequestException(
+        'Vous devez être associé à une structure',
+      );
+    }
+
+    console.log('[getCommitteeResponsibles] targetStructure:', targetStructure.uuid, targetStructure.name, 'level_uuid:', targetStructure.level_uuid);
+
+    if (!targetStructure.level_uuid) {
+      return {
+        structure: {
+          uuid: targetStructure.uuid,
+          name: targetStructure.name,
+          level: null,
+          parent: targetStructure.parent ? { uuid: targetStructure.parent.uuid, name: targetStructure.parent.name } : null,
+        },
+        responsibles: [],
+        vacant_responsibilities: [],
+      };
+    }
+
+    const responsibilities = await this.responsibilityRepository.find({
+      where: { level_uuid: targetStructure.level_uuid, status: 'enable' },
+    });
+
+    console.log('[getCommitteeResponsibles] responsibilities found:', responsibilities.length, responsibilities.map(r => r.name));
+
+    // Récupérer la structure cible ET toutes ses sous-structures (enfants, petits-enfants, etc.)
+    const allStructureUuids: string[] = [targetStructure.uuid];
+
+    const getDescendants = async (parentUuid: string) => {
+      const children = await this.structureRepository.find({
+        where: { parent_uuid: parentUuid },
+        select: ['uuid'],
+      });
+      for (const child of children) {
+        allStructureUuids.push(child.uuid);
+        await getDescendants(child.uuid);
+      }
+    };
+
+    await getDescendants(targetStructure.uuid);
+
+    console.log('[getCommitteeResponsibles] searching in', allStructureUuids.length, 'structures (target + descendants)');
+
+    const responsibles: any[] = [];
+    const assignedResponsibilityUuids = new Set<string>();
+
+    for (const responsibility of responsibilities) {
+      console.log('[getCommitteeResponsibles] searching for responsibility uuid:', responsibility.uuid, 'name:', responsibility.name);
+      console.log('[getCommitteeResponsibles] searching in structures:', allStructureUuids);
+
+      const query = this.memberResponsibilityRepository
+        .createQueryBuilder('mr')
+        .leftJoinAndSelect('mr.member', 'm', 'm.uuid = mr.member_uuid')
+        .leftJoinAndSelect('mr.responsibility', 'r', 'r.uuid = mr.responsibility_uuid')
+        .where('mr.responsibility_uuid = :responsibility_uuid', {
+          responsibility_uuid: responsibility.uuid,
+        })
+        .andWhere('m.structure_uuid IN (:...structure_uuids)', {
+          structure_uuids: allStructureUuids,
+        });
+
+      console.log('[getCommitteeResponsibles] Query:', query.getSql());
+
+      const memberResponsibilities = await query
+        .orderBy('mr.priority', 'DESC')
+        .addOrderBy('m.firstname', 'ASC')
+        .getMany();
+
+      console.log('[getCommitteeResponsibles] responsibility', responsibility.name, '-> found', memberResponsibilities.length, 'members');
+      if (memberResponsibilities.length > 0) {
+        memberResponsibilities.forEach((mr, idx) => {
+          console.log(`  [${idx}]`, mr.member?.firstname, mr.member?.lastname, 'structure_uuid:', mr.member?.structure_uuid);
+        });
+      }
+
+      if (memberResponsibilities.length > 0) {
+        assignedResponsibilityUuids.add(responsibility.uuid);
+        for (const mr of memberResponsibilities) {
+          if (mr.member) {
+            responsibles.push({
+              responsibility: {
+                uuid: responsibility.uuid,
+                name: responsibility.name,
+                slug: responsibility.slug,
+                gender: responsibility.gender,
+              },
+              member: {
+                uuid: mr.member.uuid,
+                firstname: mr.member.firstname,
+                lastname: mr.member.lastname,
+                picture: mr.member.picture,
+                phone: mr.member.phone,
+                phone_whatsapp: mr.member.phone_whatsapp,
+                email: mr.member.email,
+              },
+              priority: mr.priority,
+            });
+          }
+        }
+      }
+    }
+
+    const vacantResponsibilities = responsibilities
+      .filter((r) => !assignedResponsibilityUuids.has(r.uuid))
+      .map((r) => ({
+        uuid: r.uuid,
+        name: r.name,
+        slug: r.slug,
+        gender: r.gender,
+      }));
+
+    return {
+      structure: {
+        uuid: targetStructure.uuid,
+        name: targetStructure.name,
+        level: targetStructure.level ? {
+          uuid: targetStructure.level.uuid,
+          name: targetStructure.level.name,
+        } : null,
+        parent: targetStructure.parent ? {
+          uuid: targetStructure.parent.uuid,
+          name: targetStructure.parent.name,
+        } : null,
+      },
+      responsibles,
+      vacant_responsibilities: vacantResponsibilities,
+    };
   }
 
 
