@@ -13,6 +13,8 @@ import { LevelService } from 'src/level/level.service';
 import { v4 as uuidv4 } from 'uuid';
 import { MemberEntity } from 'src/members/entities/member.entity';
 import { LevelEntity } from 'src/level/entities/level.entity';
+import { buildPaginationMeta } from 'src/shared/helpers/pagination-meta.helper';
+import { PaginateMeta } from 'src/shared/interfaces/paginate-meta.interface';
 
 @Injectable()
 export class StructureService {
@@ -29,10 +31,30 @@ export class StructureService {
 
   ) {}
 
-  async findAll() {
-    const data = await this.structureRepo.find();
+  async findAll(
+    page = 1,
+    limit = 10,
+    search?: string,
+  ): Promise<{ data: StructureEntity[]; meta: Omit<PaginateMeta, 'page'> }> {
+    const qb = this.structureRepo
+      .createQueryBuilder('structure')
+      .orderBy('structure.created_at', 'DESC');
 
-    return data;
+    if (search?.trim()) {
+      qb.andWhere('structure.name LIKE :search', {
+        search: `%${search.trim()}%`,
+      });
+    }
+
+    const [data, total] = await qb
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    return {
+      data,
+      meta: buildPaginationMeta({ total, page, perPage: limit }),
+    };
   }
 
   async create(createStructureDto: CreateStructureDto, admin_uuid?: string) {

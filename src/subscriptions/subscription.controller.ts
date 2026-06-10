@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiBody } from '@nestjs/swagger';
 import { SubscriptionService } from './subscription.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
+import { SubscriptionPaginationQueryDto } from './dto/subscription-pagination-query.dto';
 
 @ApiBearerAuth()
 @ApiTags('Abonnement')
@@ -15,10 +16,11 @@ export class SubscriptionController {
 
   @Get()
   @ApiOperation({ summary: 'Liste toutes les abonnements ' })
-  @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
-  findAll(@Request() req) {
+  @ApiResponse({ status: 200, description: 'Retour paginé' })
+  findAll(@Request() req, @Query() query: SubscriptionPaginationQueryDto) {
     const admin_uuid = req.user.uuid as string;
-    return this.subscriptionService.findAll(admin_uuid);
+    const { page, limit, search } = query;
+    return this.subscriptionService.findAll(admin_uuid, page, limit, search);
   }
 
   @Post()

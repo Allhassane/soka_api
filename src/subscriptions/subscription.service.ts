@@ -9,6 +9,8 @@ import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 import { SubscriptionPaymentEntity } from 'src/subscription-payment/entities/subscription-payment.entity';
 import { StructureService } from 'src/structure/structure.service';
+import { buildPaginationMeta } from 'src/shared/helpers/pagination-meta.helper';
+import { PaginateMeta } from 'src/shared/interfaces/paginate-meta.interface';
 
 @Injectable()
 export class SubscriptionService {
@@ -25,24 +27,43 @@ export class SubscriptionService {
     private readonly structureService: StructureService,
   ) {}
 
-  async findAll(admin_uuid: string) {
-    const subscription = await this.subscriptionRepo.find({
-      order: { name: 'ASC' },
-    });
-
+  async findAll(
+    admin_uuid: string,
+    page = 1,
+    limit = 10,
+    search?: string,
+  ): Promise<{ data: SubscriptionEntity[]; meta: Omit<PaginateMeta, 'page'> }> {
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
 
     if (!admin) {
-        throw new NotFoundException("Identifiant de l'auteur introuvable");
+      throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
+
+    const qb = this.subscriptionRepo
+      .createQueryBuilder('subscription')
+      .orderBy('subscription.name', 'ASC');
+
+    if (search?.trim()) {
+      qb.andWhere('subscription.name LIKE :search', {
+        search: `%${search.trim()}%`,
+      });
+    }
+
+    const [data, total] = await qb
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
 
     await this.logService.logAction(
       'subscriptions-findAll',
       admin.id,
-      'recupération de la liste de tous les formations'
+      'recupération de la liste de tous les formations',
     );
 
-    return subscription;
+    return {
+      data,
+      meta: buildPaginationMeta({ total, page, perPage: limit }),
+    };
   }
 
 
