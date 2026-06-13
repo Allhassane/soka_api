@@ -55,7 +55,7 @@ export class MigrationService {
 
     async migrate(option: string, admin_uuid: string) {
 
-        const migration_url = 'https://dev.sokagakkaici.org/api/v1';
+        const migration_url = process.env.MIGRATION_SOURCE_URL ?? 'https://dev.sokagakkaici.org/api/v1';
 
         console.log(migration_url + '/migration?option=' + option);
         const query = await fetch(migration_url + '/migration?option=' + option);
@@ -177,48 +177,41 @@ export class MigrationService {
 
                     if(member.departement){
 
-                        // situation matrimonal
-                        const maritalStatus = await this.maritalStatusService.findOneByName(member.situation_matrimoniale);
-                        if(!maritalStatus){
-                            await this.maritalStatusService.store({
+                        // situation matrimoniale (corrigé : on capture l'entité créée pour renseigner le FK)
+                        let maritalStatus = member.situation_matrimoniale
+                            ? await this.maritalStatusService.findOneByName(member.situation_matrimoniale)
+                            : undefined;
+                        if(!maritalStatus && member.situation_matrimoniale){
+                            maritalStatus = await this.maritalStatusService.store({
                                 name: member.situation_matrimoniale,
                                 description: "",
                             }, admin_uuid);
                         }
                         console.log('maritalStatus ................... OK');
                         
-                        // pays
-                        let country;
+                        // pays (corrigé : plus de variable masquée, on conserve la vraie nationalité)
+                        let country: any = undefined;
                         if(member.nationalite){
-                            const verifyCountry = member.nationalite.toLowerCase();
-                            let countryName = ""
-                            if(verifyCountry == "japan"){
-                                countryName = "JAPON"
-                            }else{
-                                countryName = member.nationalite
-                            }
-                            let country = await this.countryService.findOneByName(countryName.toUpperCase());
+                            const countryName = member.nationalite.toLowerCase() === 'japan'
+                                ? 'JAPON'
+                                : member.nationalite.toUpperCase();
+                            country = await this.countryService.findOneByName(countryName);
                             if(!country){
                                 country = await this.countryService.store({
-                                    name: "COTE D'IVOIRE",
+                                    name: countryName,
                                     description: "",
                                 }, admin_uuid);
                             }
                         }
-                        
-                        !country ? country = await this.countryService.store({
-                                name: "COTE D'IVOIRE",
-                                description: "",
-                            }, admin_uuid) : null;
 
                         console.log('country ................... OK');
 
                         
-                        // civility
-                        let civility = await this.civilityService.findOneByName(member.civility);
-                        if(!civility){
-                            await this.civilityService.store("homme", admin_uuid);
-                        }
+                        // genre + civilité (corrigé : l'ancienne base a `sexe`, pas `civility`)
+                        const memberGender = (member.sexe || '').toLowerCase() === 'femme' ? 'femme' : 'homme';
+                        const civility = await this.civilityService.findOneByName(
+                            memberGender === 'femme' ? 'Madame' : 'Monsieur',
+                        );
                         console.log('civility ................... OK');
                         
                         // city
@@ -355,9 +348,9 @@ export class MigrationService {
                         const prepareSaveMember: CreateMemberDto = {
                             picture: member.picture,
                             matricule: member.matricule,
-                            firstname: member.nom,
-                            lastname: member.prenom,
-                            gender: civility?.gender as string,
+                            firstname: member.prenom,
+                            lastname: member.nom,
+                            gender: memberGender,
                             birth_date: member.date_naissance ?? null,
                             birth_city: member.lieu_naissance ?? null,
                             civility_uuid: civility?.uuid,
@@ -367,7 +360,8 @@ export class MigrationService {
                             childrens: member.nb_enfants ?? 0,
                             country_uuid: country?.uuid,
                             city_uuid: cityUuid,
-                            town: member.ville_residence ?? null,
+                            location: member.localite_residence ?? null,
+                            town: member.commune_residence ?? null,
                             formation_uuid: formationUuid,
                             job_uuid: jobUuid,
                             phone: member_phone,
@@ -381,7 +375,7 @@ export class MigrationService {
                             department_uuid: departmentUuid,
                             division_uuid: divisionUuid,
                             responsibility_uuid: responsibilityUuid,
-                            accessories: member.accessories ?? [],
+                            accessories: [],
                             has_gohonzon: member.possede_gohonzon ?? false,
                             date_gohonzon: member.annee_gohonzon ?? null,
                             has_tokusso: member.possede_tokusso ?? false,
@@ -389,7 +383,7 @@ export class MigrationService {
                             has_omamori: member.possede_omamori ?? false,
                             date_omamori: member.annee_omamori ?? null,
                             structure_uuid: structure.uuid,
-                            status: 'success',
+                            status: member.statut === 'inactif' ? 'disable' : 'enable',
                         }
 
                         console.log(prepareSaveMember);
@@ -414,14 +408,14 @@ export class MigrationService {
                         }
 
                         if(member.accessoires){
-                            const tmp_accessories = member.accessoires.split(',');
-                            const accessories = JSON.parse(tmp_accessories);
+                            let accessories: string[] = [];
+                            try { accessories = JSON.parse(member.accessoires); } catch { accessories = []; }
 
                             for(const accessory of accessories){
                                 const findAccessory = await this.accessoryService.findOneByLastVersionName(accessory);
 
                                 if (!findAccessory) {
-                                    throw new NotFoundException('Aucun accessoire trouvé');
+                                    continue; // accessoire inconnu : on ignore au lieu d'interrompre la migration
                                 }
 
                                 const accessoryEntity = await this.memberAccessoryService.findOneMemberAndAccessory(saveMember.uuid, findAccessory.uuid);
