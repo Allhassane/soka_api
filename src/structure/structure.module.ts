@@ -9,7 +9,7 @@ import { LevelModule } from 'src/level/level.module';
 import { StructureTreeService } from './structure-tree.service';
 import { MemberEntity } from 'src/members/entities/member.entity';
 import { LevelEntity } from 'src/level/entities/level.entity';
-import { MemberResponsibilityEntity } from 'src/⁠member-responsibility/entities/member-responsibility.entity';
+import { MemberResponsibilityEntity } from 'src/member-responsibility/entities/member-responsibility.entity';
 import { ResponsibilityEntity } from 'src/responsibilities/entities/responsibility.entity';
 import { AuthService } from 'src/auth/auth.service';
 import { ExportJobModule } from 'src/export-async/export-job.module';

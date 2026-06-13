@@ -207,11 +207,6 @@ export class CreateMemberDto {
   @IsDateString()
   date_omamori?: string;
 
-  @ApiPropertyOptional({ description: 'ID numérique de la structure (optionnel)' })
-  @IsOptional()
-  @IsNumber()
-  structure_id?: number;
-
   @ApiPropertyOptional({ description: 'UUID de la structure' })
   @IsOptional()
   @IsUUID()

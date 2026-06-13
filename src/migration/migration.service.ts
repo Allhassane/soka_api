@@ -20,7 +20,7 @@ import { CreateMemberDto } from 'src/members/dto/create-member.dto';
 import { AccessoryService } from 'src/accessories/accessory.service';
 import { CreateAccessoryDto } from 'src/accessories/dto/create-accessory.dto';
 import { MemberAccessoryService } from 'src/member-accessories/member-accessories.service';
-import { MemberResponsibilityService } from 'src/⁠member-responsibility/⁠member-responsibility.service';
+import { MemberResponsibilityService } from 'src/member-responsibility/member-responsibility.service';
 import { slugify } from 'src/shared/functions/slug';
 import { CreateLevelDto } from 'src/level/dto/create-level.dto';
 import { CreateStructureDto } from 'src/structure/dto/create-structure.dto';
@@ -388,7 +388,6 @@ export class MigrationService {
                             date_tokusso: member.annee_tokusso ?? null,
                             has_omamori: member.possede_omamori ?? false,
                             date_omamori: member.annee_omamori ?? null,
-                            structure_id: structure.id,
                             structure_uuid: structure.uuid,
                             status: 'success',
                         }

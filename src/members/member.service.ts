@@ -14,7 +14,7 @@ import { User } from '../users/entities/user.entity';
 import { CreateMemberDto } from './dto/create-member.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
 import { CivilityEntity } from 'src/civilities/entities/civility.entity';
-import { MemberResponsibilityEntity } from 'src/⁠member-responsibility/entities/member-responsibility.entity';
+import { MemberResponsibilityEntity } from 'src/member-responsibility/entities/member-responsibility.entity';
 import { ResponsibilityService } from 'src/responsibilities/reponsibility.service';
 import { AccessoryService } from 'src/accessories/accessory.service';
 import { MemberAccessoryEntity } from 'src/member-accessories/entities/member-accessories.entity';
@@ -35,7 +35,7 @@ import { StructureService } from 'src/structure/structure.service';
 import { MemberList } from 'src/shared/interfaces/member.interface';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ok } from 'assert';
-import { MemberResponsibilityService } from 'src/⁠member-responsibility/⁠member-responsibility.service';
+import { MemberResponsibilityService } from 'src/member-responsibility/member-responsibility.service';
 import { StructureTreeService } from 'src/structure/structure-tree.service';
 
 @Injectable()

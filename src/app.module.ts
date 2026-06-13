@@ -21,7 +21,7 @@ import { CityModule } from './cities/city.module';
 import { CivilityModule } from './civilities/civility.module';
 import { FormationModule } from './formations/formation.module';
 import { StructureModule } from './structure/structure.module';
-import { MemberResponsibilityModule } from './⁠member-responsibility/⁠member-responsibility.module';
+import { MemberResponsibilityModule } from './member-responsibility/member-responsibility.module';
 import { UserRole } from './user-roles/entities/user-roles.entity';
 import { UserRoleModule } from './user-roles/user-roles.module';
 import { AccessoryModule } from './accessories/accessory.module';

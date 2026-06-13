@@ -6,7 +6,7 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
-import { MemberResponsibilityService } from './⁠member-responsibility.service';
+import { MemberResponsibilityService } from './member-responsibility.service';
 import { CreateMemberResponsibilityDto } from './dto/create-member-responsibility.dto';
 
 @ApiTags('Responsabilités Membre')

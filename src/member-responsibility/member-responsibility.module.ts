@@ -1,6 +1,6 @@
 import { forwardRef, Module } from '@nestjs/common';
-import { MemberResponsibilityService } from './⁠member-responsibility.service';
-import { MemberResponsibilityController } from './⁠member-responsibility.controller';
+import { MemberResponsibilityService } from './member-responsibility.service';
+import { MemberResponsibilityController } from './member-responsibility.controller';
 import { MemberResponsibilityEntity } from './entities/member-responsibility.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LogActivitiesModule } from 'src/log-activities/log-activities.module';
