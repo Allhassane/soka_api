@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   Inject,
   forwardRef,
 } from '@nestjs/common';
@@ -296,6 +297,8 @@ export class MemberService {
     const existingMember = await this.memberRepo.findOne({ where: { uuid } });
     if (!existingMember) throw new NotFoundException('Membre introuvable.');
 
+    await this.assertStructureInScope(existingMember.structure_uuid, admin_uuid);
+
 
     if (dto.civility_uuid) {
       const civility = await this.civilityRepo.findOne({
@@ -496,12 +499,25 @@ async findAll(
     .leftJoinAndSelect('m.member_accessories', 'ma')
     .where('m.deleted_at IS NULL');
 
-  // Si une structure est ciblée, récupérer ses sous-structures et filtrer
+  // Périmètre du demandeur (null = superadmin technique => aucun filtre hiérarchique)
+  const scopeUuids = await this.getAccessibleStructureUuids(admin_uuid);
+
   if (targetStructureUuid) {
+    // Une structure est ciblée : elle doit appartenir au périmètre du demandeur.
+    if (scopeUuids !== null && !scopeUuids.includes(targetStructureUuid)) {
+      throw new ForbiddenException('Structure hors de votre périmètre.');
+    }
     const subStructureUuids = await this.structureTreeService.getAllSubStructureUuids(targetStructureUuid);
     query = query.andWhere('m.structure_uuid IN (:...structureUuids)', {
       structureUuids: subStructureUuids,
     });
+  } else if (scopeUuids !== null) {
+    // Pas de filtre explicite : on borne la liste au périmètre du demandeur.
+    if (scopeUuids.length === 0) {
+      query = query.andWhere('1 = 0');
+    } else {
+      query = query.andWhere('m.structure_uuid IN (:...scopeUuids)', { scopeUuids });
+    }
   }
 
   // Filtres department et division : ces champs existent bien sur le membre
@@ -579,6 +595,8 @@ async findAll(
       throw new NotFoundException('Aucun membre trouvé avec cet identifiant.');
     }
 
+    await this.assertStructureInScope(member.structure_uuid, admin_uuid);
+
     await this.logService.logAction(
       'members-findOne',
       admin.id,
@@ -604,6 +622,8 @@ async findAll(
     const member = await this.memberRepo.findOne({ where: { uuid } });
     if (!member) throw new NotFoundException('Aucun membre trouvé à supprimer.');
 
+    await this.assertStructureInScope(member.structure_uuid, admin_uuid);
+
     await this.memberRepo.softRemove(member);
 
     await this.logService.logAction(
@@ -611,6 +631,47 @@ async findAll(
       admin.id,
       `Suppression logique du membre ${member.firstname} ${member.lastname}`,
     );
+  }
+
+  /**
+   * Périmètre hiérarchique du demandeur (anti-IDOR).
+   * @returns null si superadmin technique (aucune restriction) ;
+   *          sinon les UUIDs des structures accessibles (sa structure + descendants) ;
+   *          [] si l'utilisateur n'a ni responsabilité ni structure (ne voit rien).
+   */
+  async getAccessibleStructureUuids(admin_uuid: string): Promise<string[] | null> {
+    const user = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
+    if (!user) throw new NotFoundException("Identifiant de l'auteur introuvable");
+    if (user.is_admin === true) return null;
+    if (!user.member_uuid) return [];
+
+    let mr = await this.memberResponsibilityRepo.findOne({
+      where: { member_uuid: user.member_uuid, priority: 'high' },
+      relations: ['member'],
+    });
+    if (!mr) {
+      mr = await this.memberResponsibilityRepo.findOne({
+        where: { member_uuid: user.member_uuid },
+        relations: ['member'],
+      });
+    }
+    const structureUuid = mr?.member?.structure_uuid;
+    if (!structureUuid) return [];
+    return this.structureTreeService.getAllSubStructureUuids(structureUuid);
+  }
+
+  /** Vérifie qu'une structure est dans le périmètre du demandeur (sinon 403). */
+  async assertStructureInScope(
+    structureUuid: string | null | undefined,
+    admin_uuid: string,
+  ): Promise<void> {
+    const scope = await this.getAccessibleStructureUuids(admin_uuid);
+    if (scope === null) return; // superadmin technique
+    if (!structureUuid || !scope.includes(structureUuid)) {
+      throw new ForbiddenException(
+        'Accès refusé : cet élément est hors de votre périmètre.',
+      );
+    }
   }
 
   async prepareMemberList(admin_uuid: string) {
@@ -735,6 +796,8 @@ async findAll(
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
     if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
 
+    await this.assertStructureInScope(uuid, admin_uuid);
+
     const sous_groups = await this.structureService.findByAllChildrens(uuid);
 
     const members = await this.memberRepo.find({
@@ -790,6 +853,9 @@ async getStatsByStructure(uuid: string, admin_uuid: string) {
   if (!admin) {
     throw new NotFoundException("Identifiant de l'auteur introuvable");
   }
+
+  await this.assertStructureInScope(uuid, admin_uuid);
+
   //connaitre la responsabilité
   const respo = await this.memberResponsibilityService.findResponsibilityByMember(admin.member_uuid);
   // Récupérer tous les sous-groupes
