@@ -257,7 +257,6 @@ export class MemberService {
           password: tempPassword,
           is_active: true,
           member_uuid: saved.uuid,
-          password_no_hashed: tempPassword,
         });
 
         const newUser = await this.userRepo.save(user);

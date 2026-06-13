@@ -75,11 +75,6 @@ export class User extends DateTimeEntity {
   @Column({ type: 'datetime', nullable: true })
   sending_at: Date;
 
-  // Sécurité : jamais renvoyé par défaut, et plus jamais écrit (cf. resetPassword / migration).
-  // TODO(Phase 3) : supprimer définitivement cette colonne via une migration.
-  @Column({ type: 'varchar', nullable: true, select: false })
-  password_no_hashed: string;
-
   @Column({ type: 'boolean', default: false })
   is_connected: boolean;
 
