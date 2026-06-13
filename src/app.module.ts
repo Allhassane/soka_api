@@ -72,6 +72,7 @@ import { ActivityModule } from './activities/activity.module';
         ...(config.isProd && {
           entities: ['dist/**/*.entity.js'],
           migrations: ['dist/migrations/*.js'],
+          migrationsTableName: 'typeorm_migrations', // table `migrations` déjà prise par Laravel
           migrationsRun: true,
         }),
       }),
