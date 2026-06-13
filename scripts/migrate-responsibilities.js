@@ -42,6 +42,13 @@ const OLD = process.env.OLD_DB_NAME || 'soka_db_old';
     console.log('levels seedes: ' + niveaux.length);
   } else console.log('levels deja presents: ' + lvCount[0].n);
 
+  // Lier chaque structure a son niveau (level_uuid) depuis l'ancienne base (id_niveau, perdu en migration).
+  const upd = await q(
+    `UPDATE \`${NEW}\`.structures s JOIN \`${OLD}\`.structures o ON o.id = s.uuid
+     SET s.level_uuid = o.id_niveau WHERE s.level_uuid IS NULL AND o.id_niveau IS NOT NULL`,
+  );
+  console.log('structures liees a leur niveau: ' + (upd.affectedRows ?? '?'));
+
   const levels = await q(`SELECT uuid, name FROM \`${NEW}\`.levels`);
   const levelByName = {};
   for (const l of levels) levelByName[String(l.name).toUpperCase()] = l.uuid;
