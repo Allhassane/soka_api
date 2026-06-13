@@ -27,6 +27,7 @@ export interface PaginationMemberParams {
 
 export interface MemberStatsFilters {
   region_uuid?: string;
+  centre_regional_uuid?: string;
   centre_uuid?: string;
   chapitre_uuid?: string;
   district_uuid?: string;
@@ -38,6 +39,7 @@ export interface MemberStatsFilters {
 export interface MemberStatsResponse {
   filters_available: {
     regions: { uuid: string; name: string }[];
+    centre_regionaux: { uuid: string; name: string }[];
     centres: { uuid: string; name: string }[];
     chapitres: { uuid: string; name: string }[];
     districts: { uuid: string; name: string }[];
@@ -1975,6 +1977,8 @@ export class StructureTreeService {
 
       if (levelName === 'REGION') {
         breadcrumb.region = { uuid: structure.uuid, name: structure.name };
+      } else if (levelName === 'CENTRE_REGIONAL') {
+        breadcrumb.centre_regional = { uuid: structure.uuid, name: structure.name };
       } else if (levelName === 'CENTRE') {
         breadcrumb.centre = { uuid: structure.uuid, name: structure.name };
       } else if (levelName === 'CHAPITRE') {
@@ -2017,11 +2021,22 @@ export class StructureTreeService {
 
     const filters = {
       regions: [] as { uuid: string; name: string }[],
+      centre_regionaux: [] as { uuid: string; name: string }[],
       centres: [] as { uuid: string; name: string }[],
       chapitres: [] as { uuid: string; name: string }[],
       districts: [] as { uuid: string; name: string }[],
       groupes: [] as { uuid: string; name: string }[],
     };
+
+    // Centre Régional est un palier intermédiaire entre Région et Centre.
+    // On mappe chaque Centre Régional vers sa région pour que le filtre « région »
+    // continue de lister les bons centres (dont le parent direct est désormais un CR).
+    const crToRegion = new Map<string, string>();
+    for (const s of structures) {
+      if (s.level_name?.toUpperCase() === 'CENTRE_REGIONAL') {
+        crToRegion.set(s.uuid, s.parent_uuid);
+      }
+    }
 
     for (const s of structures) {
       const levelName = s.level_name?.toUpperCase();
@@ -2029,9 +2044,19 @@ export class StructureTreeService {
 
       if (levelName === 'REGION') {
         filters.regions.push(item);
-      } else if (levelName === 'CENTRE') {
+      } else if (levelName === 'CENTRE_REGIONAL') {
         // Filtrer par région si sélectionnée
         if (!currentFilters?.region_uuid || s.parent_uuid === currentFilters.region_uuid) {
+          filters.centre_regionaux.push(item);
+        }
+      } else if (levelName === 'CENTRE') {
+        // Le parent direct d'un Centre est maintenant un Centre Régional.
+        // On respecte le filtre Centre Régional s'il est fourni, sinon le filtre Région (via le CR parent).
+        const okCentreRegional =
+          !currentFilters?.centre_regional_uuid || s.parent_uuid === currentFilters.centre_regional_uuid;
+        const okRegion =
+          !currentFilters?.region_uuid || crToRegion.get(s.parent_uuid) === currentFilters.region_uuid;
+        if (okCentreRegional && okRegion) {
           filters.centres.push(item);
         }
       } else if (levelName === 'CHAPITRE') {
