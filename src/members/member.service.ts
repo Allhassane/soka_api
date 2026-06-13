@@ -289,6 +289,18 @@ export class MemberService {
     return saved;
   }
 
+  /** Insère le membre, ou MET À JOUR l'existant (matché par uuid) — migration idempotente, anti-doublon. */
+  async upsertFromMigration(dto: CreateMemberDto & { uuid: string }, admin_uuid: string): Promise<MemberEntity> {
+    const existing = await this.memberRepo.findOne({ where: { uuid: dto.uuid } });
+    if (existing) {
+      const { accessories, responsibility_uuid, ...columns } = dto as any;
+      void accessories; void responsibility_uuid;
+      await this.memberRepo.update({ uuid: dto.uuid }, { ...columns, admin_uuid });
+      return (await this.memberRepo.findOne({ where: { uuid: dto.uuid } })) as MemberEntity;
+    }
+    return this.memberRepo.save({ ...dto, admin_uuid });
+  }
+
   async update(uuid: string, dto: UpdateMemberDto, admin_uuid: string): Promise<MemberEntity> {
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
