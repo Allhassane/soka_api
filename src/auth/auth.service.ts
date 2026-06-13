@@ -315,6 +315,7 @@ export class AuthService {
       full_name: user.firstname && user.lastname ? `${user.firstname} ${user.lastname}` : null,
       member: memberInfo,
       roles,
+      is_admin: user.is_admin === true,
       global_permissions: globalPermissions,
       permissions_source: permissionsSource,
     },
