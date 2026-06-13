@@ -6,6 +6,7 @@ import {
   Get,
   Headers as RequestHeaders,
   UnauthorizedException,
+  ForbiddenException,
   Patch,
   Param,
   Body,
@@ -18,6 +19,7 @@ import { JwtAuthGuard } from './guards/auth.guard';
 import { User } from 'src/users/entities/user.entity';
 import { SuccessMessage } from 'src/shared/decorators/success-message.decorator';
 import { ResetPasswordDto } from './dtos/reset-password.dto';
+import { JwtPayload } from './interfaces/auth.interface';
 
 @ApiTags('Authentification')
 @Controller('auth')
@@ -55,10 +57,20 @@ export class AuthController {
 
 
   @Patch('reset-password/:uuid')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Réinitialiser son mot de passe (soi-même ou admin)' })
   async resetPassword(
     @Param('uuid') uuid: string,
     @Body() resetPasswordDto: ResetPasswordDto,
+    @Request() req: { user: JwtPayload },
   ) {
+    const requester = req.user;
+    if (requester?.uuid !== uuid && requester?.is_admin !== true) {
+      throw new ForbiddenException(
+        'Vous ne pouvez réinitialiser que votre propre mot de passe.',
+      );
+    }
     return this.authService.resetPassword(uuid, resetPasswordDto.newPassword);
   }
 }

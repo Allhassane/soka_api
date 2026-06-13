@@ -35,6 +35,11 @@ export class RoleService {
   ) {}
 
   async onModuleInit() {
+    // Seeds de référence : ne pas exécuter au démarrage d'une base déjà peuplée
+    // (schéma `roles` hérité => `id` sans valeur par défaut => INSERT en échec, empêchait le boot).
+    // À activer explicitement avec RUN_SEEDS=true sur une base vierge.
+    if (process.env.RUN_SEEDS !== 'true') return;
+
     const existing = await this.roleRepository.findOne({
       where: { name: 'superadmin' },
     });

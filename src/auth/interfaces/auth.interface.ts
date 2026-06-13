@@ -20,6 +20,8 @@ export interface AuthCredentialsDto {
     } | null;
   }[];
   roles?: Role[];
+  permissions?: string[];
+  is_admin?: boolean;
 }
 
 export interface JwtPayload extends AuthCredentialsDto {

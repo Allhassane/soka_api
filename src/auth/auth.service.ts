@@ -139,8 +139,7 @@ export class AuthService {
     ...(memberResponsibilities.length > 0 ? { responsibilities: memberResponsibilities } : {}),
   };
 
-  const token = this.jwtService.sign(payload);
-  const decoded = this.jwtService.decode(token) as null | { exp?: number };
+  // Le token est signé plus bas, une fois rôles & permissions connus (pour les embarquer dans le JWT).
 
   // Récupération des rôles de l'utilisateur
   const roles = await this.userService.findUserRoles(user.uuid);
@@ -288,6 +287,22 @@ export class AuthService {
       };
     }
   }
+
+  // Embarquer les droits dans le JWT (calculés une seule fois ici, pas à chaque requête).
+  const isActive = (s: unknown) =>
+    s === true || s === 1 || s === '1' || s === 'enable' || s === 'active';
+  payload.permissions = Array.from(
+    new Set(
+      (globalPermissions ?? [])
+        .filter((p: any) => isActive(p?.status))
+        .map((p: any) => p?.slug)
+        .filter((slug: any): slug is string => typeof slug === 'string' && slug.length > 0),
+    ),
+  );
+  payload.is_admin = user.is_admin === true;
+
+  const token = this.jwtService.sign(payload);
+  const decoded = this.jwtService.decode(token) as null | { exp?: number };
 
   return {
     user: {
@@ -532,7 +547,6 @@ export class AuthService {
     { uuid: user.uuid },
     {
       password: hashedPassword,
-      password_no_hashed: newPassword,
     }
   );
 

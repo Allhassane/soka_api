@@ -62,7 +62,13 @@ import { ActivityModule } from './activities/activity.module';
         password: config.dbPassword,
         database: config.dbName,
         autoLoadEntities: true,
-        synchronize: !config.isProd,
+        // NE JAMAIS synchroniser automatiquement le schéma sur une base déjà peuplée :
+        //  - déclenche des instructions non déterministes `(UUID())` que MySQL refuse sous
+        //    binlog_format=STATEMENT → "Statement is unsafe because it uses a system function..."
+        //    (empêchait l'API de démarrer) ;
+        //  - risque de modifications destructrices sur des données réelles.
+        // Le schéma est géré via le dump / les migrations. Réactivable explicitement avec DB_SYNCHRONIZE=true.
+        synchronize: process.env.DB_SYNCHRONIZE === 'true',
         ...(config.isProd && {
           entities: ['dist/**/*.entity.js'],
           migrations: ['dist/migrations/*.js'],
