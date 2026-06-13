@@ -249,22 +249,24 @@ export class UserService {
   }
 
   async findUserRoles(uuid: string) {
-    const roles = await this.userRepo
-      .createQueryBuilder('user')
-      .leftJoinAndSelect('user.user_roles', 'ur')
-      .innerJoin('ur.role', 'role')
+    // Jointures explicites sur UUID. Les FK entières (user_id/role_id) de
+    // user_roles ne sont pas alimentées dans cette base (héritage Laravel) :
+    // le lien réel se fait par user_uuid/role_uuid, comme findGlobalPermissions.
+    const roles = await this.userRepo.manager
+      .createQueryBuilder()
       .select([
         'role.uuid AS role_uuid',
         'role.name AS role_name',
         'role.slug AS role_slug',
       ])
+      .from('user_roles', 'ur')
+      .innerJoin('roles', 'role', 'role.uuid = ur.role_uuid')
       .where('ur.user_uuid = :uuid', { uuid })
+      .andWhere('ur.is_active = 1')
       .distinct(true)
       .getRawMany();
 
-    if (!roles)
-      throw new NotFoundException('Rôles non trouvés pour l’utilisateur');
-    return roles;
+    return roles ?? [];
   }
 
   async search(keyword: string): Promise<User[]> {
