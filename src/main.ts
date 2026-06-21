@@ -37,10 +37,18 @@ async function bootstrap() {
     }),
   );
 
+  const corsOrigins = (
+    process.env.CORS_ORIGINS ??
+    'https://digital.sokagakkaici.org,http://localhost:3001,http://localhost:3000'
+  )
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin: '*',
+    origin: corsOrigins,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    allowedHeaders: 'Content-Type, Accept',
+    allowedHeaders: 'Content-Type, Accept, Authorization',
     credentials: true,
   });
 

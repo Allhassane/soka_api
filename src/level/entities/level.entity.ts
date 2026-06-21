@@ -29,8 +29,8 @@ export class LevelEntity extends DateTimeEntity {
   @Column({ type: 'int' })
   order: number;
 
-  @Column({ type: 'varchar', length: 50, default: 'mixte' })
-  category: 'responsibility' | 'level';
+  @Column({ type: 'enum', enum: ['level', 'responsibility'], default: 'level' })
+  category: 'level' | 'responsibility';
 
   @ApiProperty({
     description: 'UUID de l’administrateur propriétaire',

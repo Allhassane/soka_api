@@ -12,7 +12,7 @@ import {
 } from '../entities/activity.entity';
 
 /**
- * Critères de ciblage. Tous optionnels — si vide, on prend ceux stockés sur
+ * Critères de ciblage. Tous optionnels - si vide, on prend ceux stockés sur
  * l'activité. Permet aussi de tester un ciblage ad hoc via /targets/preview
  * sans toucher à l'activité.
  */

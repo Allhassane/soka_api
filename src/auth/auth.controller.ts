@@ -6,6 +6,7 @@ import {
   Get,
   Headers as RequestHeaders,
   UnauthorizedException,
+  ForbiddenException,
   Patch,
   Param,
   Body,
@@ -18,6 +19,8 @@ import { JwtAuthGuard } from './guards/auth.guard';
 import { User } from 'src/users/entities/user.entity';
 import { SuccessMessage } from 'src/shared/decorators/success-message.decorator';
 import { ResetPasswordDto } from './dtos/reset-password.dto';
+import { ForgotPasswordDto } from './dtos/forgot-password.dto';
+import { JwtPayload } from './interfaces/auth.interface';
 
 @ApiTags('Authentification')
 @Controller('auth')
@@ -53,12 +56,32 @@ export class AuthController {
   })
   logout() {}
 
-
   @Patch('reset-password/:uuid')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Réinitialiser son mot de passe (soi-même ou admin)' })
   async resetPassword(
     @Param('uuid') uuid: string,
     @Body() resetPasswordDto: ResetPasswordDto,
+    @Request() req: { user: JwtPayload },
   ) {
+    const requester = req.user;
+    if (requester?.uuid !== uuid && requester?.is_admin !== true) {
+      throw new ForbiddenException(
+        'Vous ne pouvez réinitialiser que votre propre mot de passe.',
+      );
+    }
     return this.authService.resetPassword(uuid, resetPasswordDto.newPassword);
+  }
+
+  // « Mot de passe oublié » (public) : génère un nouveau mot de passe et l'envoie par SMS.
+  @Post('forgot-password')
+  @ApiOperation({
+    summary:
+      'Mot de passe oublié : génère un nouveau mot de passe et l envoie par SMS',
+  })
+  @ApiBody({ type: ForgotPasswordDto })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.requestPasswordReset(dto.phone_number);
   }
 }

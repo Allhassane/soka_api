@@ -2,6 +2,8 @@ import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, Qu
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { MemberService } from './member.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
 import { CreateMemberDto } from './dto/create-member.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
 import { VerifyPhoneNumberDto } from './dto/verify-phone.dto';
@@ -9,7 +11,7 @@ import { VerifyPhoneNumberDto } from './dto/verify-phone.dto';
 @ApiBearerAuth()
 @ApiTags('Membres')
 @Controller('members')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class MemberController {
   constructor(private readonly membreService: MemberService) {}
 
@@ -91,6 +93,7 @@ async findAll(
   }
 
   @Post()
+  @RequirePermissions('membres_ajouter_un_membre')
   @ApiOperation({ summary: 'Créer un membre ' })
   @ApiResponse({ status: 200, description: 'Membre créé avec succès.' })
   @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
@@ -162,6 +165,7 @@ async findAll(
 
 
   @Delete(':uuid')
+  @RequirePermissions('membres_supprimer_un_membre')
   @ApiOperation({ summary: 'Supprimer un membre' })
   @ApiResponse({ status: 200, description: 'Membre supprimé avec succès.' })
   @ApiResponse({ status: 400, description: 'Membre introuvable.' })

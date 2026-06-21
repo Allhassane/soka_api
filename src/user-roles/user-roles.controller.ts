@@ -22,15 +22,18 @@ import {
 } from '@nestjs/swagger';
 import { UserRole } from './entities/user-roles.entity';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
 
 @ApiTags('Role Utilisateurs')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('user-roles')
 export class UserRoleController {
   constructor(private readonly service: UserRoleService) {}
 
   @Post()
+  @RequirePermissions('collaborateurs_assigner_un_role_a_un_collaborateur')
   @ApiOperation({ summary: 'Assigner un rôle à un utilisateur' })
   @ApiResponse({ status: 201, type: UserRole })
   async create(@Body() dto: CreateUserRoleDto): Promise<UserRole> {
@@ -56,6 +59,7 @@ export class UserRoleController {
   }
 
   @Put(':uuid')
+  @RequirePermissions('collaborateurs_assigner_un_role_a_un_collaborateur')
   @ApiOperation({ summary: 'Modifier une affectation utilisateur/rôle' })
   @ApiParam({ name: 'uuid', description: 'UUID de la liaison user/role' })
   async update(
@@ -66,6 +70,7 @@ export class UserRoleController {
   }
 
   @Delete(':uuid')
+  @RequirePermissions('collaborateurs_assigner_un_role_a_un_collaborateur')
   @ApiOperation({
     summary: 'Supprimer une affectation utilisateur/rôle (soft delete)',
   })

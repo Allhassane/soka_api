@@ -12,6 +12,14 @@ export class MemberStatsFilters {
   region_uuid?: string;
 
   @ApiPropertyOptional({
+    description: 'UUID du centre régional (palier entre région et centre)',
+    example: '550e8400-e29b-41d4-a716-446655440000'
+  })
+  @IsOptional()
+  @IsUUID()
+  centre_regional_uuid?: string;
+
+  @ApiPropertyOptional({
     description: 'UUID du centre',
     example: '550e8400-e29b-41d4-a716-446655440001'
   })

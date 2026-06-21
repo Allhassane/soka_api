@@ -169,7 +169,7 @@ export class ActivityStatsService {
     const actMap = new Map(activities.map((a) => [a.uuid, a]));
     const top_activities = participations.map((p) => ({
       activity_uuid: p.activity_uuid,
-      name: actMap.get(p.activity_uuid)?.name ?? '—',
+      name: actMap.get(p.activity_uuid)?.name ?? '-',
       participants: Number(p.count),
     }));
 

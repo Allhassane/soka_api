@@ -14,6 +14,7 @@ import { MemberEntity } from 'src/members/entities/member.entity';
 import { StructureEntity } from 'src/structure/entities/structure.entity';
 import { LevelEntity } from 'src/level/entities/level.entity';
 import { User } from 'src/users/entities/user.entity';
+import { SmsModule } from 'src/sms/sms.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { User } from 'src/users/entities/user.entity';
     UserModule,
     AppConfigModule,
     RoleModule,
+    SmsModule,
     TypeOrmModule.forFeature([
       MemberEntity,
       StructureEntity,

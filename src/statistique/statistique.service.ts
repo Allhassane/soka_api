@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { StructureEntity } from './entities/structure.entity';
+import { StructureEntity } from 'src/structure/entities/structure.entity';
 import { MemberEntity } from '../members/entities/member.entity';
 import { LevelEntity } from '../level/entities/level.entity';
 import { ResponsibleInfo, StructureNode } from 'src/shared/interfaces/structure-node.interface';

@@ -21,7 +21,7 @@ import { OrganisationCityEntity } from 'src/organisation_cities/entities/organis
 import { DepartmentEntity } from 'src/departments/entities/department.entity';
 import { DivisionEntity } from 'src/divisions/entities/division.entity';
 import { StructureEntity } from 'src/structure/entities/structure.entity';
-import { MemberResponsibilityEntity } from 'src/⁠member-responsibility/entities/member-responsibility.entity';
+import { MemberResponsibilityEntity } from 'src/member-responsibility/entities/member-responsibility.entity';
 import { MemberTravelEntity } from 'src/member-travel/entities/member-travel.entity';
 import { v4 as uuid } from 'uuid';
 
@@ -180,25 +180,22 @@ export class MemberEntity extends DateTimeEntity {
   @Column({ type: 'boolean', default: false })
   has_gohonzon: boolean;
 
-  @Column({ type: 'varchar', nullable: true })
+  @Column({ type: 'date', nullable: true })
   date_gohonzon: string;
 
   @Column({ type: 'boolean', default: false })
   has_tokusso: boolean;
 
-  @Column({ type: 'varchar', nullable: true })
+  @Column({ type: 'date', nullable: true })
   date_tokusso: string;
 
   @Column({ type: 'boolean', default: false })
   has_omamori: boolean;
 
-  @Column({ type: 'varchar', nullable: true })
+  @Column({ type: 'date', nullable: true })
   date_omamori: string;
 
   /** Structure */
-  @Column({ type: 'int', nullable: true })
-  structure_id: number;
-
   @Column({ type: 'varchar', length: 36, nullable: true })
   structure_uuid: string;
 

@@ -27,6 +27,11 @@ export class UserService {
   ) {}
 
   async onModuleInit() {
+    // Ne PAS recréer/repromouvoir le compte bootstrap superadmin à chaque boot :
+    // l'application n'a qu'UN administrateur (flag is_admin géré explicitement, cf. JOURNAL 2026-06-20).
+    // À n'activer que sur une base vierge avec RUN_SEEDS=true.
+    if (process.env.RUN_SEEDS !== 'true') return;
+
     const existing = await this.userRepo.findOne({
       where: [{ email: 'superadmin@soka.com' }],
     });
@@ -41,17 +46,31 @@ export class UserService {
         return;
       }*/
 
+      const seedPassword =
+        process.env.SUPERADMIN_PASSWORD?.trim() || this.generateStrongPassword();
+      if (!process.env.SUPERADMIN_PASSWORD?.trim()) {
+        console.warn(
+          `[SOKA] SUPERADMIN_PASSWORD absent du .env - mot de passe superadmin généré : ${seedPassword}`,
+        );
+      }
+
       const user = this.userRepo.create({
         uuid: uuidv4(),
         firstname: 'Admin',
         lastname: 'Root',
         email: 'superadmin@soka.com',
         phone_number: '0700000000',
-        password: 'password',
+        password: seedPassword,
         is_active: true,
+        is_admin: true,
       });
 
       await this.userRepo.save(user);
+    } else if (process.env.SUPERADMIN_PASSWORD?.trim()) {
+      // Idempotent : garantit que le compte bootstrap a le mot de passe fort du .env + le flag admin.
+      existing.password = process.env.SUPERADMIN_PASSWORD.trim();
+      existing.is_admin = true;
+      await this.userRepo.save(existing);
     }
   }
 
@@ -170,7 +189,6 @@ export class UserService {
       uuid: uuidv4(),
       ...dto,
       password: dto.password,
-      password_no_hashed: dto.password,
       is_active: dto.is_active ?? true,
       phone_number: dto.phone_number?.trim(),
     });
@@ -236,22 +254,24 @@ export class UserService {
   }
 
   async findUserRoles(uuid: string) {
-    const roles = await this.userRepo
-      .createQueryBuilder('user')
-      .leftJoinAndSelect('user.user_roles', 'ur')
-      .innerJoin('ur.role', 'role')
+    // Jointures explicites sur UUID. Les FK entières (user_id/role_id) de
+    // user_roles ne sont pas alimentées dans cette base (héritage Laravel) :
+    // le lien réel se fait par user_uuid/role_uuid, comme findGlobalPermissions.
+    const roles = await this.userRepo.manager
+      .createQueryBuilder()
       .select([
         'role.uuid AS role_uuid',
         'role.name AS role_name',
         'role.slug AS role_slug',
       ])
+      .from('user_roles', 'ur')
+      .innerJoin('roles', 'role', 'role.uuid = ur.role_uuid')
       .where('ur.user_uuid = :uuid', { uuid })
+      .andWhere('ur.is_active = 1')
       .distinct(true)
       .getRawMany();
 
-    if (!roles)
-      throw new NotFoundException('Rôles non trouvés pour l’utilisateur');
-    return roles;
+    return roles ?? [];
   }
 
   async search(keyword: string): Promise<User[]> {

@@ -18,6 +18,10 @@ export class CountryService {
 
 
     async onModuleInit() {
+    // Seeds de référence (liste des pays) : ne pas exécuter sur une base déjà peuplée.
+    // À activer explicitement avec RUN_SEEDS=true sur une base vierge.
+    if (process.env.RUN_SEEDS !== 'true') return;
+
     // Vérifie si la table contient déjà tes pays (pas juste > 0)
     const existingCountries = await this.countryRepo.find({
       select: ['name'],

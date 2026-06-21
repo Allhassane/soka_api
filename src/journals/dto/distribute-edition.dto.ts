@@ -31,7 +31,7 @@ export class DistributeEditionDto {
   channel?: NotificationChannel;
 
   @ApiPropertyOptional({
-    description: 'Modèle de message — placeholders {correspondent} {edition} {quantity} {deadline}',
+    description: 'Modèle de message - placeholders {correspondent} {edition} {quantity} {deadline}',
   })
   @IsOptional()
   @IsString()

@@ -2,6 +2,7 @@
 
 export interface MemberStatsFilters {
   region_uuid?: string;
+  centre_regional_uuid?: string;
   centre_uuid?: string;
   chapitre_uuid?: string;
   district_uuid?: string;
@@ -13,6 +14,7 @@ export interface MemberStatsFilters {
 export interface MemberStatsResponse {
   filters_available: {
     regions: { uuid: string; name: string }[];
+    centre_regionaux: { uuid: string; name: string }[];
     centres: { uuid: string; name: string }[];
     chapitres: { uuid: string; name: string }[];
     districts: { uuid: string; name: string }[];
@@ -37,6 +39,7 @@ export interface MemberStatsResponse {
   };
   breadcrumb: {
     region?: { uuid: string; name: string };
+    centre_regional?: { uuid: string; name: string };
     centre?: { uuid: string; name: string };
     chapitre?: { uuid: string; name: string };
     district?: { uuid: string; name: string };

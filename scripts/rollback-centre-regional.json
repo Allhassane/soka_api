@@ -1,0 +1,245 @@
+{
+  "note": "Rollback de add-centre-regional-level. Pour annuler : remettre parent_uuid des centres, supprimer les CR créés, retirer le niveau, décaler les orders -1, reconstruire la closure.",
+  "centres_old_parent": [
+    {
+      "centre_uuid": "045f2904-dbfc-474c-9430-92c2fe1ff754",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "0a1212dd-b5e3-4749-a1b4-b958ff0d5b2f",
+      "old_parent_uuid": "32c72f6b-3866-4676-bad6-1a4ef8a7c865"
+    },
+    {
+      "centre_uuid": "0ab50344-88e9-4955-9fbf-2a0c2e86b71a",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "14137cf9-6620-4f99-9295-0147d4112c53",
+      "old_parent_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca"
+    },
+    {
+      "centre_uuid": "19d70a74-d37b-400d-b835-f8bffc6bc958",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "1bab62ef-2f04-48dd-8690-1d1f05452c61",
+      "old_parent_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca"
+    },
+    {
+      "centre_uuid": "1ca1ee96-5ecd-4a7a-a39d-488a256446a8",
+      "old_parent_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca"
+    },
+    {
+      "centre_uuid": "269ca75e-64c0-4602-9c01-4972b3835d10",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "28bf9f4f-ec55-4505-9a6f-cbaae063cd25",
+      "old_parent_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca"
+    },
+    {
+      "centre_uuid": "2b929036-d57a-4f0b-be12-73d7c1bde85e",
+      "old_parent_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca"
+    },
+    {
+      "centre_uuid": "2c0b5249-486d-47f5-80c2-1622a4709f8b",
+      "old_parent_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca"
+    },
+    {
+      "centre_uuid": "2d36673a-43dd-41a8-b20a-e5b1784facc6",
+      "old_parent_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca"
+    },
+    {
+      "centre_uuid": "39e94780-51b0-43b5-99ce-1fb6601b571a",
+      "old_parent_uuid": "32c72f6b-3866-4676-bad6-1a4ef8a7c865"
+    },
+    {
+      "centre_uuid": "3fd8d8cb-ce16-45a6-b221-59e9426c763c",
+      "old_parent_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca"
+    },
+    {
+      "centre_uuid": "40bd15ea-dbfb-43e8-ae4b-65143e3b9757",
+      "old_parent_uuid": "32c72f6b-3866-4676-bad6-1a4ef8a7c865"
+    },
+    {
+      "centre_uuid": "41fe2089-2935-4fe0-97dd-d4255a6e9093",
+      "old_parent_uuid": "32c72f6b-3866-4676-bad6-1a4ef8a7c865"
+    },
+    {
+      "centre_uuid": "42df09f6-f402-415b-8ea1-36c057649ddb",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "45e2bd07-908a-4cf8-b0d7-74b3e2bafe7b",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "46891665-1e70-4c2b-a5f4-f55881a90319",
+      "old_parent_uuid": "32c72f6b-3866-4676-bad6-1a4ef8a7c865"
+    },
+    {
+      "centre_uuid": "545d8360-25a9-4dbc-91a9-6a32a239f4ff",
+      "old_parent_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca"
+    },
+    {
+      "centre_uuid": "5a56dd03-a86a-4434-8452-774df833cf58",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "5ccafac9-eee7-4aee-b210-72d77a5cd253",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "5eab1acf-35f7-4c37-a4ba-0db619a6afd7",
+      "old_parent_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca"
+    },
+    {
+      "centre_uuid": "7d849492-e2d7-48da-a8f2-852c0ca7a08c",
+      "old_parent_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca"
+    },
+    {
+      "centre_uuid": "7ed6fcd6-fd76-4047-b0a1-28f372e7b110",
+      "old_parent_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca"
+    },
+    {
+      "centre_uuid": "941753e2-70a9-4a38-88c9-e8a4ea5cc1a0",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "9684b44d-8935-44e5-a59f-0469f106da34",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "9863f3b8-5f58-4a6b-8fa0-2f352af6e8e6",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "9b72b153-3101-40c2-93ea-ce02cd543aa3",
+      "old_parent_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca"
+    },
+    {
+      "centre_uuid": "9deeb172-c91a-4585-b79b-9f2b2322b2f6",
+      "old_parent_uuid": "32c72f6b-3866-4676-bad6-1a4ef8a7c865"
+    },
+    {
+      "centre_uuid": "9f93a715-0645-49b6-990e-f5224b9433c4",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "a2d10f5a-ce82-4b71-bf62-21bb8099a591",
+      "old_parent_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca"
+    },
+    {
+      "centre_uuid": "a4e073b0-7d99-43ba-8f3f-fbde9d05780f",
+      "old_parent_uuid": "32c72f6b-3866-4676-bad6-1a4ef8a7c865"
+    },
+    {
+      "centre_uuid": "ad3ade94-9582-4ad2-85d8-9ee52f9b32eb",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "b739f27d-eae2-46b3-8d44-68c78b81da72",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "b7b4a7fc-a4a8-4dad-a398-560890c3704e",
+      "old_parent_uuid": "32c72f6b-3866-4676-bad6-1a4ef8a7c865"
+    },
+    {
+      "centre_uuid": "bd7243d8-da0c-4a3c-ba84-55bf193230ce",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "c03e158d-0588-435e-9711-672f9b4be27f",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "c0e537f4-30b9-4967-8635-e7ef005c99a5",
+      "old_parent_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca"
+    },
+    {
+      "centre_uuid": "c2519fd3-d5bb-4803-bfc3-db0a6db8cf86",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "d72c848b-5abb-42ba-92d5-5c020740bf99",
+      "old_parent_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca"
+    },
+    {
+      "centre_uuid": "d8253b64-72b9-4f5e-bea6-22095dc25493",
+      "old_parent_uuid": "32c72f6b-3866-4676-bad6-1a4ef8a7c865"
+    },
+    {
+      "centre_uuid": "d97ed8cf-9897-4ee0-ac7a-d17918950b82",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "dbac7fcd-fe91-4994-88dd-d0c6fe84ed64",
+      "old_parent_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca"
+    },
+    {
+      "centre_uuid": "dc970257-b2d1-40d8-8b37-a71f62c0d8fa",
+      "old_parent_uuid": "32c72f6b-3866-4676-bad6-1a4ef8a7c865"
+    },
+    {
+      "centre_uuid": "e22eb324-aa21-496f-8093-7049120a9e9a",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "e3718ed6-8a19-4041-8e9e-43885a4e606b",
+      "old_parent_uuid": "32c72f6b-3866-4676-bad6-1a4ef8a7c865"
+    },
+    {
+      "centre_uuid": "e3b5ea35-230f-4fd5-a208-bb8c81e51c52",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "e78d54ec-6b49-4949-826b-fc31c30bad31",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "ebe9d6d4-c9e8-4f19-ba12-fbb9ae28d9ff",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "f11ef68e-50be-4afa-9893-df1c6945d235",
+      "old_parent_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5"
+    },
+    {
+      "centre_uuid": "f234c8e9-01d7-4d8a-a392-452a55702714",
+      "old_parent_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca"
+    },
+    {
+      "centre_uuid": "fb0893bb-20a8-4ddf-b0bb-384b37dd2c4d",
+      "old_parent_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca"
+    },
+    {
+      "centre_uuid": "fc3c31af-3e0d-4dab-915c-24f568f7b1cd",
+      "old_parent_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca"
+    }
+  ],
+  "created": {
+    "level_uuid": "40c88f2d-5f22-46c0-a141-2277aabcf6b9",
+    "level_name": "CENTRE_REGIONAL",
+    "centre_regionaux": [
+      {
+        "uuid": "f5b4c0af-567f-49c5-aa13-83ebe81fb25b",
+        "name": "Centre Régional LUTTER ENSEMBLE",
+        "region_uuid": "32c72f6b-3866-4676-bad6-1a4ef8a7c865",
+        "centres_rattaches": 11
+      },
+      {
+        "uuid": "35a0cd4d-4d4e-443d-8aec-b07a06ccd871",
+        "name": "Centre Régional JUSTICE",
+        "region_uuid": "6696483a-1490-4e42-a331-acaf97ebdeca",
+        "centres_rattaches": 20
+      },
+      {
+        "uuid": "a70547d5-cb15-43a0-80f1-000bbf83820f",
+        "name": "Centre Régional CHÂTEAU DE LA VICTOIRE SOKA",
+        "region_uuid": "a7e00b11-0981-4049-b8e8-6e7afbe0b6d5",
+        "centres_rattaches": 23
+      }
+    ]
+  }
+}
