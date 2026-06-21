@@ -20,11 +20,11 @@ import { CreateMemberDto } from 'src/members/dto/create-member.dto';
 import { AccessoryService } from 'src/accessories/accessory.service';
 import { CreateAccessoryDto } from 'src/accessories/dto/create-accessory.dto';
 import { MemberAccessoryService } from 'src/member-accessories/member-accessories.service';
-import { MemberResponsibilityService } from 'src/⁠member-responsibility/⁠member-responsibility.service';
+import { MemberResponsibilityService } from 'src/member-responsibility/member-responsibility.service';
 import { slugify } from 'src/shared/functions/slug';
 import { CreateLevelDto } from 'src/level/dto/create-level.dto';
 import { CreateStructureDto } from 'src/structure/dto/create-structure.dto';
-import { MIGRATION_URL, ROLE_MEMBER_SLUG } from 'src/shared/constants/constants';
+import { MIGRATION_URL, ROLE_RESPONSABLE_SLUG } from 'src/shared/constants/constants';
 import { UserService } from 'src/users/user.service';
 import { CreateUserDto } from 'src/users/dtos/create-user.dto';
 import { formatDateOrNull } from 'src/shared/functions/format-migration-date';
@@ -53,15 +53,58 @@ export class MigrationService {
         private readonly roleService : RoleService,
     ){}
 
+    /** Normalise une date texte (YYYY-MM-DD, dd/mm/yyyy, ou AAAA) en 'YYYY-MM-DD', sinon null. */
+    private normDate(v: any): string | undefined {
+        if (!v) return undefined;
+        const s = String(v).trim();
+        if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+        let m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+        m = s.match(/^(\d{4})$/);
+        if (m) return `${m[1]}-01-01`;
+        return undefined;
+    }
+
     async migrate(option: string, admin_uuid: string) {
 
-        const migration_url = 'https://dev.sokagakkaici.org/api/v1';
+        // Source : lecture DIRECTE de l'ancienne base `soka_db_old` (plus de dépendance à l'app en ligne).
+        const mysql = require('mysql2/promise');
+        const old = await mysql.createConnection({
+            host: process.env.OLD_DB_HOST ?? process.env.DB_HOST ?? 'localhost',
+            port: Number(process.env.OLD_DB_PORT ?? process.env.DB_PORT ?? 3306),
+            user: process.env.OLD_DB_USER ?? process.env.DB_USER ?? 'root',
+            password: process.env.OLD_DB_PASSWORD ?? process.env.DB_PASSWORD ?? '',
+            database: process.env.OLD_DB_NAME ?? 'soka_db_old',
+        });
 
-        console.log(migration_url + '/migration?option=' + option);
-        const query = await fetch(migration_url + '/migration?option=' + option);
-        const response = await query.json();
-
-        const data = response.data;
+        let data: any = [];
+        if (option === 'departments') { const [r] = await old.query('SELECT * FROM departements'); data = r; }
+        else if (option === 'divisions') { const [r] = await old.query('SELECT * FROM divisions'); data = r; }
+        else if (option === 'civilities') {
+            data = [
+                { name: 'Monsieur', sigle: 'M.', gender: 'homme', description: 'Monsieur', status: 'enable' },
+                { name: 'Madame', sigle: 'Mme.', gender: 'femme', description: 'Madame', status: 'enable' },
+                { name: 'Mademoiselle', sigle: 'Mlle.', gender: 'femme', description: 'Mademoiselle', status: 'enable' },
+            ];
+        }
+        else if (option === 'accessories') {
+            data = [
+                { name: 'Butsudan', migration: 'Butsudan' }, { name: 'Grues', migration: 'Grues' },
+                { name: 'Gong', migration: 'Gong' }, { name: 'Juzu', migration: 'Juzu' },
+                { name: 'Kyobon', migration: 'Kyobon' }, { name: 'Coupe à eau', migration: 'coupeEau' },
+                { name: 'Bac à encens', migration: 'BacEncens' }, { name: 'Coupe de riz', migration: 'CoupeRiz' },
+                { name: 'Bougeoires', migration: 'Bougeoires' }, { name: 'Bougies Electriques', migration: 'Bougies' },
+            ];
+        }
+        else if (option === 'members') {
+            const lim = process.env.MIGRATION_LIMIT ? ' LIMIT ' + parseInt(process.env.MIGRATION_LIMIT, 10) : '';
+            const [r] = await old.query('SELECT membres.*, users.phone AS user_phone, users.email AS user_email, users.password_no_hashed AS user_password_no_hashed FROM membres LEFT JOIN users ON users.membre_id = membres.id' + lim);
+            data = r;
+        }
+        else if (option === 'structures') {
+            const [levels] = await old.query('SELECT * FROM niveaux ORDER BY `order` ASC');
+            data = { levels };
+        }
 
         if(option == 'departments'){
             for(const item of data){
@@ -145,20 +188,15 @@ export class MigrationService {
                     level = await this.levelService.create(prepare);
                 }
 
-                const queryStructs = await fetch(migration_url +'/migration/find-structure-by-level?level_id=' + level.uuid);
-                const results = await queryStructs.json();
-
-                const structs = results.data;
+                const [structs] = await old.query('SELECT * FROM structures WHERE id_niveau = ?', [level.uuid]);
 
                 for(const struct of structs){
-                    let parent;
-                    if(struct.parent_id){
-                        parent = await this.structureService.findOne(struct.parent_id);
-                    }
+                    const existsStruct = await this.structureService.findOne(struct.id).catch(() => null);
+                    if(existsStruct) continue; // structure déjà restaurée (étape 4) : on ne la recrée pas
                     const prepareStruct: CreateStructureDto = {
                         uuid: struct.id,
                         name: struct.name,
-                        parent_uuid: parent ? parent.uuid : null,
+                        parent_uuid: struct.parent_id ?? null,
                     }
                     await this.structureService.create(prepareStruct);
                 }
@@ -170,55 +208,48 @@ export class MigrationService {
             let x = 0;
             for(const member of data){
                 x++;
+                try {
                 const findMember = await this.memberService.findOneByUuid(member.id);
-                const role = await this.roleService.findOneBySlug(ROLE_MEMBER_SLUG);
+                const role = await this.roleService.findOneBySlug(ROLE_RESPONSABLE_SLUG).catch(() => null);
 
-                if(!findMember){
+                // UPSERT : on traite TOUJOURS le membre (mise à jour si déjà présent, sinon insertion)
+                if(member.departement){
 
-                    if(member.departement){
-
-                        // situation matrimonal
-                        const maritalStatus = await this.maritalStatusService.findOneByName(member.situation_matrimoniale);
-                        if(!maritalStatus){
-                            await this.maritalStatusService.store({
+                        // situation matrimoniale (corrigé : on capture l'entité créée pour renseigner le FK)
+                        let maritalStatus = member.situation_matrimoniale
+                            ? await this.maritalStatusService.findOneByName(member.situation_matrimoniale)
+                            : undefined;
+                        if(!maritalStatus && member.situation_matrimoniale){
+                            maritalStatus = await this.maritalStatusService.store({
                                 name: member.situation_matrimoniale,
                                 description: "",
                             }, admin_uuid);
                         }
                         console.log('maritalStatus ................... OK');
                         
-                        // pays
-                        let country;
+                        // pays (corrigé : plus de variable masquée, on conserve la vraie nationalité)
+                        let country: any = undefined;
                         if(member.nationalite){
-                            const verifyCountry = member.nationalite.toLowerCase();
-                            let countryName = ""
-                            if(verifyCountry == "japan"){
-                                countryName = "JAPON"
-                            }else{
-                                countryName = member.nationalite
-                            }
-                            let country = await this.countryService.findOneByName(countryName.toUpperCase());
+                            const countryName = member.nationalite.toLowerCase() === 'japan'
+                                ? 'JAPON'
+                                : member.nationalite.toUpperCase();
+                            country = await this.countryService.findOneByName(countryName);
                             if(!country){
                                 country = await this.countryService.store({
-                                    name: "COTE D'IVOIRE",
+                                    name: countryName,
                                     description: "",
                                 }, admin_uuid);
                             }
                         }
-                        
-                        !country ? country = await this.countryService.store({
-                                name: "COTE D'IVOIRE",
-                                description: "",
-                            }, admin_uuid) : null;
 
                         console.log('country ................... OK');
 
                         
-                        // civility
-                        let civility = await this.civilityService.findOneByName(member.civility);
-                        if(!civility){
-                            await this.civilityService.store("homme", admin_uuid);
-                        }
+                        // genre + civilité (corrigé : l'ancienne base a `sexe`, pas `civility`)
+                        const memberGender = (member.sexe || '').toLowerCase() === 'femme' ? 'femme' : 'homme';
+                        const civility = await this.civilityService.findOneByName(
+                            memberGender === 'femme' ? 'Madame' : 'Monsieur',
+                        );
                         console.log('civility ................... OK');
                         
                         // city
@@ -318,7 +349,7 @@ export class MigrationService {
                             }
 
                             const level = await this.levelService.findOneByName(member.niveau_responsabilite);
-                            if(level){
+                            if(level && role){
 
                                 let responsibility = await this.responsibilityService.findOneBySlug(slugify(member.type_responsabilite));
                                 if(!responsibility){
@@ -355,9 +386,9 @@ export class MigrationService {
                         const prepareSaveMember: CreateMemberDto = {
                             picture: member.picture,
                             matricule: member.matricule,
-                            firstname: member.nom,
-                            lastname: member.prenom,
-                            gender: civility?.gender as string,
+                            firstname: member.prenom,
+                            lastname: member.nom,
+                            gender: memberGender,
                             birth_date: member.date_naissance ?? null,
                             birth_city: member.lieu_naissance ?? null,
                             civility_uuid: civility?.uuid,
@@ -367,7 +398,8 @@ export class MigrationService {
                             childrens: member.nb_enfants ?? 0,
                             country_uuid: country?.uuid,
                             city_uuid: cityUuid,
-                            town: member.ville_residence ?? null,
+                            location: member.localite_residence ?? null,
+                            town: member.commune_residence ?? null,
                             formation_uuid: formationUuid,
                             job_uuid: jobUuid,
                             phone: member_phone,
@@ -381,20 +413,18 @@ export class MigrationService {
                             department_uuid: departmentUuid,
                             division_uuid: divisionUuid,
                             responsibility_uuid: responsibilityUuid,
-                            accessories: member.accessories ?? [],
+                            accessories: [],
                             has_gohonzon: member.possede_gohonzon ?? false,
-                            date_gohonzon: member.annee_gohonzon ?? null,
+                            date_gohonzon: this.normDate(member.annee_gohonzon),
                             has_tokusso: member.possede_tokusso ?? false,
-                            date_tokusso: member.annee_tokusso ?? null,
+                            date_tokusso: this.normDate(member.annee_tokusso),
                             has_omamori: member.possede_omamori ?? false,
-                            date_omamori: member.annee_omamori ?? null,
-                            structure_id: structure.id,
+                            date_omamori: this.normDate(member.annee_omamori),
                             structure_uuid: structure.uuid,
-                            status: 'success',
+                            status: member.statut === 'inactif' ? 'disable' : 'enable',
                         }
 
-                        console.log(prepareSaveMember);
-                        const saveMember = await this.memberService.storeFromMigration({...prepareSaveMember, uuid: member.id}, admin_uuid);
+                        const saveMember = await this.memberService.upsertFromMigration({...prepareSaveMember, uuid: member.id}, admin_uuid);
                         console.log('member ................... OK');
                         
                         // creation du compte utilisateur lié au membre
@@ -415,14 +445,14 @@ export class MigrationService {
                         }
 
                         if(member.accessoires){
-                            const tmp_accessories = member.accessoires.split(',');
-                            const accessories = JSON.parse(tmp_accessories);
+                            let accessories: string[] = [];
+                            try { accessories = JSON.parse(member.accessoires); } catch { accessories = []; }
 
                             for(const accessory of accessories){
                                 const findAccessory = await this.accessoryService.findOneByLastVersionName(accessory);
 
                                 if (!findAccessory) {
-                                    throw new NotFoundException('Aucun accessoire trouvé');
+                                    continue; // accessoire inconnu : on ignore au lieu d'interrompre la migration
                                 }
 
                                 const accessoryEntity = await this.memberAccessoryService.findOneMemberAndAccessory(saveMember.uuid, findAccessory.uuid);
@@ -453,11 +483,14 @@ export class MigrationService {
 
                         console.log('################################################################################## ' + x);
                     }
+                } catch (e: any) {
+                    console.warn('[migration] membre ' + (member?.id) + ' ignore: ' + (e?.message ?? e));
                 }
             }
 
         }
 
+        await old.end();
         return {
             message: 'Données migrées avec succès',
         };

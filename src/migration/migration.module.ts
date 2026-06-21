@@ -16,7 +16,7 @@ import { LevelModule } from 'src/level/level.module';
 import { AccessoryModule } from 'src/accessories/accessory.module';
 import { MemberAccessoryModule } from 'src/member-accessories/member-accessories.module';
 import { ResponsibilityModule } from 'src/responsibilities/reponsibility.module';
-import { MemberResponsibilityModule } from 'src/⁠member-responsibility/⁠member-responsibility.module';
+import { MemberResponsibilityModule } from 'src/member-responsibility/member-responsibility.module';
 import { UserModule } from 'src/users/user.module';
 import { RoleModule } from 'src/roles/role.module';
 

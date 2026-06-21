@@ -19,6 +19,9 @@
     "noFallthroughCasesInSwitch": false,
     "moduleResolution": "node",
     "types": ["node", "multer"]
+  },
+  "ts-node": {
+    "transpileOnly": true
   }
 }
 

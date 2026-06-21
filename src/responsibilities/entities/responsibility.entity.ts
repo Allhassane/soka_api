@@ -50,11 +50,12 @@ export class ResponsibilityEntity extends DateTimeEntity {
 
 
 
-  @ManyToOne(() => LevelEntity, (level) => level.id, {
+  // Lien réel porté par level_uuid (level_id est NULL sur les données migrées).
+  @ManyToOne(() => LevelEntity, {
     nullable: true,
     onDelete: 'SET NULL',
   })
-  @JoinColumn({ name: 'level_id', referencedColumnName: 'id' })
+  @JoinColumn({ name: 'level_uuid', referencedColumnName: 'uuid' })
   level?: LevelEntity;
 
 

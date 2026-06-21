@@ -21,7 +21,7 @@ import { CityModule } from './cities/city.module';
 import { CivilityModule } from './civilities/civility.module';
 import { FormationModule } from './formations/formation.module';
 import { StructureModule } from './structure/structure.module';
-import { MemberResponsibilityModule } from './⁠member-responsibility/⁠member-responsibility.module';
+import { MemberResponsibilityModule } from './member-responsibility/member-responsibility.module';
 import { UserRole } from './user-roles/entities/user-roles.entity';
 import { UserRoleModule } from './user-roles/user-roles.module';
 import { AccessoryModule } from './accessories/accessory.module';
@@ -48,6 +48,7 @@ import { ConfigModule } from '@nestjs/config';
 import { LocationModule } from './location/location.module';
 import { JournalModule } from './journals/journal.module';
 import { ActivityModule } from './activities/activity.module';
+import { ImportModule } from './import/import.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -62,10 +63,17 @@ import { ActivityModule } from './activities/activity.module';
         password: config.dbPassword,
         database: config.dbName,
         autoLoadEntities: true,
-        synchronize: !config.isProd,
+        // NE JAMAIS synchroniser automatiquement le schéma sur une base déjà peuplée :
+        //  - déclenche des instructions non déterministes `(UUID())` que MySQL refuse sous
+        //    binlog_format=STATEMENT → "Statement is unsafe because it uses a system function..."
+        //    (empêchait l'API de démarrer) ;
+        //  - risque de modifications destructrices sur des données réelles.
+        // Le schéma est géré via le dump / les migrations. Réactivable explicitement avec DB_SYNCHRONIZE=true.
+        synchronize: process.env.DB_SYNCHRONIZE === 'true',
         ...(config.isProd && {
           entities: ['dist/**/*.entity.js'],
           migrations: ['dist/migrations/*.js'],
+          migrationsTableName: 'typeorm_migrations', // table `migrations` déjà prise par Laravel
           migrationsRun: true,
         }),
       }),
@@ -121,6 +129,7 @@ import { ActivityModule } from './activities/activity.module';
     LocationModule
     ,JournalModule
     ,ActivityModule
+    ,ImportModule
   ],
   controllers: [AppController, RolePermissionController,CinetpayCallbackController],
   providers: [AppService, RolePermissionService],

@@ -24,10 +24,12 @@ import { SuccessMessage } from 'src/shared/decorators/success-message.decorator'
 import { UpdateRoleDto } from './dtos/update-role.dto';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { PaginationQueryDto } from 'src/shared/dtos/pagination-query.dto';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
 
 @ApiTags('Rôles')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('roles')
 export class RoleController {
   constructor(
@@ -35,6 +37,7 @@ export class RoleController {
 ) {}
 
   @Post()
+  @RequirePermissions('roles_ajouter_un_role')
   @SuccessMessage('Rôle créé avec succès')
   @ApiOperation({ summary: 'Créer un nouveau rôle' })
   @ApiResponse({ status: 201, description: 'Rôle créé' })
@@ -52,6 +55,7 @@ export class RoleController {
   }
 
   @Put(':uuid')
+  @RequirePermissions('roles_modifier_un_role')
   @SuccessMessage('Rôle mis à jour')
   @ApiOperation({ summary: 'Mettre à jour un rôle' })
   @ApiResponse({ status: 200, description: 'Rôle mis à jour' })
@@ -70,6 +74,7 @@ export class RoleController {
   }
 
   @Patch(':uuid/delete')
+  @RequirePermissions('roles_activer_ou_desactiver_un_role')
   @SuccessMessage('Rôle supprimé (soft delete)')
   @ApiOperation({ summary: 'Supprimer un rôle (soft delete)' })
   @ApiResponse({ status: 200, description: 'Rôle supprimé avec succès' })
@@ -104,6 +109,7 @@ export class RoleController {
   }
 
   @Put('permissions/:uuid/toggle')
+  @RequirePermissions('roles_activer_ou_desactiver_un_role')
   @ApiParam({ name: 'uuid', description: 'UUID du rôle-permission ' })
     @ApiOperation({ summary: 'Changer le status de la permission' })
 
@@ -118,6 +124,7 @@ export class RoleController {
    * @param uuid UUID du rôle
    */
   @Post(':uuid/generate-permissions')
+  @RequirePermissions('roles_ajouter_un_role')
   @ApiOperation({ summary: 'Générer toutes les permissions pour un rôle' })
   @ApiResponse({ status: 200, description: 'Permissions générées avec succès.' })
   @ApiResponse({ status: 404, description: 'Rôle introuvable.' })
