@@ -16,7 +16,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { RolePermissionEntity } from 'src/role-permission/entities/role-permission.entity';
 import { PaginateMeta } from 'src/shared/interfaces/paginate-meta.interface';
 import { v4 as uuidv4 } from 'uuid';
-import { ROLE_MEMBER_SLUG } from 'src/shared/constants/constants';
+import {
+  ROLE_ADMIN_SLUG,
+  ROLE_RESPONSABLE_SLUG,
+  ROLE_MEMBRE_SLUG,
+} from 'src/shared/constants/constants';
 
 @Injectable()
 export class RoleService {
@@ -40,23 +44,21 @@ export class RoleService {
     // À activer explicitement avec RUN_SEEDS=true sur une base vierge.
     if (process.env.RUN_SEEDS !== 'true') return;
 
-    const existing = await this.roleRepository.findOne({
-      where: { name: 'superadmin' },
-    });
+    // L'application n'a que 3 rôles : ADMINISTRATEUR / RESPONSABLE / MEMBRE.
+    const targets = [
+      { name: 'ADMINISTRATEUR', slug: ROLE_ADMIN_SLUG },
+      { name: 'RESPONSABLE', slug: ROLE_RESPONSABLE_SLUG },
+      { name: 'MEMBRE', slug: ROLE_MEMBRE_SLUG },
+    ];
 
-    if (!existing) {
-      const role = new Role();
-      role.name = 'superadmin';
-      await this.roleRepository.save(role);
-    }
-
-    const existeMemberRole = await this.roleRepository.findOne({ where: { slug: ROLE_MEMBER_SLUG } });
-
-    if (!existeMemberRole) {
-      const role = new Role();
-      role.name = 'Responsable membre';
-      role.slug = ROLE_MEMBER_SLUG;
-      await this.roleRepository.save(role);
+    for (const t of targets) {
+      const exists = await this.roleRepository.findOne({ where: { slug: t.slug } });
+      if (!exists) {
+        const role = new Role();
+        role.name = t.name;
+        role.slug = t.slug;
+        await this.roleRepository.save(role);
+      }
     }
   }
 

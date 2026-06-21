@@ -24,7 +24,7 @@ import { MemberResponsibilityService } from 'src/member-responsibility/member-re
 import { slugify } from 'src/shared/functions/slug';
 import { CreateLevelDto } from 'src/level/dto/create-level.dto';
 import { CreateStructureDto } from 'src/structure/dto/create-structure.dto';
-import { MIGRATION_URL, ROLE_MEMBER_SLUG } from 'src/shared/constants/constants';
+import { MIGRATION_URL, ROLE_RESPONSABLE_SLUG } from 'src/shared/constants/constants';
 import { UserService } from 'src/users/user.service';
 import { CreateUserDto } from 'src/users/dtos/create-user.dto';
 import { formatDateOrNull } from 'src/shared/functions/format-migration-date';
@@ -210,7 +210,7 @@ export class MigrationService {
                 x++;
                 try {
                 const findMember = await this.memberService.findOneByUuid(member.id);
-                const role = await this.roleService.findOneBySlug(ROLE_MEMBER_SLUG).catch(() => null);
+                const role = await this.roleService.findOneBySlug(ROLE_RESPONSABLE_SLUG).catch(() => null);
 
                 // UPSERT : on traite TOUJOURS le membre (mise à jour si déjà présent, sinon insertion)
                 if(member.departement){

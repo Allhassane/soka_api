@@ -12,5 +12,8 @@ export const MAIL_FROM = process.env.MAIL_FROM_ADRESSE;
 
 export const MIGRATION_URL = process.env.MIGRATION_URL;
 
-export const ROLE_MEMBER_SLUG = 'responsable-membre';
+// L'application n'a que 3 rôles. Slugs canoniques (cf. scripts/setup-3-roles.js et RoleService.onModuleInit).
+export const ROLE_ADMIN_SLUG = 'administrateur';
+export const ROLE_RESPONSABLE_SLUG = 'responsable';
+export const ROLE_MEMBRE_SLUG = 'membre';
 export const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;

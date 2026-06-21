@@ -48,6 +48,7 @@ import { ConfigModule } from '@nestjs/config';
 import { LocationModule } from './location/location.module';
 import { JournalModule } from './journals/journal.module';
 import { ActivityModule } from './activities/activity.module';
+import { ImportModule } from './import/import.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -128,6 +129,7 @@ import { ActivityModule } from './activities/activity.module';
     LocationModule
     ,JournalModule
     ,ActivityModule
+    ,ImportModule
   ],
   controllers: [AppController, RolePermissionController,CinetpayCallbackController],
   providers: [AppService, RolePermissionService],

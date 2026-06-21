@@ -19,6 +19,7 @@ import { JwtAuthGuard } from './guards/auth.guard';
 import { User } from 'src/users/entities/user.entity';
 import { SuccessMessage } from 'src/shared/decorators/success-message.decorator';
 import { ResetPasswordDto } from './dtos/reset-password.dto';
+import { ForgotPasswordDto } from './dtos/forgot-password.dto';
 import { JwtPayload } from './interfaces/auth.interface';
 
 @ApiTags('Authentification')
@@ -55,7 +56,6 @@ export class AuthController {
   })
   logout() {}
 
-
   @Patch('reset-password/:uuid')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -72,5 +72,16 @@ export class AuthController {
       );
     }
     return this.authService.resetPassword(uuid, resetPasswordDto.newPassword);
+  }
+
+  // « Mot de passe oublié » (public) : génère un nouveau mot de passe et l'envoie par SMS.
+  @Post('forgot-password')
+  @ApiOperation({
+    summary:
+      'Mot de passe oublié : génère un nouveau mot de passe et l envoie par SMS',
+  })
+  @ApiBody({ type: ForgotPasswordDto })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.requestPasswordReset(dto.phone_number);
   }
 }

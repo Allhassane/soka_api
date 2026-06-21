@@ -23,26 +23,24 @@ export class MemberResponsibilityEntity extends DateTimeEntity {
   @IsOptional()
   member_uuid?: string;
 
-  @ManyToOne(() => MemberEntity, (member) => member.id, {
+  // Les liens réels sont portés par les colonnes *_uuid (member_id/responsibility_id
+  // sont NULL sur toutes les lignes migrées). On joint donc sur uuid, comme MemberEntity.
+  @ManyToOne(() => MemberEntity, (member) => member.member_responsibilities, {
     nullable: true,
     onDelete: 'SET NULL',
   })
-  @JoinColumn({ name: 'member_id', referencedColumnName: 'id' })
+  @JoinColumn({ name: 'member_uuid', referencedColumnName: 'uuid' })
   member?: MemberEntity;
 
   @Column({ type: 'varchar', length: 36, nullable: true })
   @IsOptional()
   responsibility_uuid?: string;
 
-  @ManyToOne(
-    () => ResponsibilityEntity,
-    (responsibility) => responsibility.id,
-    {
-      nullable: true,
-      onDelete: 'SET NULL',
-    },
-  )
-  @JoinColumn({ name: 'responsibility_id', referencedColumnName: 'id' })
+  @ManyToOne(() => ResponsibilityEntity, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'responsibility_uuid', referencedColumnName: 'uuid' })
   responsibility?: ResponsibilityEntity | null;
 
   @Column({ type: 'varchar', length: 36, nullable: false, default:'high' })

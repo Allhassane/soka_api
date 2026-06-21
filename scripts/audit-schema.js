@@ -1,5 +1,5 @@
 /**
- * Audit de dérive de schéma — SOKA
+ * Audit de dérive de schéma - SOKA
  * Compare le schéma ATTENDU par les entités TypeORM (source de vérité, via le dist compilé)
  * au schéma RÉEL de la base `soka_db` (information_schema).
  *

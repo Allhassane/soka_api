@@ -1,4 +1,4 @@
--- SOKA — Correctifs de schéma appliqués le 2026-06-13 (base de dev `soka_db`, MySQL 8)
+-- SOKA - Correctifs de schéma appliqués le 2026-06-13 (base de dev `soka_db`, MySQL 8)
 --
 -- Contexte : la base est en migration Laravel -> NestJS INACHEVÉE. Plusieurs tables
 -- divergent des entités TypeORM (le `synchronize` qui devait compléter le schéma avait
@@ -12,7 +12,7 @@ ALTER TABLE structures  ADD COLUMN deleted_at datetime(6) NULL DEFAULT NULL;
 ALTER TABLE departments ADD COLUMN deleted_at datetime(6) NULL DEFAULT NULL;
 ALTER TABLE divisions   ADD COLUMN deleted_at datetime(6) NULL DEFAULT NULL;
 
--- ⚠⚠ INSUFFISANT — bloquant n°1 du projet :
+-- ⚠⚠ INSUFFISANT - bloquant n°1 du projet :
 -- La table `members` réelle n'a que ~13 colonnes (id, uuid, picture, structure_uuid,
 -- matricule, gender, birth_date, birth_city, email, sokahan_byakuren, created_at,
 -- updated_at, deleted_at) alors que `MemberEntity` en attend ~50 : il MANQUE notamment

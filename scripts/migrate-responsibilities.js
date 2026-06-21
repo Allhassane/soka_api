@@ -1,8 +1,8 @@
 /**
- * ETL — Responsabilités & Niveaux (complément de la migration membres).
+ * ETL - Responsabilités & Niveaux (complément de la migration membres).
  *
  * 1) Seed `levels` depuis `soka_db_old.niveaux` (les 7 paliers).
- * 2) Crée le rôle « membre » (roles.id est char36 sans auto-increment => on fournit un uuid).
+ * 2) Crée le rôle RESPONSABLE (roles.id est char36 sans auto-increment => on fournit un uuid).
  * 3) Crée les `responsibilities` (dédupliquées par slug du type, niveau mappé, rôle membre).
  * 4) Crée les `member_responsibilities` (lien membre -> responsabilité, priorité 'high').
  *
@@ -59,20 +59,20 @@ const OLD = process.env.OLD_DB_NAME || 'soka_db_old';
     return levelByName[key] || null;
   };
 
-  // 2) Rôle « membre »
-  let role = (await q(`SELECT id, uuid FROM \`${NEW}\`.roles WHERE slug = 'membre' OR name = 'membre' LIMIT 1`))[0];
+  // 2) Rôle RESPONSABLE (le rôle attaché à toutes les responsabilités)
+  let role = (await q(`SELECT id, uuid FROM \`${NEW}\`.roles WHERE slug = 'responsable' OR name = 'RESPONSABLE' LIMIT 1`))[0];
   let roleUuid;
   if (!role) {
     const rid = uuid();
     await q(
       `INSERT INTO \`${NEW}\`.roles (id, name, uuid, slug, created_at, updated_at) VALUES (?,?,?,?,NOW(6),NOW(6))`,
-      [rid, 'membre', rid, 'membre'],
+      [rid, 'RESPONSABLE', rid, 'responsable'],
     );
     roleUuid = rid;
-    console.log('role membre cree');
+    console.log('role RESPONSABLE cree');
   } else {
     roleUuid = role.uuid || role.id;
-    console.log('role membre existant');
+    console.log('role RESPONSABLE existant');
   }
 
   // 3) Responsabilités (dédup par slug du type)

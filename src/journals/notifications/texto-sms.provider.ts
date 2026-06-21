@@ -13,7 +13,7 @@ import { NotificationChannel } from '../entities/journal-distribution.entity';
  * Paramètres lus depuis .env :
  *  - TEXTO_BASE_URL     (ex: https://api.texto.ci/api/v1)
  *  - TEXTO_API_KEY      (clé API / token bearer)
- *  - TEXTO_CLIENT_ID    (optionnel — identifiant client)
+ *  - TEXTO_CLIENT_ID    (optionnel - identifiant client)
  *  - TEXTO_SENDER       (sender ID alphanumérique, ex: SOKA)
  *  - TEXTO_SMS_PATH     (chemin endpoint SMS, défaut: /sms/send)
  *  - TEXTO_WA_PATH      (chemin endpoint WhatsApp, défaut: /whatsapp/send)
@@ -78,7 +78,7 @@ export class TextoSmsProvider implements NotificationProvider {
       };
     }
 
-    // Mode dégradé : pas d'envoi réel — on logge et on rapporte succès simulé.
+    // Mode dégradé : pas d'envoi réel - on logge et on rapporte succès simulé.
     if (!this.enabled || !this.baseUrl || !this.apiKey) {
       this.logger.warn(
         `[TextO][SIMULATION] channel=${channel} to=${to} ref=${input.reference ?? '-'} :: ${input.message}`,

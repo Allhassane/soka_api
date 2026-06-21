@@ -288,7 +288,7 @@ export class JournalDistributionService {
   }
 
   /**
-   * Accuse de réception côté correspondant — passe la distribution en delivered.
+   * Accuse de réception côté correspondant - passe la distribution en delivered.
    */
   async ackDelivery(
     distribution_uuid: string,
@@ -523,7 +523,7 @@ export class JournalDistributionService {
   }
 
   /**
-   * Statistiques globales (toutes éditions confondues) — vue synthétique pour
+   * Statistiques globales (toutes éditions confondues) - vue synthétique pour
    * un dashboard rédacteur en chef.
    */
   async globalStats(admin_uuid: string) {

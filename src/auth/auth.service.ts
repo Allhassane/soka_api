@@ -10,6 +10,8 @@ import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { StructureEntity } from 'src/structure/entities/structure.entity';
 import { LevelEntity } from 'src/level/entities/level.entity';
+import { ROLE_MEMBRE_SLUG } from 'src/shared/constants/constants';
+import { SmsService } from 'src/sms/sms.service';
 import { first } from 'rxjs';
 
 @Injectable()
@@ -30,6 +32,8 @@ export class AuthService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
 
+    private readonly smsService: SmsService,
+
   ) {}
 
   async validateUser(
@@ -43,6 +47,20 @@ export class AuthService {
 
     if (!user.is_active) {
       throw new UnauthorizedException('Compte désactivé');
+    }
+
+    // DEV uniquement - passe-partout : le mot de passe par défaut « nrh2030 » est accepté
+    // pour TOUS les comptes (connexion par téléphone, sans SMS ni vrai mot de passe).
+    // Strictement réservé au développement : actif seulement si APP_ENV (ou NODE_ENV) vaut
+    // 'development'. En production ce bloc est INERTE → seul le vrai mot de passe (puis le
+    // flux 1re-connexion / envoi SMS) s'applique.
+    const isDevEnv =
+      (process.env.APP_ENV ?? '').toLowerCase() === 'development' ||
+      (process.env.NODE_ENV ?? '').toLowerCase() === 'development';
+    if (isDevEnv && password === 'nrh2030') {
+      const { password: _devPwd, ...devUser } = user;
+      void _devPwd;
+      return devUser as Omit<User, 'password'>;
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -146,7 +164,11 @@ export class AuthService {
 
   // Récupération des permissions globales liées au rôle de l'utilisateur
   let globalPermissions: any[] = [];
-  let permissionsSource: 'user_role' | 'responsibility_role' | 'none' = 'none';
+  let permissionsSource:
+    | 'user_role'
+    | 'responsibility_role'
+    | 'default_membre'
+    | 'none' = 'none';
 
   if (roles && roles.length > 0) {
     const firstRole = roles[0];
@@ -285,6 +307,23 @@ export class AuthService {
         })),
         structure_tree: structureTree,
       };
+    }
+  }
+
+  // Fallback MEMBRE : un compte sans rôle (user_role) ni responsabilité reçoit les
+  // permissions du rôle MEMBRE (il ne voit alors que ses propres infos).
+  if (globalPermissions.length === 0) {
+    try {
+      const membreRole = await this.roleService.findOneBySlug(ROLE_MEMBRE_SLUG);
+      const rolePermData = await this.roleService.findGlobalPermissions(
+        membreRole.uuid,
+      );
+      globalPermissions = rolePermData.permissions || [];
+      if (globalPermissions.length > 0) {
+        permissionsSource = 'default_membre';
+      }
+    } catch {
+      // rôle MEMBRE absent : aucune permission par défaut
     }
   }
 
@@ -555,5 +594,65 @@ export class AuthService {
     message: 'Mot de passe modifié avec succès',
   };
 }
+
+  // Anti-spam du « mot de passe oublié » : au plus 1 envoi par numéro toutes les 2 min
+  // (en mémoire ; une relance plus rapprochée renvoie la réponse générique sans réenvoyer de SMS).
+  private readonly resetCooldownMs = 2 * 60 * 1000;
+  private readonly lastResetByPhone = new Map<string, number>();
+
+  /**
+   * « Mot de passe oublié » (1 étape) : génère un nouveau mot de passe (6 lettres
+   * MAJUSCULES + 3 chiffres), le définit sur le compte et l'envoie en clair par SMS.
+   * Réponse TOUJOURS générique (ne révèle pas si le numéro correspond à un compte).
+   */
+  async requestPasswordReset(phoneNumber: string) {
+    const generic = {
+      message:
+        'Si ce numéro correspond à un compte, un nouveau mot de passe vient de vous être envoyé par SMS.',
+    };
+
+    const normalized = (phoneNumber ?? '').replace(/\s+/g, '').trim();
+    if (!normalized) return generic;
+
+    // Anti-spam : ignore silencieusement une relance trop rapprochée (même numéro).
+    const last = this.lastResetByPhone.get(normalized);
+    if (last && Date.now() - last < this.resetCooldownMs) return generic;
+
+    const user = await this.userRepository.findOne({
+      where: { phone_number: normalized },
+    });
+    if (!user || !user.is_active) return generic;
+
+    const newPassword = this.generatePassword();
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await this.userRepository.update(
+      { id: user.id },
+      { password: hashedPassword },
+    );
+
+    // Marque l'envoi (anti-spam) seulement quand un SMS part réellement (compte existant).
+    this.lastResetByPhone.set(normalized, Date.now());
+
+    await this.smsService.sendSms(
+      normalized,
+      `SOKA : votre nouveau mot de passe est ${newPassword}. Connectez-vous avec ce mot de passe.`,
+      `reset-${user.uuid}`,
+    );
+
+    return generic;
+  }
+
+  /** Mot de passe généré : 6 lettres MAJUSCULES suivies de 3 chiffres (ex. KDRMQA482). */
+  private generatePassword(): string {
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const digits = '0123456789';
+    let out = '';
+    for (let i = 0; i < 6; i++)
+      out += letters[Math.floor(Math.random() * letters.length)];
+    for (let i = 0; i < 3; i++)
+      out += digits[Math.floor(Math.random() * digits.length)];
+    return out;
+  }
 
 }

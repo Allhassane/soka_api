@@ -1,12 +1,12 @@
 /**
- * Seed RBAC — couche 2 : permissions de menu (`*_voir_menu_*`).
+ * Seed RBAC - couche 2 : permissions de menu (`*_voir_menu_*`).
  *
- * 0) Aligne `roles_permissions.status` sur l'entité (boolean/tinyint) — sinon le front
+ * 0) Aligne `roles_permissions.status` sur l'entité (boolean/tinyint) - sinon le front
  *    (`status === true`) ne voit jamais les permissions stockées en varchar '1'.
  * 0b) Répare `roles.uuid`/`roles.slug` (vides → cassent le lookup des permissions au login).
  * 1) Extrait les slugs `permission:` de web/config/menus.ts.
  * 2) Crée les permissions manquantes (module « Navigation »).
- * 3) Active ces permissions pour les rôles indiqués (SEED_ROLES, défaut 'admin,gestionnaire').
+ * 3) Active ces permissions pour les rôles indiqués (SEED_ROLES, défaut 'administrateur').
  *
  * Idempotent. Usage : node scripts/seed-menu-permissions.js   (ou SEED_ROLES="gestionnaire,user" node ...)
  */
@@ -66,7 +66,7 @@ const humanize = (s) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCa
   console.log('permissions de menu creees: ' + created + '/' + slugs.length);
 
   // 4) Matrice role -> permissions
-  const roles = (process.env.SEED_ROLES || 'admin,gestionnaire').split(',').map((s) => s.trim()).filter(Boolean);
+  const roles = (process.env.SEED_ROLES || 'administrateur').split(',').map((s) => s.trim()).filter(Boolean);
   for (const roleName of roles) {
     const role = (await q('SELECT id, uuid FROM roles WHERE name=? OR slug=? LIMIT 1', [roleName, roleName]))[0];
     if (!role) { console.log('  role absent: ' + roleName); continue; }

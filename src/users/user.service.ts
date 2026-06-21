@@ -27,6 +27,11 @@ export class UserService {
   ) {}
 
   async onModuleInit() {
+    // Ne PAS recréer/repromouvoir le compte bootstrap superadmin à chaque boot :
+    // l'application n'a qu'UN administrateur (flag is_admin géré explicitement, cf. JOURNAL 2026-06-20).
+    // À n'activer que sur une base vierge avec RUN_SEEDS=true.
+    if (process.env.RUN_SEEDS !== 'true') return;
+
     const existing = await this.userRepo.findOne({
       where: [{ email: 'superadmin@soka.com' }],
     });
@@ -45,7 +50,7 @@ export class UserService {
         process.env.SUPERADMIN_PASSWORD?.trim() || this.generateStrongPassword();
       if (!process.env.SUPERADMIN_PASSWORD?.trim()) {
         console.warn(
-          `[SOKA] SUPERADMIN_PASSWORD absent du .env — mot de passe superadmin généré : ${seedPassword}`,
+          `[SOKA] SUPERADMIN_PASSWORD absent du .env - mot de passe superadmin généré : ${seedPassword}`,
         );
       }
 

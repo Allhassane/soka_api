@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
- * Migration ADDITIVE et NON-DESTRUCTIVE — alignement minimal du schéma sur les entités.
+ * Migration ADDITIVE et NON-DESTRUCTIVE - alignement minimal du schéma sur les entités.
  *
  * Contexte : la base de prod ressemble à `soka_db.sql` (incomplète mais AVEC des données).
  * On NE peut donc PAS dropper/recréer. Cette migration ajoute UNIQUEMENT les colonnes

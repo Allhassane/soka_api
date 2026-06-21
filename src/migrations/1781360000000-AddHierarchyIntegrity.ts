@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
- * Migration INTÉGRITÉ — hiérarchie (étape 4 du MODELE-CIBLE).
+ * Migration INTÉGRITÉ - hiérarchie (étape 4 du MODELE-CIBLE).
  *
  * Restaure la hiérarchie depuis les données déjà présentes (sans ETL) puis pose l'intégrité :
  *  1) `structures.uuid` <- `id` (l'id char(36) EST l'uuid métier) ; `parent_uuid` <- `parent_id`.

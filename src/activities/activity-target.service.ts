@@ -260,7 +260,7 @@ export class ActivityTargetService {
 
   /**
    * Auto-assignation : résout les cibles puis crée les participants manquants
-   * dans une seule transaction logique (idempotent — on saute les déjà inscrits).
+   * dans une seule transaction logique (idempotent - on saute les déjà inscrits).
    */
   async autoAssign(
     activity_uuid: string,

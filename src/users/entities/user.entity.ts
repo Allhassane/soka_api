@@ -79,9 +79,6 @@ export class User extends DateTimeEntity {
   is_connected: boolean;
 
 
-
-
-
   @BeforeInsert()
   @BeforeUpdate()
   async hashPassword(): Promise<void> {
