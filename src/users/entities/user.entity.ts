@@ -78,6 +78,14 @@ export class User extends DateTimeEntity {
   @Column({ type: 'boolean', default: false })
   is_connected: boolean;
 
+  @ApiProperty({
+    description:
+      'Doit changer son mot de passe à la 1re connexion. true = le compte a encore le mot de passe par défaut (nrh2030) ; au prochain login, un nouveau mot de passe est généré et envoyé par SMS.',
+    default: true,
+  })
+  @Column({ type: 'boolean', default: true })
+  must_change_password: boolean;
+
 
   @BeforeInsert()
   @BeforeUpdate()
