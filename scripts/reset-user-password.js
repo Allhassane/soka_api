@@ -18,8 +18,32 @@
  * Surcharges DB (défauts = mêmes que les autres scripts) :
  *   DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=root DB_PASSWORD='' DB_NAME=soka_db
  */
+const fs = require('fs');
+const path = require('path');
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcrypt');
+
+// Charge api/.env (sans dépendance) pour récupérer les identifiants DB de prod.
+function loadEnv(file) {
+  try {
+    for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+      if (/^\s*#/.test(line) || !line.trim()) continue;
+      const m = line.match(/^\s*([\w.-]+)\s*=\s*(.*)\s*$/);
+      if (!m) continue;
+      let [, key, val] = m;
+      if (
+        (val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'"))
+      ) {
+        val = val.slice(1, -1);
+      }
+      if (process.env[key] === undefined) process.env[key] = val;
+    }
+  } catch {
+    /* pas de .env : on garde les défauts */
+  }
+}
+loadEnv(path.join(__dirname, '..', '.env'));
 
 const PHONE = (process.env.PHONE || '').replace(/\s+/g, '').trim();
 const NEW_PASSWORD = process.env.NEW_PASSWORD || null;

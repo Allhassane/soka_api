@@ -710,9 +710,9 @@ export class AuthService {
     return generic;
   }
 
-  /** Mot de passe généré : 6 lettres MAJUSCULES suivies de 3 chiffres (ex. KDRMQA482). */
+  /** Mot de passe généré : 6 lettres minuscules suivies de 3 chiffres (ex. kdrmqa482). */
   private generatePassword(): string {
-    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const letters = 'abcdefghijklmnopqrstuvwxyz';
     const digits = '0123456789';
     let out = '';
     for (let i = 0; i < 6; i++)
