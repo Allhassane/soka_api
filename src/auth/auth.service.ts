@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UserService } from '../users/user.service';
@@ -16,6 +22,8 @@ import { first } from 'rxjs';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
@@ -60,6 +68,9 @@ export class AuthService {
     if (isDevEnv && password === 'nrh2030') {
       const { password: _devPwd, ...devUser } = user;
       void _devPwd;
+      // En dev, le passe-partout court-circuite le flux « 1re connexion » (pas de SMS,
+      // pas de rotation) : on présente le compte comme déjà initialisé.
+      (devUser as { must_change_password?: boolean }).must_change_password = false;
       return devUser as Omit<User, 'password'>;
     }
 
@@ -73,6 +84,13 @@ export class AuthService {
 
 
   async login(user: User) {
+  // Flux « 1re connexion » : tant que le compte a encore le mot de passe par défaut
+  // (must_change_password = true), on NE délivre PAS de session. On génère un nouveau
+  // mot de passe, on l'envoie par SMS, et le membre se reconnecte avec.
+  if ((user as { must_change_password?: boolean }).must_change_password) {
+    return this.handleFirstLogin(user);
+  }
+
   // Récupération des informations du membre associé AVANT de créer le payload
   let memberResponsibilities: any[] = [];
 
@@ -595,6 +613,45 @@ export class AuthService {
   };
 }
 
+  /**
+   * 1re connexion (compte encore au mot de passe par défaut nrh2030) : génère un
+   * nouveau mot de passe, l'envoie par SMS, le persiste et lève le flag. AUCUNE
+   * session n'est délivrée — le membre se reconnecte ensuite avec le mot de passe reçu.
+   * Si le SMS échoue : on NE change RIEN (le compte reste sur nrh2030, retry possible).
+   */
+  private async handleFirstLogin(user: User) {
+    const newPassword = this.generatePassword();
+
+    const sms = await this.smsService.sendSms(
+      user.phone_number,
+      `SOKA : votre mot de passe est ${newPassword}. Connectez-vous avec ce mot de passe.`,
+      `firstlogin-${user.uuid}`,
+    );
+
+    if (!sms.success) {
+      this.logger.error(
+        `handleFirstLogin : SMS non envoyé (${sms.error ?? 'erreur inconnue'}) pour ${user.uuid} - mot de passe INCHANGÉ.`,
+      );
+      throw new ServiceUnavailableException(
+        "L'envoi du SMS a échoué. Réessayez dans un instant ou contactez un administrateur.",
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await this.userRepository.update(
+      { id: user.id },
+      { password: hashedPassword, must_change_password: false },
+    );
+
+    return {
+      must_change_password: true,
+      access_token: null,
+      user: null,
+      message:
+        'Un SMS contenant votre mot de passe vous a été envoyé. Reconnectez-vous avec ce mot de passe.',
+    };
+  }
+
   // Anti-spam du « mot de passe oublié » : au plus 1 envoi par numéro toutes les 2 min
   // (en mémoire ; une relance plus rapprochée renvoie la réponse générique sans réenvoyer de SMS).
   private readonly resetCooldownMs = 2 * 60 * 1000;
@@ -624,21 +681,31 @@ export class AuthService {
     if (!user || !user.is_active) return generic;
 
     const newPassword = this.generatePassword();
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
 
+    // On envoie le SMS D'ABORD et on ne change le mot de passe en base QUE si l'envoi
+    // a réussi. Sinon un échec LeTexto (numéro mal formé, crédits, sender…) laisserait
+    // le compte avec un mot de passe perdu, jamais reçu par le membre.
+    const sms = await this.smsService.sendSms(
+      normalized,
+      `SOKA : votre nouveau mot de passe est ${newPassword}. Connectez-vous avec ce mot de passe.`,
+      `reset-${user.uuid}`,
+    );
+
+    if (!sms.success) {
+      this.logger.error(
+        `requestPasswordReset : SMS non envoyé (${sms.error ?? 'erreur inconnue'}) - mot de passe INCHANGÉ pour ${user.uuid}.`,
+      );
+      return generic;
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
     await this.userRepository.update(
       { id: user.id },
       { password: hashedPassword },
     );
 
-    // Marque l'envoi (anti-spam) seulement quand un SMS part réellement (compte existant).
+    // Marque l'envoi (anti-spam) seulement quand un SMS part réellement.
     this.lastResetByPhone.set(normalized, Date.now());
-
-    await this.smsService.sendSms(
-      normalized,
-      `SOKA : votre nouveau mot de passe est ${newPassword}. Connectez-vous avec ce mot de passe.`,
-      `reset-${user.uuid}`,
-    );
 
     return generic;
   }

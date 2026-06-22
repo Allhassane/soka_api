@@ -47,16 +47,25 @@ export class SmsService {
     });
   }
 
-  /** Normalise un numéro CI au format international LeTexto : 225XXXXXXXXXX (sans +). */
+  /**
+   * Normalise un numéro CI au format international LeTexto.
+   * Plan ivoirien à 10 chiffres (depuis 2021) : le format attendu est
+   * `225` + le numéro local à 10 chiffres EN GARDANT son `0` (ex. 2250749326623).
+   * Réf. : sms-api/README.md (« 0749326623 -> 2250749326623 »).
+   */
   normalizePhone(raw: string): string {
     if (!raw) return '';
-    const digits = raw.replace(/[^0-9]/g, '');
-    if (digits.startsWith('00')) return digits.substring(2);
-    if (digits.startsWith('225')) return digits;
-    if (digits.length === 10 && digits.startsWith('0'))
-      return `225${digits.substring(1)}`;
-    if (digits.length === 10) return `225${digits}`;
-    return digits;
+    let digits = raw.replace(/[^0-9]/g, '');
+    // Préfixe international composé avec 00 -> on le retire.
+    if (digits.startsWith('00')) digits = digits.slice(2);
+    // Repart toujours du numéro LOCAL (retire un éventuel indicatif 225 déjà présent).
+    let local = digits.startsWith('225') ? digits.slice(3) : digits;
+    // Auto-répare un numéro qui aurait perdu son 0 de tête (9 chiffres -> 10).
+    if (local.length === 9) local = `0${local}`;
+    // Cas nominal : 10 chiffres commençant par 0 -> 225 + numéro local complet.
+    if (local.length === 10 && local.startsWith('0')) return `225${local}`;
+    // Cas non reconnu : on préfixe 225 si purement local, sinon on renvoie tel quel.
+    return digits.startsWith('225') ? digits : `225${local}`;
   }
 
   /**
