@@ -707,23 +707,77 @@ export class StructureTreeService {
     };
   }
 
+  // --- Cache du dataset « structure_tree » -------------------------------------------
+  // Construire la structureMap complète (toutes structures + niveaux + counts +
+  // responsables + totaux) coûte plusieurs secondes. Avant, `getStructureTreeForResponsible`
+  // refaisait TOUT ce travail à CHAQUE appel — or il est appelé UNE FOIS PAR MEMBRE dans
+  // les listes paginées → ~10 rechargements complets/page → ~57 s → timeout passerelle (500).
+  // On construit donc la map UNE SEULE FOIS et on la réutilise (TTL court ; map en lecture
+  // seule après construction). Le promise est mémoïsé → pas de double construction en
+  // parallèle. Fraîcheur des comptages : ≤ TTL (acceptable pour un arbre de comptage).
+  private static readonly STRUCTURE_MAP_TTL_MS = 15_000;
+  private structureMapCache: {
+    at: number;
+    mapPromise: Promise<Map<string, any>>;
+    filtered: Map<string, any>;
+  } | null = null;
+
+  /**
+   * structure_tree filtré pour une structure cible.
+   * ⚠ `responsibleLevelOrder` est conservé pour compatibilité d'appel mais n'influence PAS
+   * la sortie (la coupe se fait à la structure cible, pas au niveau) — comportement
+   * identique à l'implémentation précédente. La construction du dataset global est mise en
+   * cache et réutilisée pour tous les membres d'une même requête, et le résultat filtré est
+   * mémoïsé par `structure_uuid` (deux membres d'une même structure → même arbre).
+   */
   public async getStructureTreeForResponsible(
     structureUuid: string,
-    responsibleLevelOrder: number
+    responsibleLevelOrder: number,
   ): Promise<any> {
-    // Récupérer toutes les structures
+    void responsibleLevelOrder;
+
+    const now = Date.now();
+    if (
+      !this.structureMapCache ||
+      now - this.structureMapCache.at >= StructureTreeService.STRUCTURE_MAP_TTL_MS
+    ) {
+      this.structureMapCache = {
+        at: now,
+        mapPromise: this.buildStructureMapWithTotals(),
+        filtered: new Map<string, any>(),
+      };
+    }
+
+    const cache = this.structureMapCache;
+    const structureMap = await cache.mapPromise;
+    if (structureMap.size === 0) return null;
+
+    if (cache.filtered.has(structureUuid)) {
+      return cache.filtered.get(structureUuid);
+    }
+    const tree = this.buildFilteredTreeFromMap(structureMap, structureUuid);
+    cache.filtered.set(structureUuid, tree);
+    return tree;
+  }
+
+  /**
+   * Construit la `structureMap` complète (tous nœuds + level_name/order + comptages directs +
+   * responsables + totaux remontés). Coûteux (plusieurs requêtes + ~3600 nœuds) → appelé une
+   * seule fois par fenêtre de cache. Retourne une map vide s'il n'y a aucune structure.
+   */
+  private async buildStructureMapWithTotals(): Promise<Map<string, any>> {
+    const structureMap = new Map<string, any>();
+
     const structures = await this.structureRepository
       .createQueryBuilder('s')
       .where('s.deleted_at IS NULL')
       .getMany();
 
-    if (structures.length === 0) return null;
+    if (structures.length === 0) return structureMap;
 
-    // Récupérer tous les niveaux
     const levels = await this.levelRepository.find();
     const levelsMap = new Map(levels.map(l => [l.uuid, { name: l.name, order: l.order }]));
 
-    // Compter les membres directs par structure
     const memberCounts = await this.memberRepository
       .createQueryBuilder('m')
       .select('m.structure_uuid', 'structure_uuid')
@@ -736,7 +790,6 @@ export class StructureTreeService {
       memberCounts.map(mc => [mc.structure_uuid, parseInt(mc.count)])
     );
 
-    // Récupérer les responsables par structure
     const responsibles = await this.memberRepository
       .createQueryBuilder('m')
       .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
@@ -751,7 +804,6 @@ export class StructureTreeService {
       .where('m.deleted_at IS NULL')
       .getRawMany();
 
-    // Grouper les responsables par structure
     const responsiblesMap = new Map<string, any[]>();
     for (const resp of responsibles) {
       if (!resp.structure_uuid) continue;
@@ -765,9 +817,6 @@ export class StructureTreeService {
         responsibility_name: resp.responsibility_name,
       });
     }
-
-    // Construire la map des structures
-    const structureMap = new Map<string, any>();
 
     for (const structure of structures) {
       const levelUuid = structure.level_uuid ?? null;
@@ -791,9 +840,7 @@ export class StructureTreeService {
       });
     }
 
-    // Construire l'arbre complet
     const rootNodes: any[] = [];
-
     for (const node of structureMap.values()) {
       if (node.parent_uuid && structureMap.has(node.parent_uuid)) {
         const parent = structureMap.get(node.parent_uuid)!;
@@ -803,7 +850,6 @@ export class StructureTreeService {
       }
     }
 
-    // Calculer les totaux
     const calculateTotals = (node: any): number => {
       let total = node.direct_members_count;
       let subGroupsCount = 0;
@@ -823,32 +869,44 @@ export class StructureTreeService {
       calculateTotals(root);
     }
 
-    // Trouver la structure du responsable
+    return structureMap;
+  }
+
+  /**
+   * À partir d'une `structureMap` déjà construite, produit le structure_tree filtré pour
+   * UNE structure cible : remontée jusqu'à la racine puis coupe à la structure cible.
+   * FONCTION PURE (aucune requête DB) — c'est ce qui rend l'appel par-membre bon marché.
+   */
+  private buildFilteredTreeFromMap(
+    structureMap: Map<string, any>,
+    structureUuid: string,
+  ): any {
     const targetStructure = structureMap.get(structureUuid);
     if (!targetStructure) return null;
 
-    // Remonter jusqu'à la racine pour construire le chemin
+    // Remonter jusqu'à la racine. Garde anti-cycle : un `parent_uuid` cyclique dans les
+    // données héritées provoquerait sinon une boucle infinie (hang).
     const pathToRoot: string[] = [];
-    let currentUuid = structureUuid;
+    const seen = new Set<string>();
+    let currentUuid: string | null | undefined = structureUuid;
 
-    while (currentUuid) {
+    while (currentUuid && !seen.has(currentUuid)) {
+      seen.add(currentUuid);
       pathToRoot.push(currentUuid);
-      const current = structureMap.get(currentUuid);
-      currentUuid = current?.parent_uuid;
+      currentUuid = structureMap.get(currentUuid)?.parent_uuid;
     }
 
-    // Trouver la racine
     const rootUuid = pathToRoot[pathToRoot.length - 1];
     const rootStructure = structureMap.get(rootUuid);
     if (!rootStructure) return null;
 
-    // Filtrer l'arbre : garder le chemin vers la structure cible et couper au niveau de responsabilité
-    const filterTree = (node: any, pathUuids: string[], targetLevelOrder: number): any => {
+    // Filtrer l'arbre : garder le chemin vers la structure cible et couper à la cible.
+    const filterTree = (node: any, pathUuids: string[]): any => {
       const { level_order, ...nodeWithoutOrder } = node;
+      void level_order;
       const isOnPath = pathUuids.includes(node.uuid);
       const isTarget = node.uuid === structureUuid;
 
-      // Si c'est la structure cible, couper les enfants (s'arrêter à son niveau)
       if (isTarget) {
         return {
           ...nodeWithoutOrder,
@@ -856,11 +914,10 @@ export class StructureTreeService {
         };
       }
 
-      // Si on est sur le chemin vers la cible, garder seulement l'enfant qui mène à la cible
       if (isOnPath) {
         const filteredChildren = node.children
           .filter((child: any) => pathUuids.includes(child.uuid))
-          .map((child: any) => filterTree(child, pathUuids, targetLevelOrder));
+          .map((child: any) => filterTree(child, pathUuids));
 
         return {
           ...nodeWithoutOrder,
@@ -868,11 +925,10 @@ export class StructureTreeService {
         };
       }
 
-      // Sinon, ne pas inclure ce nœud
       return null;
     };
 
-    return filterTree(rootStructure, pathToRoot, responsibleLevelOrder);
+    return filterTree(rootStructure, pathToRoot);
   }
 
 
