@@ -904,8 +904,14 @@ export class StructureTreeService {
     const member = await this.memberRepository.findOne({
       where: { uuid: memberUuid },
     });
-    console.log(structureUuid)
-    if (!member || !structureUuid) {
+    if (!member) {
+      throw new NotFoundException('Utilisateur non associé à un membre');
+    }
+
+    // Utilisateur sans responsabilité (pas de structure de scope dans le JWT) :
+    // on retombe sur la structure propre du membre.
+    const effectiveStructureUuid = structureUuid ?? member.structure_uuid;
+    if (!effectiveStructureUuid) {
       throw new NotFoundException('Structure du membre non trouvée');
     }
 
@@ -915,7 +921,7 @@ export class StructureTreeService {
     const offset = (page - 1) * limit;
 
     // Récupérer toutes les sous-structures accessibles
-    const allStructureUuids = await this.getAllSubStructureUuids(structureUuid);
+    const allStructureUuids = await this.getAllSubStructureUuids(effectiveStructureUuid);
 
     // Construire la requête de base pour les membres
     let membersQuery = this.memberRepository
@@ -1660,16 +1666,34 @@ export class StructureTreeService {
    * Récupère récursivement tous les UUIDs des sous-structures
    */
   public async getAllSubStructureUuids(structureUuid: string): Promise<string[]> {
-    const result: string[] = [structureUuid];
-
-    const children = await this.structureRepository.find({
-      where: { parent_uuid: structureUuid },
-      select: ['uuid'],
+    // ⚠ Anciennement récursif (1 requête SQL par nœud, en série) → des MILLIERS de
+    // requêtes pour un palier haut (~3600 structures) → 60 s+ et timeout passerelle.
+    // Ici : UNE seule requête (uuid + parent_uuid de toutes les structures) puis
+    // parcours du sous-arbre en mémoire (BFS itératif, avec garde anti-cycle).
+    const all = await this.structureRepository.find({
+      select: ['uuid', 'parent_uuid'],
     });
 
-    for (const child of children) {
-      const childUuids = await this.getAllSubStructureUuids(child.uuid);
-      result.push(...childUuids);
+    const childrenByParent = new Map<string, string[]>();
+    for (const s of all) {
+      const parent =
+        s.parent_uuid && s.parent_uuid.trim() !== '' ? s.parent_uuid : null;
+      if (!parent) continue;
+      const bucket = childrenByParent.get(parent);
+      if (bucket) bucket.push(s.uuid);
+      else childrenByParent.set(parent, [s.uuid]);
+    }
+
+    const result: string[] = [];
+    const seen = new Set<string>();
+    const stack: string[] = [structureUuid];
+    while (stack.length > 0) {
+      const uuid = stack.pop() as string;
+      if (seen.has(uuid)) continue; // garde anti-cycle (données héritées)
+      seen.add(uuid);
+      result.push(uuid);
+      const kids = childrenByParent.get(uuid);
+      if (kids) stack.push(...kids);
     }
 
     return result;
@@ -1766,11 +1790,16 @@ export class StructureTreeService {
       where: { uuid: memberUuid },
     });
 
-    if (!member || !responsibility_structure_uuid) {
-      throw new NotFoundException('Structure du membre non trouvée');
+    if (!member) {
+      throw new NotFoundException('Utilisateur non associé à un membre');
     }
 
-    const memberStructureUuid = responsibility_structure_uuid;
+    // Utilisateur sans responsabilité : repli sur la structure propre du membre.
+    const memberStructureUuid =
+      responsibility_structure_uuid ?? member.structure_uuid;
+    if (!memberStructureUuid) {
+      throw new NotFoundException('Structure du membre non trouvée');
+    }
 
     // 1. Déterminer la structure de base selon les filtres
     let targetStructureUuid = memberStructureUuid;

@@ -84,7 +84,7 @@ async queueTransactionsExport(
     source_uuid,
     req.user.uuid,
     req.user.member_uuid,
-    req.user.responsibilities[0]?.structure?.uuid,
+    req.user.responsibilities?.[0]?.structure?.uuid,
     status,
   );
 }
@@ -275,7 +275,7 @@ async getMyExports(
     return this.paymentService.findTransactionsForSubGroups(
       source_uuid,
       req.user.uuid, // admin uuid
-      req.user.responsibilities[0]?.structure?.uuid,
+      req.user.responsibilities?.[0]?.structure?.uuid,
       +page,
       +limit,
       search,

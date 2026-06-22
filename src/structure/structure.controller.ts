@@ -65,7 +65,7 @@ export class StructureController {
       //console.log(user.responsibilities[0].structure)
       return this.structureTreeService.getMembersWithTreeByConnectedUser(
         user.member_uuid,
-        user.responsibilities[0]?.structure?.uuid,
+        user.responsibilities?.[0]?.structure?.uuid,
         {
           page: page ? Number(page) : undefined,
           limit: limit ? Number(limit) : undefined,
@@ -121,7 +121,7 @@ async exportMembersToExcel(
    const user = req.user;
   await this.structureTreeService.exportMembersToExcel(
     user.member_uuid,
-    user.responsibilities[0]?.structure?.uuid,
+    user.responsibilities?.[0]?.structure?.uuid,
     Res,
     filterParams
   );
@@ -173,7 +173,7 @@ async queueMembersExport(
 
   return this.structureTreeService.queueMembersExport(
     user.member_uuid,
-    user.responsibilities[0]?.structure?.uuid,
+    user.responsibilities?.[0]?.structure?.uuid,
     filterParams,
     user.uuid,
   );
@@ -231,8 +231,8 @@ async downloadMembersExport(
       const user = req.user;
       return this.structureTreeService.getBeneficiaryByConnectedUser(
         user.member_uuid,
-        user.responsibilities[0]?.structure?.uuid,
-        user.responsibilities[0]?.level_uuid,
+        user.responsibilities?.[0]?.structure?.uuid,
+        user.responsibilities?.[0]?.level_uuid,
 
         {
           search,
@@ -267,7 +267,7 @@ async downloadMembersExport(
     @Query('division_uuid') division_uuid?: string,
   ) {
     const user = req.user;
-    const responsibility_structure_uuid = user.responsibilities[0]?.structure?.uuid;
+    const responsibility_structure_uuid = user.responsibilities?.[0]?.structure?.uuid;
     //console.log(user)
     return this.structureTreeService.getMemberStatsByConnectedUser(
       user.member_uuid,
@@ -282,6 +282,25 @@ async downloadMembersExport(
         division_uuid,
       }
     );
+  }
+
+  @Get('my-committee')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Comité de la structure de l\'utilisateur connecté',
+  })
+  async getMyCommittee(@Req() req) {
+    return this.structureService.getMyCommittee(req.user);
+  }
+
+  @Get(':uuid/committee')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Comité (responsables + responsabilités vacantes) d\'une structure',
+  })
+  @ApiParam({ name: 'uuid', description: 'UUID de la structure' })
+  async getCommitteeByStructure(@Param('uuid') uuid: string) {
+    return this.structureService.getCommittee(uuid);
   }
 
 @Post('stats/export/:category')
@@ -386,7 +405,7 @@ async exportStatCategory(
   const memberUuid = req.user.member_uuid;
   const user = req.user;
   const user_uuid = req.user.uuid;
-  const responsibilityStructureUuid = user.responsibilities[0]?.structure?.uuid;
+  const responsibilityStructureUuid = user.responsibilities?.[0]?.structure?.uuid;
   return this.structureTreeService.exportMembersByStatCategory(
     user_uuid,
     memberUuid,

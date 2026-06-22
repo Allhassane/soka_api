@@ -49,7 +49,7 @@ export class DonateController {
       uuid,
       req.user.uuid,
       req.user.member_uuid,
-      req.user.responsibilities[0]?.structure?.uuid,
+      req.user.responsibilities?.[0]?.structure?.uuid,
     );
   }
 
