@@ -18,4 +18,11 @@ export const envValidationSchema = Joi.object({
   DB_PASSWORD: Joi.string().allow('').optional(),
   //DB_PASSWORD: Joi.string().required(),
   DB_NAME: Joi.string().required(),
+
+  // --- SOKA Pay (microservice de paiement HUB2) ---
+  // Optionnels : l'API démarre sans ; seuls les endpoints SOKA Pay exigent la config.
+  SOKA_PAY_BASE_URL: Joi.string().uri().default('http://localhost:3001'),
+  SOKA_PAY_API_KEY: Joi.string().allow('').default(''),
+  SOKA_PAY_WEBHOOK_SECRET: Joi.string().allow('').default(''),
+  SOKA_PAY_CALLBACK_URL: Joi.string().allow('').default(''),
 });

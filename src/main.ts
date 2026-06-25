@@ -8,7 +8,10 @@ import { ValidationPipe } from '@nestjs/common';
 import { join } from 'path';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // `rawBody: true` : conserve le corps brut (req.rawBody) pour vérifier la
+  // signature HMAC des webhooks SOKA Pay. Additif — n'altère pas le parsing JSON
+  // existant ni aucune route en place.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
 
   app.set('trust proxy', 1);
 

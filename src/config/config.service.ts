@@ -57,4 +57,25 @@ export class AppConfigService {
   get isProd(): boolean {
     return this.nodeEnv === AppEnv.PRODUCTION;
   }
+
+  // --- SOKA Pay (microservice de paiement HUB2) ---
+
+  get sokaPayBaseUrl(): string {
+    return (this.config.get<string>('SOKA_PAY_BASE_URL') ?? 'http://localhost:3001').replace(/\/+$/, '');
+  }
+
+  get sokaPayApiKey(): string {
+    return this.config.get<string>('SOKA_PAY_API_KEY') ?? '';
+  }
+
+  get sokaPayWebhookSecret(): string {
+    return this.config.get<string>('SOKA_PAY_WEBHOOK_SECRET') ?? '';
+  }
+
+  /** URL de réception des callbacks SOKA Pay (défaut : route webhook de cette API). */
+  get sokaPayCallbackUrl(): string {
+    const explicit = this.config.get<string>('SOKA_PAY_CALLBACK_URL');
+    if (explicit && explicit.trim()) return explicit.trim();
+    return `${this.appUrl}api/webhooks/soka-pay`;
+  }
 }
