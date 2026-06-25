@@ -40,6 +40,7 @@ const RESPONSABLE_ACTIVE = [
   // Actions membres (scopées à sa structure côté API)
   'membres_acceder_alonglet_membre',
   'membres_ajouter_un_membre',
+  'membres_modifier_un_membre',
   'membres_supprimer_un_membre',
   // Accès à sa structure
   'gestionnaire_acceder_a_sa_structure',

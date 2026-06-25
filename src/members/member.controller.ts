@@ -15,22 +15,8 @@ import { VerifyPhoneNumberDto } from './dto/verify-phone.dto';
 export class MemberController {
   constructor(private readonly membreService: MemberService) {}
 
- /*  @Get()
-  @ApiOperation({ summary: 'Liste paginée des membres' })
-  @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
-  findAll(
-    @Request() req,
-    @Query('page') page: number = 1,
-    @Query('limit') limit: number = 15,
-  ) {
-    const admin_uuid = req.user.uuid as string;
-    return this.membreService.findAll(admin_uuid, Number(page), Number(limit));
-  }
- */
-
-
 @Get()
-@UseGuards(JwtAuthGuard)
+@RequirePermissions('membres_voir_menu_liste_membres')
 @ApiOperation({ summary: 'Liste paginée des membres' })
 @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
 @ApiQuery({ name: 'page', required: false, type: Number })
@@ -67,6 +53,7 @@ async findAll(
 }
 
   @Get('structures')
+  @RequirePermissions('membres_voir_menu_liste_membres')
   @ApiOperation({ summary: 'Récupérer tous les membres en fonction du user connecté par son UUID' })
   @ApiResponse({ status: 200, description: 'Liste des membres récupérée avec succès.' })
   @ApiResponse({ status: 400, description: 'Liste des membres non trouvée.' })
@@ -111,18 +98,8 @@ async findAll(
     return this.membreService.verifyPhoneNumber(payload);
   }
 
-  // @Post('/verify/email')
-  // @ApiOperation({ summary: 'Verifier si le numero de telephone est disponible ' })
-  // @ApiResponse({ status: 200, description: 'Numero de telephone disponible.' })
-  // @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
-  // @ApiBody({ type: VerifyPhoneNumberDto })
-  // verifyEmail(@Body() payload: VerifyEmailDto) {
-  //   return this.membreService.verifyPhoneNumber(payload);
-  // }
-
-
-
   @Get('by-structure/:uuid')
+  @RequirePermissions('membres_voir_menu_liste_membres')
   @ApiOperation({ summary: 'Récupérer tous les membres d une structure par UUID' })
   @ApiResponse({ status: 200, description: 'Membres trouvés.' })
   @ApiResponse({ status: 400, description: 'Structure non trouvée.' })
@@ -132,17 +109,8 @@ async findAll(
   }
 
 
-  @Get('find-list/:uuid')
-  @ApiOperation({ summary: 'Récupérer tous les membres d une structure par UUID' })
-  @ApiResponse({ status: 200, description: 'Membres trouvés.' })
-  @ApiResponse({ status: 400, description: 'Structure non trouvée.' })
-  findList(@Param('uuid') uuid: string, @Request() req) {
-    const admin_uuid = req.user.uuid as string;
-    return this.membreService.findList(uuid, admin_uuid);
-  }
-
-
   @Get(':uuid')
+  @RequirePermissions('membres_acceder_alonglet_membre')
   @ApiOperation({ summary: 'Récupérer un membre par UUID' })
   @ApiResponse({ status: 200, description: 'Membre trouvé.' })
   @ApiResponse({ status: 400, description: 'Membre non trouvé.' })
@@ -152,6 +120,7 @@ async findAll(
   }
 
  @Put(':uuid')
+ @RequirePermissions('membres_modifier_un_membre')
  @ApiOperation({ summary: 'Modifier un membre' })
  @ApiResponse({ status: 200, description: 'Membre modifiée avec succès.' })
  @ApiResponse({ status: 400, description: 'Champs invalides ou manquants.' })
@@ -176,6 +145,7 @@ async findAll(
 
   //
   @Get('stat-by-structure/:uuid')
+  @RequirePermissions('membres_voir_menu_liste_membres')
   @ApiOperation({ summary: 'Récupérer tous les statistiques des membres d une structure par UUID' })
   @ApiResponse({ status: 200, description: 'Statistiques sur les membres trouvés.' })
   @ApiResponse({ status: 400, description: 'Structure non trouvée.' })

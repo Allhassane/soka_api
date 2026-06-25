@@ -111,7 +111,6 @@ export class StructureTreeService {
       .getMany();
 
     if (structures.length === 0) {
-      console.log('Aucune structure dans la base de données');
       return [];
     }
 
@@ -3229,8 +3228,6 @@ export class StructureTreeService {
   ) {
     let targetStructure: StructureEntity | null = null;
 
-    console.log('[getCommitteeResponsibles] memberUuid:', memberUuid, 'responsibilityStructureUuid:', responsibilityStructureUuid);
-
     if (responsibilityStructureUuid) {
       targetStructure = await this.structureRepository.findOne({
         where: { uuid: responsibilityStructureUuid },
@@ -3247,7 +3244,6 @@ export class StructureTreeService {
       if (!member) {
         throw new NotFoundException('Membre non trouvé');
       }
-      console.log('[getCommitteeResponsibles] member.structure_uuid:', member.structure_uuid);
       if (!member.structure_uuid) {
         throw new BadRequestException(
           'Le membre n\'a pas de structure d\'appartenance',
@@ -3268,8 +3264,6 @@ export class StructureTreeService {
       );
     }
 
-    console.log('[getCommitteeResponsibles] targetStructure:', targetStructure.uuid, targetStructure.name, 'level_uuid:', targetStructure.level_uuid);
-
     if (!targetStructure.level_uuid) {
       return {
         structure: {
@@ -3287,8 +3281,6 @@ export class StructureTreeService {
       where: { level_uuid: targetStructure.level_uuid, status: 'enable' },
     });
 
-    console.log('[getCommitteeResponsibles] responsibilities found:', responsibilities.length, responsibilities.map(r => r.name));
-
     // Récupérer la structure cible ET toutes ses sous-structures (enfants, petits-enfants, etc.)
     const allStructureUuids: string[] = [targetStructure.uuid];
 
@@ -3305,15 +3297,10 @@ export class StructureTreeService {
 
     await getDescendants(targetStructure.uuid);
 
-    console.log('[getCommitteeResponsibles] searching in', allStructureUuids.length, 'structures (target + descendants)');
-
     const responsibles: any[] = [];
     const assignedResponsibilityUuids = new Set<string>();
 
     for (const responsibility of responsibilities) {
-      console.log('[getCommitteeResponsibles] searching for responsibility uuid:', responsibility.uuid, 'name:', responsibility.name);
-      console.log('[getCommitteeResponsibles] searching in structures:', allStructureUuids);
-
       const query = this.memberResponsibilityRepository
         .createQueryBuilder('mr')
         .leftJoinAndSelect('mr.member', 'm', 'm.uuid = mr.member_uuid')
@@ -3325,19 +3312,10 @@ export class StructureTreeService {
           structure_uuids: allStructureUuids,
         });
 
-      console.log('[getCommitteeResponsibles] Query:', query.getSql());
-
       const memberResponsibilities = await query
         .orderBy('mr.priority', 'DESC')
         .addOrderBy('m.firstname', 'ASC')
         .getMany();
-
-      console.log('[getCommitteeResponsibles] responsibility', responsibility.name, '-> found', memberResponsibilities.length, 'members');
-      if (memberResponsibilities.length > 0) {
-        memberResponsibilities.forEach((mr, idx) => {
-          console.log(`  [${idx}]`, mr.member?.firstname, mr.member?.lastname, 'structure_uuid:', mr.member?.structure_uuid);
-        });
-      }
 
       if (memberResponsibilities.length > 0) {
         assignedResponsibilityUuids.add(responsibility.uuid);
