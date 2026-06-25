@@ -201,75 +201,100 @@ export class MemberService {
         });
       }
 
-      // ---- Sauvegarde du membre principal ----
-      const saved = await this.memberRepo.save(member);
-
-      // ---- Gestion de la responsabilité ----
+      // ---- Pré-résolution (lectures + validations) AVANT la transaction ----
+      // On valide la responsabilité et les accessoires d'abord : en cas d'erreur, aucun
+      // membre orphelin n'est créé (avant, ces lectures étaient interleavées avec les saves).
+      let responsibility: ResponsibilityEntity | null = null;
       if (dto.responsibility_uuid) {
-        const responsibility = await this.responsibilityService.findOne(
+        responsibility = await this.responsibilityService.findOne(
           dto.responsibility_uuid,
           admin_uuid,
         );
-
-        const memberResponsibility = this.memberResponsibilityRepo.create({
-          member_uuid: saved.uuid,
-          member: saved,
-          responsibility_uuid: dto.responsibility_uuid,
-          responsibility,
-          priority: 'high',
-        });
-
-        await this.memberResponsibilityRepo.save(memberResponsibility);
       }
 
-      // ---- Gestion des accessoires ----
+      const resolvedAccessories: { uuid: string; accessory: any }[] = [];
       if (dto.accessories && dto.accessories.length > 0) {
         for (const accessoryUuid of dto.accessories) {
-          const accessory = await this.accessoryService.findOne(
-            accessoryUuid,
-            admin_uuid,
-          );
-
-          if (accessory) {
-            const memberAccessory = this.memberAccessoryRepo.create({
-              member_uuid: saved.uuid,
-              member: saved,
-              accessory_uuid: accessoryUuid,
-              accessory,
-            });
-            await this.memberAccessoryRepo.save(memberAccessory);
-          }
+          const accessory = await this.accessoryService.findOne(accessoryUuid, admin_uuid);
+          if (accessory) resolvedAccessories.push({ uuid: accessoryUuid, accessory });
         }
       }
 
-      //creation du compte utilisateur lié au membre
-      if (saved.phone!=null) {
+      // Mot de passe par défaut : le compte est créé au défaut (nrh2030) avec
+      // must_change_password=true → au 1er login, rotation + envoi SMS (cf. AuthService).
+      const defaultPassword = process.env.DEFAULT_PASSWORD || 'nrh2030';
 
-        // Générer un mot de passe temporaire
-        //let newUser: any = null;
-        const tempPassword = Math.random().toString(36).slice(-8); // ex: kf8d2j3s
+      // ---- Écritures ATOMIQUES (membre + responsabilité + accessoires + compte) ----
+      let userCreated = false;
+      const saved = await this.memberRepo.manager.transaction(async (manager) => {
+        const savedMember = await manager.save(member);
 
-        const user = this.userRepo.create({
-          firstname: saved.firstname,
-          lastname: saved.lastname,
-          email: saved.email,
-          phone_number: saved.phone,
-          password: tempPassword,
-          is_active: true,
-          member_uuid: saved.uuid,
-        });
+        if (responsibility) {
+          await manager.save(
+            this.memberResponsibilityRepo.create({
+              member_uuid: savedMember.uuid,
+              member: savedMember,
+              responsibility_uuid: dto.responsibility_uuid,
+              responsibility,
+              priority: 'high',
+            }),
+          );
+        }
 
-        const newUser = await this.userRepo.save(user);
+        for (const { uuid: accessoryUuid, accessory } of resolvedAccessories) {
+          await manager.save(
+            this.memberAccessoryRepo.create({
+              member_uuid: savedMember.uuid,
+              member: savedMember,
+              accessory_uuid: accessoryUuid,
+              accessory,
+            }),
+          );
+        }
 
+        // Compte utilisateur lié : uniquement si téléphone présent ET non déjà utilisé.
+        if (savedMember.phone) {
+          const existingByPhone = await manager.findOne(User, {
+            where: { phone_number: savedMember.phone },
+          });
+
+          if (!existingByPhone) {
+            // email est UNIQUE : ne pas réutiliser un email déjà pris (sinon la contrainte
+            // ferait échouer toute la création). On retombe sur null le cas échéant.
+            let email: string | null = savedMember.email ?? null;
+            if (email) {
+              const existingByEmail = await manager.findOne(User, { where: { email } });
+              if (existingByEmail) email = null;
+            }
+
+            await manager.save(
+              this.userRepo.create({
+                firstname: savedMember.firstname,
+                lastname: savedMember.lastname,
+                email: email ?? undefined,
+                phone_number: savedMember.phone,
+                password: defaultPassword,
+                is_active: true,
+                member_uuid: savedMember.uuid,
+                must_change_password: true,
+              }),
+            );
+            userCreated = true;
+          }
+        }
+
+        return savedMember;
+      });
+
+      // ---- Journalisation (hors transaction : uniquement après un commit réussi) ----
+      if (userCreated) {
         await this.logService.logAction(
           'user-create-from-member',
           admin.id,
           `Compte utilisateur créé automatiquement pour ${saved.firstname} ${saved.lastname}`,
         );
-
       }
 
-      // Journalisation
       await this.logService.logAction(
         'members-store',
         admin.id,
