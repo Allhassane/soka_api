@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { StructureEntity } from './entities/structure.entity';
@@ -98,6 +98,8 @@ export class StructureTreeService {
     private memberResponsibilityRepository: Repository<MemberResponsibilityEntity>,
 
     private exportJobService: ExportJobService,
+    // Dépendance circulaire ExportProcessorService <-> StructureTreeService → forwardRef.
+    @Inject(forwardRef(() => ExportProcessorService))
     private exportProcessorService: ExportProcessorService,
 
   ) { }
@@ -936,6 +938,30 @@ export class StructureTreeService {
     return filterTree(rootStructure, pathToRoot);
   }
 
+  /**
+   * Résolveur de structure_tree PAR REQUÊTE pour les traitements par-membre.
+   *
+   * Construit la `structureMap` lourde UNE SEULE FOIS (à l'appel), puis renvoie une fonction
+   * pure mémoïsée par `structure_uuid` (deux membres d'une même structure → même arbre, calculé
+   * une fois). Contrairement à `getStructureTreeForResponsible` (cache statique TTL partagé entre
+   * requêtes/workers), les données sont TOUJOURS fraîches et l'état n'est pas partagé : à privilégier
+   * pour les listes interactives. `responsibleLevelOrder` n'influence pas la sortie (la coupe se fait
+   * à la structure cible) → un simple `structure_uuid` suffit.
+   */
+  public async createStructureTreeResolver(): Promise<
+    (structureUuid: string | null | undefined) => any
+  > {
+    const structureMap = await this.buildStructureMapWithTotals();
+    const memo = new Map<string, any>();
+    return (structureUuid) => {
+      if (!structureUuid || structureMap.size === 0) return null;
+      if (memo.has(structureUuid)) return memo.get(structureUuid);
+      const tree = this.buildFilteredTreeFromMap(structureMap, structureUuid);
+      memo.set(structureUuid, tree);
+      return tree;
+    };
+  }
+
 
   /**
    * Récupère les membres avec leur structure_tree pour l'utilisateur connecté
@@ -1095,42 +1121,12 @@ export class StructureTreeService {
     // Construire les structure_tree pour chaque membre
     const memberStructureTreeMap = new Map<string, any>();
 
+    const resolveTree = await this.createStructureTreeResolver();
     for (const m of members) {
       if (!m.structure_uuid) continue;
-
-      const memberResponsibilitiesList = responsibilitiesMap.get(m.uuid) || [];
-
-      // Si le membre a des responsabilités, utiliser le niveau le plus haut
-      if (memberResponsibilitiesList.length > 0) {
-        const validResponsibilities = memberResponsibilitiesList.filter(r => r.level_order !== null);
-
-        if (validResponsibilities.length > 0) {
-          const highestLevelOrder = Math.min(
-            ...validResponsibilities.map(r => parseInt(r.level_order))
-          );
-
-          const tree = await this.getStructureTreeForResponsible(
-            m.structure_uuid,
-            highestLevelOrder
-          );
-
-          memberStructureTreeMap.set(m.uuid, tree);
-        } else {
-          // Pas de level_order valide, utiliser l'arbre complet
-          const tree = await this.getStructureTreeForResponsible(
-            m.structure_uuid,
-            999
-          );
-          memberStructureTreeMap.set(m.uuid, tree);
-        }
-      } else {
-        // Pas de responsabilité, afficher l'arbre complet depuis sa structure
-        const tree = await this.getStructureTreeForResponsible(
-          m.structure_uuid,
-          999
-        );
-        memberStructureTreeMap.set(m.uuid, tree);
-      }
+      // L'arbre ne dépend que de la structure du membre (le niveau de responsabilité
+      // n'influence pas la coupe) → résolveur par-requête, mémoïsé par structure.
+      memberStructureTreeMap.set(m.uuid, resolveTree(m.structure_uuid));
     }
 
     // Formater les membres avec leurs responsabilités et structure_tree
@@ -1352,42 +1348,12 @@ export class StructureTreeService {
     // Construire les structure_tree pour chaque membre
     const memberStructureTreeMap = new Map<string, any>();
 
+    const resolveTree = await this.createStructureTreeResolver();
     for (const m of members) {
       if (!m.structure_uuid) continue;
-
-      const memberResponsibilitiesList = responsibilitiesMap.get(m.uuid) || [];
-
-      // Si le membre a des responsabilités, utiliser le niveau le plus haut
-      if (memberResponsibilitiesList.length > 0) {
-        const validResponsibilities = memberResponsibilitiesList.filter(r => r.level_order !== null);
-
-        if (validResponsibilities.length > 0) {
-          const highestLevelOrder = Math.min(
-            ...validResponsibilities.map(r => parseInt(r.level_order))
-          );
-
-          const tree = await this.getStructureTreeForResponsible(
-            m.structure_uuid,
-            highestLevelOrder
-          );
-
-          memberStructureTreeMap.set(m.uuid, tree);
-        } else {
-          // Pas de level_order valide, utiliser l'arbre complet
-          const tree = await this.getStructureTreeForResponsible(
-            m.structure_uuid,
-            999
-          );
-          memberStructureTreeMap.set(m.uuid, tree);
-        }
-      } else {
-        // Pas de responsabilité, afficher l'arbre complet depuis sa structure
-        const tree = await this.getStructureTreeForResponsible(
-          m.structure_uuid,
-          999
-        );
-        memberStructureTreeMap.set(m.uuid, tree);
-      }
+      // L'arbre ne dépend que de la structure du membre (le niveau de responsabilité
+      // n'influence pas la coupe) → résolveur par-requête, mémoïsé par structure.
+      memberStructureTreeMap.set(m.uuid, resolveTree(m.structure_uuid));
     }
 
     // Formater les membres avec leurs responsabilités et structure_tree
