@@ -748,27 +748,75 @@ async findAll(
 
   async findAllBeneficiaryByUserConnected(
     admin_uuid: string,
+    page?: number,
+    limit?: number,
+    search?: string,
   ): Promise<any> {
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
     if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
 
     const sous_groupes = await this.prepareMemberList(admin_uuid);
 
-    const members = await this.memberRepo.find({
-      where: { structure_uuid: In(sous_groupes) },
-      order: { firstname: 'ASC' },
-    });
-    if (!members) throw new NotFoundException("Aucun membre trouvé");
+    // Périmètre vide → liste vide (évite un `IN ()` invalide).
+    if (!sous_groupes || sous_groupes.length === 0) {
+      return { results: [] };
+    }
 
+    // Sélection ciblée (colonnes du picker uniquement) + recherche serveur optionnelle.
+    const query = this.memberRepo
+      .createQueryBuilder('m')
+      .select(['m.uuid', 'm.firstname', 'm.lastname', 'm.phone'])
+      .where('m.structure_uuid IN (:...sous_groupes)', { sous_groupes })
+      .andWhere('m.deleted_at IS NULL')
+      .orderBy('m.firstname', 'ASC');
+
+    if (search?.trim()) {
+      query.andWhere(
+        '(m.firstname LIKE :s OR m.lastname LIKE :s)',
+        { s: `%${search.trim()}%` },
+      );
+    }
+
+    // Pagination OPTIONNELLE : si page/limit fournis on pagine + meta ; sinon, comportement
+    // historique (toute la liste, même enveloppe) pour ne pas casser le picker existant.
+    const paginate = page != null && limit != null && limit > 0;
+    if (paginate) {
+      const currentPage = Math.max(1, Number(page));
+      const perPage = Number(limit);
+      const [members, total] = await query
+        .skip((currentPage - 1) * perPage)
+        .take(perPage)
+        .getManyAndCount();
+
+      return {
+        results: members.map((member) => ({
+          uuid: member.uuid,
+          firstname: member.firstname,
+          lastname: member.lastname,
+          phone_number: member.phone,
+          selected: admin.member_uuid == member.uuid ? true : false,
+        })),
+        meta: {
+          current_page: currentPage,
+          limit: perPage,
+          total_items: total,
+          total_pages: Math.ceil(total / perPage),
+          has_next: currentPage * perPage < total,
+          has_prev: currentPage > 1,
+        },
+      };
+    }
+
+    const members = await query.getMany();
     return {
       results: members.map((member) => ({
         uuid: member.uuid,
         firstname: member.firstname,
         lastname: member.lastname,
         phone_number: member.phone,
-        selected: admin.member_uuid == member.uuid ? true: false,
-      }))
-    }
+        selected: admin.member_uuid == member.uuid ? true : false,
+      })),
+    };
   }
 
 

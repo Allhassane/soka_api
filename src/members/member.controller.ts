@@ -72,11 +72,22 @@ async findAll(
   @ApiOperation({ summary: 'Récupérer tous les bénéficiaires en fonction du membre connecté par son UUID' })
   @ApiResponse({ status: 200, description: 'Liste des bénéficiaires récupérée avec succès.' })
   @ApiResponse({ status: 400, description: 'Liste des bénéficiaires non trouvée.' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'search', required: false, type: String })
   findAllBeneficiaryByUserConnected(
     @Request() req,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('search') search?: string,
   ) {
     const admin_uuid = req.user.uuid as string;
-    return this.membreService.findAllBeneficiaryByUserConnected(admin_uuid);
+    return this.membreService.findAllBeneficiaryByUserConnected(
+      admin_uuid,
+      page != null ? Number(page) : undefined,
+      limit != null ? Number(limit) : undefined,
+      search,
+    );
   }
 
   @Post()
