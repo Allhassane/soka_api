@@ -110,6 +110,13 @@ export class JournalEditionService {
         where: { uuid: payload.subscription_uuid },
       });
       if (!sub) throw new NotFoundException('Campagne d’abonnement introuvable');
+      // Règle métier : on ne crée une édition qu'à partir d'une campagne TERMINÉE
+      // (le tirage se base sur le recensement final des abonnés).
+      if (sub.status !== GlobalStatus.COMPLETED) {
+        throw new BadRequestException(
+          'La campagne d’abonnement doit être terminée avant de créer une édition.',
+        );
+      }
     }
 
     const start = new Date(payload.distribution_start_at);

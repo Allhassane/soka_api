@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JournalZoneEntity } from './entities/journal-zone.entity';
+import { JournalZoneCityEntity } from './entities/journal-zone-city.entity';
 import { JournalDestinationEntity } from './entities/journal-destination.entity';
 import { JournalEditionEntity } from './entities/journal-edition.entity';
 import { JournalDistributionEntity } from './entities/journal-distribution.entity';
@@ -16,7 +17,10 @@ import { LogActivitiesModule } from 'src/log-activities/log-activities.module';
 import { UserModule } from 'src/users/user.module';
 import { User } from 'src/users/entities/user.entity';
 import { MemberEntity } from 'src/members/entities/member.entity';
+import { StructureEntity } from 'src/structure/entities/structure.entity';
+import { CityEntity } from 'src/cities/entities/city.entity';
 import { SubscriptionEntity } from 'src/subscriptions/entities/subscription.entity';
+import { SubscriptionPaymentEntity } from 'src/subscription-payment/entities/subscription-payment.entity';
 import { TextoSmsProvider } from './notifications/texto-sms.provider';
 import { NotificationService } from './notifications/notification.service';
 
@@ -24,12 +28,16 @@ import { NotificationService } from './notifications/notification.service';
   imports: [
     TypeOrmModule.forFeature([
       JournalZoneEntity,
+      JournalZoneCityEntity,
       JournalDestinationEntity,
       JournalEditionEntity,
       JournalDistributionEntity,
       User,
       MemberEntity,
+      StructureEntity,
+      CityEntity,
       SubscriptionEntity,
+      SubscriptionPaymentEntity,
     ]),
     LogActivitiesModule,
     UserModule,
