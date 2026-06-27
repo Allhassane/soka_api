@@ -58,11 +58,13 @@ export class StructureService {
   }
 
   async create(createStructureDto: CreateStructureDto, admin_uuid?: string) {
-    let parent;
+    let parent: StructureEntity | null = null;
     if (createStructureDto.parent_uuid) {
       parent = await this.findOne(createStructureDto.parent_uuid);
     }
 
+    // Niveau de l'enfant = palier suivant celui du parent (order(parent) + 1),
+    // résolu via le level_uuid du parent. Racine (sans parent) : aucun niveau auto.
     let level;
     if (parent) {
       level = await this.levelService.findNextLevelByParent(
@@ -70,21 +72,28 @@ export class StructureService {
       );
     }
 
+    // La table `structures` (héritée de Laravel) a une PK `id` char(36) SANS
+    // valeur par défaut ni auto-incrément : l'INSERT via l'ORM (@PrimaryGeneratedColumn)
+    // échouait avec « Field 'id' doesn't have a default value » (HTTP 500).
+    // Convention des lignes existantes : id = uuid, parent_id = parent_uuid,
+    // level_id NULL (seul level_uuid porte le lien). On insère explicitement ainsi.
+    const newUuid = createStructureDto.uuid ?? uuidv4();
+    await this.structureRepo.query(
+      `INSERT INTO structures
+         (id, uuid, name, parent_uuid, parent_id, level_uuid, admin_uuid, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [
+        newUuid,
+        newUuid,
+        createStructureDto.name,
+        createStructureDto.parent_uuid ?? null,
+        createStructureDto.parent_uuid ?? null,
+        level?.uuid ?? null,
+        admin_uuid ?? null,
+      ],
+    );
 
-    const newStructure = this.structureRepo.create({
-      uuid: createStructureDto.uuid ?? uuidv4(),
-      name: createStructureDto.name,
-      ...(admin_uuid ? { admin_uuid } : {}),
-      ...(createStructureDto.parent_uuid
-        ? { parent_uuid: createStructureDto.parent_uuid }
-        : {}),
-      ...(level ? { level_uuid: level.uuid } : {}),
-      ...(createStructureDto.parent_uuid ? { parent: parent ?? null } : {}),
-      ...(level ? { level: level ?? null } : {}),
-    });
-
-    const saved = await this.structureRepo.save(newStructure);
-    return saved;
+    return this.findOne(newUuid);
   }
 
   async findOne(uuid: string | undefined) {
@@ -163,21 +172,29 @@ export class StructureService {
       parent = await this.findOne(updateStructureDto.parent_uuid);
     }
 
-    existing.name = updateStructureDto.name;
-    existing.parent_uuid = updateStructureDto.parent_uuid;
-    existing.parent = parent ?? null;
-
-    let level;
+    // Le niveau se déduit du parent. On le résout via le level_uuid du parent
+    // (et NON parent.uuid, qui n'est pas un identifiant de niveau : c'était la
+    // cause de l'erreur « Niveau introuvable »). Sans parent (racine), on conserve
+    // le niveau existant.
+    let levelUuid: string | null = existing.level_uuid ?? null;
     if (parent) {
-      level = await this.levelService.findNextLevelByParent(parent.uuid);
+      const level = await this.levelService.findNextLevelByParent(
+        parent.level_uuid as string,
+      );
+      levelUuid = level?.uuid ?? null;
     }
 
-    existing.level_uuid = level?.uuid;
-    existing.level = level ?? null;
+    // Mise à jour explicite (même convention que create : parent_id = parent_uuid,
+    // level_id laissé NULL — la PK char(36) héritée n'a pas de stratégie ORM fiable).
+    const parentUuid = updateStructureDto.parent_uuid ?? null;
+    await this.structureRepo.query(
+      `UPDATE structures
+          SET name = ?, parent_uuid = ?, parent_id = ?, level_uuid = ?, updated_at = NOW()
+        WHERE uuid = ?`,
+      [updateStructureDto.name, parentUuid, parentUuid, levelUuid, uuid],
+    );
 
-    const updated = await this.structureRepo.save(existing);
-
-    return updated;
+    return this.findOne(uuid);
   }
 
   async delete(uuid: string) {
