@@ -132,7 +132,10 @@ export class ExportProcessorService {
       ): Promise<any> => {
         const key = `${structureUuid}:${order}`;
         if (treeCache.has(key)) return treeCache.get(key);
-        const tree = await this.structureService.getStructureTreeForResponsible(
+        // getStructureTreeForResponsible vit sur StructureTreeService (retiré de
+        // StructureService lors de l'audit P10) ; `order` est accepté mais ignoré
+        // (l'arbre ne dépend que de la structure).
+        const tree = await this.structureTreeService.getStructureTreeForResponsible(
           structureUuid,
           order,
         );
