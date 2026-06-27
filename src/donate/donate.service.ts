@@ -95,7 +95,6 @@ export class DonateService {
   // Récupérer les sous-groupes du responsable
   const sousGroups = await this.structureService.findByAllChildrens(structure_uuid);
 
-  // Calculer les statistiques pour cette donation
   let total_campaign_amount = 0;
   let total_successful_payments = 0;
   let total_successful_amount = 0;
@@ -109,7 +108,28 @@ export class DonateService {
     .andWhere('dp.status = :status', { status: GlobalStatus.SUCCESS })
     .getRawOne();
 
+
   total_campaign_amount = Number(campaignSum?.sum ?? 0);
+
+  if (!sousGroups.length) {
+    await this.logService.logAction(
+      'donate-findOne',
+      admin.id,
+      `Consultation du don "${donate.name}"`,
+    );
+
+    return {
+      ...donate,
+      statistics: {
+        total_campaign_amount,
+        total_successful_payments: 0,
+        total_successful_amount: 0,
+        total_members_donated: 0,
+        root_structure_uuid: structure_uuid,
+        sous_groups_count: 0,
+      },
+    };
+  }
 
   // Statistiques pour les sous-groupes du responsable
   const responsibleStats = await this.donatePaymentRepo

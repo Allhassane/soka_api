@@ -1,0 +1,105 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Put,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
+import { JournalReceptionService } from './journal-reception.service';
+import {
+  ValidateDistrictLotDto,
+  ValidateMemberReceptionDto,
+} from './dto/reception.dto';
+
+@ApiBearerAuth()
+@ApiTags('Journal - Réception')
+@Controller('journals')
+@UseGuards(JwtAuthGuard)
+export class JournalReceptionController {
+  constructor(private readonly service: JournalReceptionService) {}
+
+  @Get('editions/:uuid/reception')
+  @ApiOperation({
+    summary: 'Réception par district (cascade District → Membre)',
+    description:
+      "Regroupe les abonnés payés de l'édition par DISTRICT (déduit de leur structure) avec l'état de réception du lot et de chaque membre.",
+  })
+  @ApiParam({ name: 'uuid', description: "UUID de l'édition" })
+  @ApiResponse({ status: 200, description: 'Vue de réception par district.' })
+  @ApiResponse({ status: 400, description: 'Édition non liée à une campagne.' })
+  @ApiResponse({ status: 404, description: 'Édition introuvable.' })
+  reception(@Param('uuid') edition_uuid: string, @Request() req) {
+    return this.service.receptionByDistrict(
+      edition_uuid,
+      req.user.uuid as string,
+    );
+  }
+
+  @Get('editions/:uuid/reception-stats')
+  @ApiOperation({
+    summary: 'Statistiques de réception (suivi distribution)',
+    description:
+      'Synthèse globale (districts/membres reçus, en attente, en retard) + agrégat par district, sans la liste nominative.',
+  })
+  @ApiParam({ name: 'uuid', description: "UUID de l'édition" })
+  @ApiResponse({ status: 200, description: 'Statistiques de réception.' })
+  receptionStats(@Param('uuid') edition_uuid: string, @Request() req) {
+    return this.service.receptionStats(edition_uuid, req.user.uuid as string);
+  }
+
+  @Put('editions/:uuid/districts/:districtUuid/reception')
+  @ApiOperation({
+    summary: "Valider la réception du lot d'un district",
+    description:
+      'Enregistre le réceptionnaire = responsable du district (auto, repli sur le validateur).',
+  })
+  @ApiParam({ name: 'uuid', description: "UUID de l'édition" })
+  @ApiParam({ name: 'districtUuid', description: 'UUID de la structure district' })
+  @ApiResponse({ status: 200, description: 'Réception du lot enregistrée.' })
+  validateDistrict(
+    @Param('uuid') edition_uuid: string,
+    @Param('districtUuid') district_uuid: string,
+    @Body() payload: ValidateDistrictLotDto,
+    @Request() req,
+  ) {
+    return this.service.validateDistrictLot(
+      edition_uuid,
+      district_uuid,
+      req.user.uuid as string,
+      payload?.received ?? true,
+      payload?.note,
+    );
+  }
+
+  @Put('editions/:uuid/members/:memberUuid/reception')
+  @ApiOperation({
+    summary: "Valider la réception individuelle d'un membre",
+  })
+  @ApiParam({ name: 'uuid', description: "UUID de l'édition" })
+  @ApiParam({ name: 'memberUuid', description: 'UUID du membre' })
+  @ApiResponse({ status: 200, description: 'Réception du membre enregistrée.' })
+  validateMember(
+    @Param('uuid') edition_uuid: string,
+    @Param('memberUuid') member_uuid: string,
+    @Body() payload: ValidateMemberReceptionDto,
+    @Request() req,
+  ) {
+    return this.service.validateMemberReception(
+      edition_uuid,
+      member_uuid,
+      req.user.uuid as string,
+      payload?.received ?? true,
+      payload?.district_uuid ?? null,
+    );
+  }
+}

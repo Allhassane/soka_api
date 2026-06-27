@@ -7,7 +7,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { MemberEntity } from './entities/member.entity';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
@@ -201,75 +201,100 @@ export class MemberService {
         });
       }
 
-      // ---- Sauvegarde du membre principal ----
-      const saved = await this.memberRepo.save(member);
-
-      // ---- Gestion de la responsabilité ----
+      // ---- Pré-résolution (lectures + validations) AVANT la transaction ----
+      // On valide la responsabilité et les accessoires d'abord : en cas d'erreur, aucun
+      // membre orphelin n'est créé (avant, ces lectures étaient interleavées avec les saves).
+      let responsibility: ResponsibilityEntity | null = null;
       if (dto.responsibility_uuid) {
-        const responsibility = await this.responsibilityService.findOne(
+        responsibility = await this.responsibilityService.findOne(
           dto.responsibility_uuid,
           admin_uuid,
         );
-
-        const memberResponsibility = this.memberResponsibilityRepo.create({
-          member_uuid: saved.uuid,
-          member: saved,
-          responsibility_uuid: dto.responsibility_uuid,
-          responsibility,
-          priority: 'high',
-        });
-
-        await this.memberResponsibilityRepo.save(memberResponsibility);
       }
 
-      // ---- Gestion des accessoires ----
+      const resolvedAccessories: { uuid: string; accessory: any }[] = [];
       if (dto.accessories && dto.accessories.length > 0) {
         for (const accessoryUuid of dto.accessories) {
-          const accessory = await this.accessoryService.findOne(
-            accessoryUuid,
-            admin_uuid,
-          );
-
-          if (accessory) {
-            const memberAccessory = this.memberAccessoryRepo.create({
-              member_uuid: saved.uuid,
-              member: saved,
-              accessory_uuid: accessoryUuid,
-              accessory,
-            });
-            await this.memberAccessoryRepo.save(memberAccessory);
-          }
+          const accessory = await this.accessoryService.findOne(accessoryUuid, admin_uuid);
+          if (accessory) resolvedAccessories.push({ uuid: accessoryUuid, accessory });
         }
       }
 
-      //creation du compte utilisateur lié au membre
-      if (saved.phone!=null) {
+      // Mot de passe par défaut : le compte est créé au défaut (nrh2030) avec
+      // must_change_password=true → au 1er login, rotation + envoi SMS (cf. AuthService).
+      const defaultPassword = process.env.DEFAULT_PASSWORD || 'nrh2030';
 
-        // Générer un mot de passe temporaire
-        //let newUser: any = null;
-        const tempPassword = Math.random().toString(36).slice(-8); // ex: kf8d2j3s
+      // ---- Écritures ATOMIQUES (membre + responsabilité + accessoires + compte) ----
+      let userCreated = false;
+      const saved = await this.memberRepo.manager.transaction(async (manager) => {
+        const savedMember = await manager.save(member);
 
-        const user = this.userRepo.create({
-          firstname: saved.firstname,
-          lastname: saved.lastname,
-          email: saved.email,
-          phone_number: saved.phone,
-          password: tempPassword,
-          is_active: true,
-          member_uuid: saved.uuid,
-        });
+        if (responsibility) {
+          await manager.save(
+            this.memberResponsibilityRepo.create({
+              member_uuid: savedMember.uuid,
+              member: savedMember,
+              responsibility_uuid: dto.responsibility_uuid,
+              responsibility,
+              priority: 'high',
+            }),
+          );
+        }
 
-        const newUser = await this.userRepo.save(user);
+        for (const { uuid: accessoryUuid, accessory } of resolvedAccessories) {
+          await manager.save(
+            this.memberAccessoryRepo.create({
+              member_uuid: savedMember.uuid,
+              member: savedMember,
+              accessory_uuid: accessoryUuid,
+              accessory,
+            }),
+          );
+        }
 
+        // Compte utilisateur lié : uniquement si téléphone présent ET non déjà utilisé.
+        if (savedMember.phone) {
+          const existingByPhone = await manager.findOne(User, {
+            where: { phone_number: savedMember.phone },
+          });
+
+          if (!existingByPhone) {
+            // email est UNIQUE : ne pas réutiliser un email déjà pris (sinon la contrainte
+            // ferait échouer toute la création). On retombe sur null le cas échéant.
+            let email: string | null = savedMember.email ?? null;
+            if (email) {
+              const existingByEmail = await manager.findOne(User, { where: { email } });
+              if (existingByEmail) email = null;
+            }
+
+            await manager.save(
+              this.userRepo.create({
+                firstname: savedMember.firstname,
+                lastname: savedMember.lastname,
+                email: email ?? undefined,
+                phone_number: savedMember.phone,
+                password: defaultPassword,
+                is_active: true,
+                member_uuid: savedMember.uuid,
+                must_change_password: true,
+              }),
+            );
+            userCreated = true;
+          }
+        }
+
+        return savedMember;
+      });
+
+      // ---- Journalisation (hors transaction : uniquement après un commit réussi) ----
+      if (userCreated) {
         await this.logService.logAction(
           'user-create-from-member',
           admin.id,
           `Compte utilisateur créé automatiquement pour ${saved.firstname} ${saved.lastname}`,
         );
-
       }
 
-      // Journalisation
       await this.logService.logAction(
         'members-store',
         admin.id,
@@ -748,27 +773,75 @@ async findAll(
 
   async findAllBeneficiaryByUserConnected(
     admin_uuid: string,
+    page?: number,
+    limit?: number,
+    search?: string,
   ): Promise<any> {
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
     if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
 
     const sous_groupes = await this.prepareMemberList(admin_uuid);
 
-    const members = await this.memberRepo.find({
-      where: { structure_uuid: In(sous_groupes) },
-      order: { firstname: 'ASC' },
-    });
-    if (!members) throw new NotFoundException("Aucun membre trouvé");
+    // Périmètre vide → liste vide (évite un `IN ()` invalide).
+    if (!sous_groupes || sous_groupes.length === 0) {
+      return { results: [] };
+    }
 
+    // Sélection ciblée (colonnes du picker uniquement) + recherche serveur optionnelle.
+    const query = this.memberRepo
+      .createQueryBuilder('m')
+      .select(['m.uuid', 'm.firstname', 'm.lastname', 'm.phone'])
+      .where('m.structure_uuid IN (:...sous_groupes)', { sous_groupes })
+      .andWhere('m.deleted_at IS NULL')
+      .orderBy('m.firstname', 'ASC');
+
+    if (search?.trim()) {
+      query.andWhere(
+        '(m.firstname LIKE :s OR m.lastname LIKE :s)',
+        { s: `%${search.trim()}%` },
+      );
+    }
+
+    // Pagination OPTIONNELLE : si page/limit fournis on pagine + meta ; sinon, comportement
+    // historique (toute la liste, même enveloppe) pour ne pas casser le picker existant.
+    const paginate = page != null && limit != null && limit > 0;
+    if (paginate) {
+      const currentPage = Math.max(1, Number(page));
+      const perPage = Number(limit);
+      const [members, total] = await query
+        .skip((currentPage - 1) * perPage)
+        .take(perPage)
+        .getManyAndCount();
+
+      return {
+        results: members.map((member) => ({
+          uuid: member.uuid,
+          firstname: member.firstname,
+          lastname: member.lastname,
+          phone_number: member.phone,
+          selected: admin.member_uuid == member.uuid ? true : false,
+        })),
+        meta: {
+          current_page: currentPage,
+          limit: perPage,
+          total_items: total,
+          total_pages: Math.ceil(total / perPage),
+          has_next: currentPage * perPage < total,
+          has_prev: currentPage > 1,
+        },
+      };
+    }
+
+    const members = await query.getMany();
     return {
       results: members.map((member) => ({
         uuid: member.uuid,
         firstname: member.firstname,
         lastname: member.lastname,
         phone_number: member.phone,
-        selected: admin.member_uuid == member.uuid ? true: false,
-      }))
-    }
+        selected: admin.member_uuid == member.uuid ? true : false,
+      })),
+    };
   }
 
 
@@ -825,39 +898,6 @@ async findAll(
     return members;
   }
 
-  async findList(uuid: string, admin_uuid: string){
-    const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-    if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
-
-    const connectedMember = await this.memberRepo.findOne({ where: { uuid } });
-    if (!connectedMember) throw new NotFoundException('Membre introuvable.');
-
-    const memberResponsibility = await this.memberResponsibilityRepo.findOne({ where: { member_uuid: uuid } });
-
-    console.log(memberResponsibility);
-
-    /*const sous_groups = await this.structureService.findByAllChildrens(uuid);
-
-    const members = await this.memberRepo.find({
-      where: { structure_uuid: In(sous_groups) },
-      order: { firstname: 'ASC' },
-    });
-
-    await this.logService.logAction(
-      'members-findList',
-      admin.id,
-      `Consultation des membres de la structure ${uuid}`,
-    );
-
-    return {
-      pageHeaders: {
-        name: 'Liste des membres',
-        description: 'Liste des membres',
-      },
-      data: members
-    }*/
-  }
-
   // Obtenir les statistiques
 async getStatsByStructure(uuid: string, admin_uuid: string) {
   const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
@@ -867,177 +907,72 @@ async getStatsByStructure(uuid: string, admin_uuid: string) {
 
   await this.assertStructureInScope(uuid, admin_uuid);
 
-  //connaitre la responsabilité
-  const respo = await this.memberResponsibilityService.findResponsibilityByMember(admin.member_uuid);
-  // Récupérer tous les sous-groupes
+  // Récupérer tous les sous-groupes du périmètre
   const sous_groupes = await this.structureService.findByAllChildrens(uuid);
-  //console.log('info sgpe');
-  //console.log(sous_groupes);
-  // Total membres
-  const total = await this.memberRepo.count({
-    where: { structure_uuid: In(sous_groupes) },
-  });
 
-  // --- DEPARTEMENTS ---
-  const total_hommes = await this.memberRepo.count({
-    where: {
-      structure_uuid: In(sous_groupes),
-      department: { name: 'HOMME' },
-    },
-    relations: ['department'],
-  });
+  const stats = {
+    total: 0,
+    total_hommes: 0,
+    total_femmes: 0,
+    total_jeunes: 0,
+    // Divisions
+    total_jeune_hommes: 0,
+    total_jeune_femmes: 0,
+    total_avenir: 0,
+    jeunes_sans_division: 0,
+  };
 
-  const total_femmes = await this.memberRepo.count({
-    where: {
-      structure_uuid: In(sous_groupes),
-      department: { name: 'FEMME' },
-    },
-    relations: ['department'],
-  });
+  // Garde : périmètre vide → tout à zéro (évite un `IN ()` invalide).
+  if (!sous_groupes || sous_groupes.length === 0) {
+    await this.logService.logAction(
+      'members-getStatsByStructure',
+      admin.id,
+      `Consultation des statistiques de la structure ${uuid}`,
+    );
+    return stats;
+  }
 
-  const total_jeunes = await this.memberRepo.count({
-    where: {
-      structure_uuid: In(sous_groupes),
-      department: { name: 'JEUNESSE' },
-    },
-    relations: ['department'],
-  });
+  // UNE SEULE requête agrégée (remplace 8 COUNT distincts) : comptage par
+  // département/division sur le périmètre, soft-delete exclu. L'agrégation finale
+  // se fait en mémoire — comportement strictement identique à l'ancien.
+  const rows = await this.memberRepo
+    .createQueryBuilder('m')
+    .leftJoin('m.department', 'd')
+    .leftJoin('m.division', 'dv')
+    .select('d.name', 'department_name')
+    .addSelect('dv.name', 'division_name')
+    .addSelect('COUNT(*)', 'count')
+    .where('m.structure_uuid IN (:...sous_groupes)', { sous_groupes })
+    .andWhere('m.deleted_at IS NULL')
+    .groupBy('d.name')
+    .addGroupBy('dv.name')
+    .getRawMany();
 
-  // --- DIVISIONS ---
-  const total_jeune_hommes = await this.memberRepo.count({
-    where: {
-      structure_uuid: In(sous_groupes),
-      division: { name: 'JEUNES_HOMMES' },
-    },
-    relations: ['division'],
-  });
+  for (const r of rows) {
+    const n = parseInt(r.count, 10) || 0;
+    stats.total += n;
 
-  const total_jeune_femmes = await this.memberRepo.count({
-    where: {
-      structure_uuid: In(sous_groupes),
-      division: { name: 'JEUNES_FEMMES' },
-    },
-    relations: ['division'],
-  });
+    // Départements
+    if (r.department_name === 'HOMME') stats.total_hommes += n;
+    if (r.department_name === 'FEMME') stats.total_femmes += n;
+    if (r.department_name === 'JEUNESSE') {
+      stats.total_jeunes += n;
+      if (r.division_name === null) stats.jeunes_sans_division += n;
+    }
 
-  const total_avenir = await this.memberRepo.count({
-    where: {
-      structure_uuid: In(sous_groupes),
-      division: { name: 'AVENIR' },
-    },
-    relations: ['division'],
-  });
+    // Divisions
+    if (r.division_name === 'JEUNES_HOMMES') stats.total_jeune_hommes += n;
+    if (r.division_name === 'JEUNES_FEMMES') stats.total_jeune_femmes += n;
+    if (r.division_name === 'AVENIR') stats.total_avenir += n;
+  }
 
-
-  const jeunes_sans_division = await this.memberRepo.count({
-    where: {
-      structure_uuid: In(sous_groupes),
-      department: { name: 'JEUNESSE' },
-      division: IsNull(),
-    },
-    relations: ['department', 'division'],
-  });
-
-  // Log
   await this.logService.logAction(
     'members-getStatsByStructure',
     admin.id,
     `Consultation des statistiques de la structure ${uuid}`,
   );
 
-  return {
-    total,
-    total_hommes,
-    total_femmes,
-    total_jeunes,
-
-    // Divisions
-    total_jeune_hommes,
-    total_jeune_femmes,
-    total_avenir,
-    jeunes_sans_division,
-
-  };
-}
-//afficher tous les membres par catégorie de statistique
-async getAllMembersGroupedByStats(uuid: string, admin_uuid: string) {
-  const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-  if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
-
-  // Récupération des sous structures
-  const sous_groupes = await this.structureService.findByAllChildrens(uuid);
-
-  // --- HOMMES ---
-  const hommes = await this.memberRepo.find({
-    where: {
-      structure_uuid: In(sous_groupes),
-      department: { name: 'HOMME' },
-    },
-    relations: ['department', 'division'],
-    order: { firstname: 'ASC' },
-  });
-
-  // --- FEMMES ---
-  const femmes = await this.memberRepo.find({
-    where: {
-      structure_uuid: In(sous_groupes),
-      department: { name: 'FEMME' },
-    },
-    relations: ['department', 'division'],
-    order: { firstname: 'ASC' },
-  });
-
-  // --- JEUNES SANS DIVISION ---
-  const jeunes_sans_division = await this.memberRepo.find({
-    where: {
-      structure_uuid: In(sous_groupes),
-      department: { name: 'JEUNESSE' },
-      division: IsNull(),
-    },
-    relations: ['department', 'division'],
-    order: { firstname: 'ASC' },
-  });
-
-  // --- JEUNES HOMMES ---
-  const jeunes_hommes = await this.memberRepo.find({
-    where: {
-      structure_uuid: In(sous_groupes),
-      division: { name: 'JEUNES_HOMMES' },
-    },
-    relations: ['department', 'division'],
-    order: { firstname: 'ASC' },
-  });
-
-  // --- JEUNES FEMMES ---
-  const jeunes_femmes = await this.memberRepo.find({
-    where: {
-      structure_uuid: In(sous_groupes),
-      division: { name: 'JEUNES_FEMMES' },
-    },
-    relations: ['department', 'division'],
-    order: { firstname: 'ASC' },
-  });
-
-  // --- AVENIR ---
-  const avenir = await this.memberRepo.find({
-    where: {
-      structure_uuid: In(sous_groupes),
-      division: { name: 'AVENIR' },
-    },
-    relations: ['department', 'division'],
-    order: { firstname: 'ASC' },
-  });
-
-  return {
-    hommes,
-    femmes,
-    jeunes: {
-      sans_division: jeunes_sans_division,
-      jeunes_hommes,
-      jeunes_femmes,
-      avenir,
-    },
-  };
+  return stats;
 }
 
 

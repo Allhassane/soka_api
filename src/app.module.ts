@@ -48,7 +48,9 @@ import { ConfigModule } from '@nestjs/config';
 import { LocationModule } from './location/location.module';
 import { JournalModule } from './journals/journal.module';
 import { ActivityModule } from './activities/activity.module';
+import { ActivityTypesModule } from './activity-types/activity-types.module';
 import { ImportModule } from './import/import.module';
+import { SokaPayModule } from './sokapay/sokapay.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -129,7 +131,9 @@ import { ImportModule } from './import/import.module';
     LocationModule
     ,JournalModule
     ,ActivityModule
+    ,ActivityTypesModule
     ,ImportModule
+    ,SokaPayModule
   ],
   controllers: [AppController, RolePermissionController,CinetpayCallbackController],
   providers: [AppService, RolePermissionService],

@@ -52,6 +52,14 @@ export class MemberStatsFilters {
   groupe_uuid?: string;
 
   @ApiPropertyOptional({
+    description: 'UUID du sous-groupe (palier feuille)',
+    example: '550e8400-e29b-41d4-a716-446655440000'
+  })
+  @IsOptional()
+  @IsUUID()
+  sous_groupe_uuid?: string;
+
+  @ApiPropertyOptional({
     description: 'UUID du département',
     example: '550e8400-e29b-41d4-a716-446655440005'
   })

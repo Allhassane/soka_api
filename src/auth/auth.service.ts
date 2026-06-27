@@ -395,168 +395,66 @@ export class AuthService {
     structureUuid: string,
     responsibleLevelOrder: number
   ): Promise<any> {
-    // Récupérer toutes les structures
-    const structures = await this.structureRepository
-      .createQueryBuilder('s')
-      .where('s.deleted_at IS NULL')
-      .getMany();
+    // RÉ-ÉCRIT (perf login & co.) : avant, cette méthode chargeait ~3562 structures via
+    // TypeORM getMany() + comptait tous les membres + tous les responsables, puis bâtissait
+    // un arbre de 3600 nœuds — ≈2 à 3,4 s PAR APPEL, et le login l'appelait 2x (~5,6 s). Or
+    // le résultat n'est qu'un CHEMIN d'ancêtres (racine → structure du membre) dont le front
+    // ne lit que name/level_name. On récupère donc UNIQUEMENT ce chemin via un CTE remontant
+    // (≈5 ms). Forme de retour identique (compteurs/responsables à 0/[], non lus). Le paramètre
+    // `responsibleLevelOrder` est conservé pour compat d'appel mais n'influe pas (coupe = cible).
+    void responsibleLevelOrder;
+    if (!structureUuid) return null;
 
-    if (structures.length === 0) return null;
-
-    // Récupérer tous les niveaux
-    const levels = await this.levelRepository.find();
-    const levelsMap = new Map(levels.map(l => [l.uuid, { name: l.name, order: l.order }]));
-
-    // Compter les membres directs par structure
-    const memberCounts = await this.memberRepository
-      .createQueryBuilder('m')
-      .select('m.structure_uuid', 'structure_uuid')
-      .addSelect('COUNT(*)', 'count')
-      .where('m.deleted_at IS NULL')
-      .groupBy('m.structure_uuid')
-      .getRawMany();
-
-    const memberCountMap = new Map(
-      memberCounts.map(mc => [mc.structure_uuid, parseInt(mc.count)])
+    // Chemin cible → racine via le FK entier parent_id (peuplé sur `structures` ; 1 seul NULL = racine).
+    const rows: Array<{
+      uuid: string;
+      name: string;
+      level_uuid: string | null;
+      parent_uuid: string | null;
+    }> = await this.structureRepository.query(
+      `WITH RECURSIVE up AS (
+         SELECT id, uuid, name, parent_id, parent_uuid, level_uuid
+         FROM structures WHERE uuid = ? AND deleted_at IS NULL
+         UNION ALL
+         SELECT s.id, s.uuid, s.name, s.parent_id, s.parent_uuid, s.level_uuid
+         FROM structures s JOIN up ON up.parent_id = s.id
+       )
+       SELECT uuid, name, level_uuid, parent_uuid FROM up`,
+      [structureUuid],
     );
+    if (rows.length === 0) return null;
 
-    // Récupérer les responsables par structure
-    const responsibles = await this.memberRepository
-      .createQueryBuilder('m')
-      .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
-      .innerJoin('responsibilities', 'r', 'r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL')
-      .select([
-        'm.structure_uuid AS structure_uuid',
-        'm.uuid AS member_uuid',
-        "CONCAT(m.firstname, ' ', m.lastname) AS member_name",
-        'r.uuid AS responsibility_uuid',
-        'r.name AS responsibility_name',
-      ])
-      .where('m.deleted_at IS NULL')
-      .getRawMany();
+    const levels = await this.levelRepository.find();
+    const levelNameMap = new Map(levels.map(l => [l.uuid, l.name]));
 
-    // Grouper les responsables par structure
-    const responsiblesMap = new Map<string, any[]>();
-    for (const resp of responsibles) {
-      if (!resp.structure_uuid) continue;
-      if (!responsiblesMap.has(resp.structure_uuid)) {
-        responsiblesMap.set(resp.structure_uuid, []);
-      }
-      responsiblesMap.get(resp.structure_uuid)!.push({
-        member_uuid: resp.member_uuid,
-        member_name: resp.member_name,
-        responsibility_uuid: resp.responsibility_uuid,
-        responsibility_name: resp.responsibility_name,
-      });
-    }
-
-    // Construire la map des structures
-    const structureMap = new Map<string, any>();
-
-    for (const structure of structures) {
-      const levelUuid = structure.level_uuid ?? null;
-      const levelInfo = levelUuid ? levelsMap.get(levelUuid) : null;
-      const parentUuid = structure.parent_uuid && structure.parent_uuid.trim() !== ''
-        ? structure.parent_uuid
-        : null;
-
-      structureMap.set(structure.uuid, {
-        uuid: structure.uuid,
-        name: structure.name,
-        level_uuid: levelUuid,
-        level_name: levelInfo?.name || 'Inconnu',
-        level_order: levelInfo?.order ?? 999,
+    // Nœuds du chemin (même forme que l'ancienne sortie ; compteurs à 0 car non lus par le front).
+    const nodeByUuid = new Map<string, any>();
+    for (const r of rows) {
+      const parentUuid = r.parent_uuid && r.parent_uuid.trim() !== '' ? r.parent_uuid : null;
+      nodeByUuid.set(r.uuid, {
+        uuid: r.uuid,
+        name: r.name,
+        level_uuid: r.level_uuid ?? null,
+        level_name: r.level_uuid ? (levelNameMap.get(r.level_uuid) ?? 'Inconnu') : 'Inconnu',
         parent_uuid: parentUuid,
-        direct_members_count: memberCountMap.get(structure.uuid) ?? 0,
+        direct_members_count: 0,
         total_members_count: 0,
         sub_groups_count: 0,
-        responsibles: responsiblesMap.get(structure.uuid) ?? [],
+        responsibles: [],
         children: [],
       });
     }
 
-    // Construire l'arbre complet
-    const rootNodes: any[] = [];
-
-    for (const node of structureMap.values()) {
-      if (node.parent_uuid && structureMap.has(node.parent_uuid)) {
-        const parent = structureMap.get(node.parent_uuid)!;
-        parent.children.push(node);
+    // Chaîner racine → … → cible (chemin unique). La cible reste feuille (children: []).
+    let root: any = null;
+    for (const node of nodeByUuid.values()) {
+      if (node.parent_uuid && nodeByUuid.has(node.parent_uuid)) {
+        nodeByUuid.get(node.parent_uuid)!.children.push(node);
       } else {
-        rootNodes.push(node);
+        root = node;
       }
     }
-
-    // Calculer les totaux
-    const calculateTotals = (node: any): number => {
-      let total = node.direct_members_count;
-      let subGroupsCount = 0;
-
-      for (const child of node.children) {
-        total += calculateTotals(child);
-        subGroupsCount += 1 + child.sub_groups_count;
-      }
-
-      node.total_members_count = total;
-      node.sub_groups_count = subGroupsCount;
-
-      return total;
-    };
-
-    for (const root of rootNodes) {
-      calculateTotals(root);
-    }
-
-    // Trouver la structure du responsable
-    const targetStructure = structureMap.get(structureUuid);
-    if (!targetStructure) return null;
-
-    // Remonter jusqu'à la racine pour construire le chemin
-    const pathToRoot: string[] = [];
-    let currentUuid = structureUuid;
-
-    while (currentUuid) {
-      pathToRoot.push(currentUuid);
-      const current = structureMap.get(currentUuid);
-      currentUuid = current?.parent_uuid;
-    }
-
-    // Trouver la racine
-    const rootUuid = pathToRoot[pathToRoot.length - 1];
-    const rootStructure = structureMap.get(rootUuid);
-    if (!rootStructure) return null;
-
-    // Filtrer l'arbre : garder le chemin vers la structure cible et couper au niveau de responsabilité
-    const filterTree = (node: any, pathUuids: string[], targetLevelOrder: number): any => {
-      const { level_order, ...nodeWithoutOrder } = node;
-      const isOnPath = pathUuids.includes(node.uuid);
-      const isTarget = node.uuid === structureUuid;
-
-      // Si c'est la structure cible, couper les enfants (s'arrêter à son niveau)
-      if (isTarget) {
-        return {
-          ...nodeWithoutOrder,
-          children: [],
-        };
-      }
-
-      // Si on est sur le chemin vers la cible, garder seulement l'enfant qui mène à la cible
-      if (isOnPath) {
-        const filteredChildren = node.children
-          .filter((child: any) => pathUuids.includes(child.uuid))
-          .map((child: any) => filterTree(child, pathUuids, targetLevelOrder));
-
-        return {
-          ...nodeWithoutOrder,
-          children: filteredChildren,
-        };
-      }
-
-      // Sinon, ne pas inclure ce nœud
-      return null;
-    };
-
-    return filterTree(rootStructure, pathToRoot, responsibleLevelOrder);
+    return root;
   }
 
   async getAuthenticatedUser(token: string): Promise<Omit<User, 'password'>> {
@@ -616,7 +514,7 @@ export class AuthService {
   /**
    * 1re connexion (compte encore au mot de passe par défaut nrh2030) : génère un
    * nouveau mot de passe, l'envoie par SMS, le persiste et lève le flag. AUCUNE
-   * session n'est délivrée — le membre se reconnecte ensuite avec le mot de passe reçu.
+   * session n'est délivrée - le membre se reconnecte ensuite avec le mot de passe reçu.
    * Si le SMS échoue : on NE change RIEN (le compte reste sur nrh2030, retry possible).
    */
   private async handleFirstLogin(user: User) {
@@ -701,7 +599,12 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await this.userRepository.update(
       { id: user.id },
-      { password: hashedPassword },
+      // On lève AUSSI must_change_password : le mot de passe envoyé par SMS est définitif,
+      // le membre doit pouvoir se connecter directement avec. Sans ça, un compte encore au
+      // défaut (must_change_password = true) verrait login() relancer handleFirstLogin, qui
+      // régénère un autre mot de passe et ne délivre aucune session → « le mot de passe reçu
+      // par SMS ne marche pas ».
+      { password: hashedPassword, must_change_password: false },
     );
 
     // Marque l'envoi (anti-spam) seulement quand un SMS part réellement.

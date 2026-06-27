@@ -38,6 +38,7 @@ export class ActivityService {
     const qb = this.activityRepo
       .createQueryBuilder('a')
       .leftJoinAndSelect('a.structure', 's')
+      .leftJoinAndSelect('a.activityType', 'at')
       .leftJoin('s.level', 'sl');
 
     if (f.search) {
@@ -93,7 +94,7 @@ export class ActivityService {
     const admin = await this.getAdmin(admin_uuid);
     const activity = await this.activityRepo.findOne({
       where: { uuid },
-      relations: ['structure', 'participants', 'participants.member'],
+      relations: ['structure', 'activityType', 'participants', 'participants.member'],
     });
     if (!activity) throw new NotFoundException('Aucune activite trouvee');
     await this.logService.logAction(
@@ -126,9 +127,13 @@ export class ActivityService {
       name: payload.name,
       description: payload.description ?? null,
       type: payload.type ?? null,
+      activity_type_uuid: payload.activity_type_uuid ?? null,
       location: payload.location ?? null,
       starts_at: payload.starts_at,
       ends_at: payload.ends_at,
+      capacity: payload.capacity ?? null,
+      is_recurring: payload.is_recurring ?? false,
+      recurrence_rule: payload.recurrence_rule ?? null,
       structure_uuid: payload.structure_uuid ?? null,
       organigram: payload.organigram ? JSON.stringify(payload.organigram) : null,
       target_scope: payload.target_scope ?? undefined,
@@ -136,6 +141,7 @@ export class ActivityService {
       target_levels: payload.target_levels ? JSON.stringify(payload.target_levels) : null,
       target_responsibilities: payload.target_responsibilities ? JSON.stringify(payload.target_responsibilities) : null,
       target_responsibility_levels: payload.target_responsibility_levels ? JSON.stringify(payload.target_responsibility_levels) : null,
+      target_departments: payload.target_departments ? JSON.stringify(payload.target_departments) : null,
       include_descendants: payload.include_descendants ?? false,
       target_gender: payload.target_gender ?? null,
       admin_uuid,
@@ -162,7 +168,7 @@ export class ActivityService {
       activity.organigram = JSON.stringify(merged.organigram);
       delete merged.organigram;
     }
-    const jsonFields = ['target_structures', 'target_levels', 'target_responsibilities', 'target_responsibility_levels'] as const;
+    const jsonFields = ['target_structures', 'target_levels', 'target_responsibilities', 'target_responsibility_levels', 'target_departments'] as const;
     for (const jsonField of jsonFields) {
       if (merged[jsonField] !== undefined) {
         (activity as any)[jsonField] = merged[jsonField] ? JSON.stringify(merged[jsonField]) : null;
@@ -273,5 +279,6 @@ export function decodeActivity(a: any) {
     target_levels: safeParse(a.target_levels) ?? [],
     target_responsibilities: safeParse(a.target_responsibilities) ?? [],
     target_responsibility_levels: safeParse(a.target_responsibility_levels) ?? [],
+    target_departments: safeParse(a.target_departments) ?? [],
   };
 }

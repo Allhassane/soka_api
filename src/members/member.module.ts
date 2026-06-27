@@ -50,13 +50,11 @@ import { ResponsibilityEntity } from 'src/responsibilities/entities/responsibili
     UserModule,
     ResponsibilityModule,
     CivilityModule,
-    ResponsibilityModule,
     AccessoryModule,
     MemberAccessoryModule,
     StructureModule,
 
     forwardRef(() => MemberResponsibilityModule),
-    StructureModule
   ],
   controllers: [MemberController],
   providers: [MemberService],

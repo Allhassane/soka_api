@@ -55,14 +55,24 @@ export class TextoSmsProvider implements NotificationProvider {
     });
   }
 
-  /** Normalise un numéro CI au format international 225XXXXXXXXXX */
+  /**
+   * Normalise un numéro CI au format opérateur : 225 + les 10 chiffres EN
+   * CONSERVANT le 0 (ex : 0707697733 -> 2250707697733). Retirer le 0 fait
+   * rejeter l'envoi par l'opérateur (incident déjà constaté en prod).
+   * Gère aussi les correspondants à plusieurs numéros (séparés par / , ; "ou")
+   * en retenant le premier numéro exploitable.
+   */
   private normalizePhone(raw: string): string {
     if (!raw) return '';
-    const digits = raw.replace(/[^0-9]/g, '');
+    const candidates = raw
+      .split(/[\/,;]| ou /i)
+      .map((p) => p.replace(/[^0-9]/g, ''))
+      .filter(Boolean);
+    const digits = candidates[0] ?? raw.replace(/[^0-9]/g, '');
+    if (!digits) return '';
     if (digits.startsWith('00')) return digits.substring(2);
     if (digits.startsWith('225')) return digits;
-    if (digits.length === 10 && digits.startsWith('0')) return `225${digits.substring(1)}`;
-    if (digits.length === 10) return `225${digits}`;
+    if (digits.length === 10) return `225${digits}`; // conserve le 0 initial
     return digits;
   }
 

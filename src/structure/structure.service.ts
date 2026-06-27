@@ -203,7 +203,7 @@ export class StructureService {
     // 1) Vérifier que le point de départ existe
     const start = await this.structureRepo.findOne({
       where: { uuid },
-      select: ['id', 'uuid'],
+      select: ['id', 'uuid','name'],
     });
     if (!start) {
       throw new NotFoundException('Nœud de départ introuvable');
@@ -212,19 +212,19 @@ export class StructureService {
     // 2) Exécuter le CTE récursif
     const sql = `
       WITH RECURSIVE tree AS (
-        SELECT s.id, s.uuid, s.name, s.parent_id, s.level_id
+        SELECT s.id, s.uuid, s.name, s.parent_id, s.level_uuid
         FROM structures s
         WHERE s.uuid = ?
 
         UNION ALL
 
-        SELECT c.id, c.uuid, c.name, c.parent_id, c.level_id
+        SELECT c.id, c.uuid, c.name, c.parent_id, c.level_uuid
         FROM structures c
         JOIN tree t ON c.parent_id = t.id
       )
       SELECT sg.*
       FROM tree sg
-      JOIN levels l ON l.id = sg.level_id
+      JOIN levels l ON l.uuid = sg.level_uuid
       WHERE l.\`order\` = 7
       ORDER BY sg.name ASC
     `;
@@ -251,173 +251,10 @@ export class StructureService {
     return structures;
   }
 
-    public async getStructureTreeForResponsible(
-    structureUuid: string,
-    responsibleLevelOrder: number
-  ): Promise<any> {
-    // Récupérer toutes les structures
-    const structures = await this.structureRepo
-      .createQueryBuilder('s')
-      .where('s.deleted_at IS NULL')
-      .getMany();
-
-    if (structures.length === 0) return null;
-
-    // Récupérer tous les niveaux
-    const levels = await this.levelRepository.find();
-    const levelsMap = new Map(levels.map(l => [l.uuid, { name: l.name, order: l.order }]));
-
-    // Compter les membres directs par structure
-    const memberCounts = await this.memberRepository
-      .createQueryBuilder('m')
-      .select('m.structure_uuid', 'structure_uuid')
-      .addSelect('COUNT(*)', 'count')
-      .where('m.deleted_at IS NULL')
-      .groupBy('m.structure_uuid')
-      .getRawMany();
-
-    const memberCountMap = new Map(
-      memberCounts.map(mc => [mc.structure_uuid, parseInt(mc.count)])
-    );
-
-    // Récupérer les responsables par structure
-    const responsibles = await this.memberRepository
-      .createQueryBuilder('m')
-      .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
-      .innerJoin('responsibilities', 'r', 'r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL')
-      .select([
-        'm.structure_uuid AS structure_uuid',
-        'm.uuid AS member_uuid',
-        "CONCAT(m.firstname, ' ', m.lastname) AS member_name",
-        'r.uuid AS responsibility_uuid',
-        'r.name AS responsibility_name',
-      ])
-      .where('m.deleted_at IS NULL')
-      .getRawMany();
-
-    // Grouper les responsables par structure
-    const responsiblesMap = new Map<string, any[]>();
-    for (const resp of responsibles) {
-      if (!resp.structure_uuid) continue;
-      if (!responsiblesMap.has(resp.structure_uuid)) {
-        responsiblesMap.set(resp.structure_uuid, []);
-      }
-      responsiblesMap.get(resp.structure_uuid)!.push({
-        member_uuid: resp.member_uuid,
-        member_name: resp.member_name,
-        responsibility_uuid: resp.responsibility_uuid,
-        responsibility_name: resp.responsibility_name,
-      });
-    }
-
-    // Construire la map des structures
-    const structureMap = new Map<string, any>();
-
-    for (const structure of structures) {
-      const levelUuid = structure.level_uuid ?? null;
-      const levelInfo = levelUuid ? levelsMap.get(levelUuid) : null;
-      const parentUuid = structure.parent_uuid && structure.parent_uuid.trim() !== ''
-        ? structure.parent_uuid
-        : null;
-
-      structureMap.set(structure.uuid, {
-        uuid: structure.uuid,
-        name: structure.name,
-        level_uuid: levelUuid,
-        level_name: levelInfo?.name || 'Inconnu',
-        level_order: levelInfo?.order ?? 999,
-        parent_uuid: parentUuid,
-        direct_members_count: memberCountMap.get(structure.uuid) ?? 0,
-        total_members_count: 0,
-        sub_groups_count: 0,
-        responsibles: responsiblesMap.get(structure.uuid) ?? [],
-        children: [],
-      });
-    }
-
-    // Construire l'arbre complet
-    const rootNodes: any[] = [];
-
-    for (const node of structureMap.values()) {
-      if (node.parent_uuid && structureMap.has(node.parent_uuid)) {
-        const parent = structureMap.get(node.parent_uuid)!;
-        parent.children.push(node);
-      } else {
-        rootNodes.push(node);
-      }
-    }
-
-    // Calculer les totaux
-    const calculateTotals = (node: any): number => {
-      let total = node.direct_members_count;
-      let subGroupsCount = 0;
-
-      for (const child of node.children) {
-        total += calculateTotals(child);
-        subGroupsCount += 1 + child.sub_groups_count;
-      }
-
-      node.total_members_count = total;
-      node.sub_groups_count = subGroupsCount;
-
-      return total;
-    };
-
-    for (const root of rootNodes) {
-      calculateTotals(root);
-    }
-
-    // Trouver la structure du responsable
-    const targetStructure = structureMap.get(structureUuid);
-    if (!targetStructure) return null;
-
-    // Remonter jusqu'à la racine pour construire le chemin
-    const pathToRoot: string[] = [];
-    let currentUuid = structureUuid;
-
-    while (currentUuid) {
-      pathToRoot.push(currentUuid);
-      const current = structureMap.get(currentUuid);
-      currentUuid = current?.parent_uuid;
-    }
-
-    // Trouver la racine
-    const rootUuid = pathToRoot[pathToRoot.length - 1];
-    const rootStructure = structureMap.get(rootUuid);
-    if (!rootStructure) return null;
-
-    // Filtrer l'arbre : garder le chemin vers la structure cible et couper au niveau de responsabilité
-    const filterTree = (node: any, pathUuids: string[], targetLevelOrder: number): any => {
-      const { level_order, ...nodeWithoutOrder } = node;
-      const isOnPath = pathUuids.includes(node.uuid);
-      const isTarget = node.uuid === structureUuid;
-
-      // Si c'est la structure cible, couper les enfants (s'arrêter à son niveau)
-      if (isTarget) {
-        return {
-          ...nodeWithoutOrder,
-          children: [],
-        };
-      }
-
-      // Si on est sur le chemin vers la cible, garder seulement l'enfant qui mène à la cible
-      if (isOnPath) {
-        const filteredChildren = node.children
-          .filter((child: any) => pathUuids.includes(child.uuid))
-          .map((child: any) => filterTree(child, pathUuids, targetLevelOrder));
-
-        return {
-          ...nodeWithoutOrder,
-          children: filteredChildren,
-        };
-      }
-
-      // Sinon, ne pas inclure ce nœud
-      return null;
-    };
-
-    return filterTree(rootStructure, pathToRoot, responsibleLevelOrder);
-  }
+    // NOTE (audit P10) : l'implementation dupliquee de getStructureTreeForResponsible a ete
+    // retiree d'ici (rechargeait tout le dataset a chaque appel, sans cache). L'unique
+    // implementation canonique vit dans StructureTreeService (build unique par requete +
+    // resolveur memoise via createStructureTreeResolver). Verifie : aucun appelant restant.
 
   /**
    * « Comité » d'une structure : la structure (avec son niveau + son parent), la liste

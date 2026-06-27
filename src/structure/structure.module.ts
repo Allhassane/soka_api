@@ -20,7 +20,7 @@ import { ExportJobModule } from 'src/export-async/export-job.module';
     LogActivitiesModule,
     UserModule,
     LevelModule,
-    ExportJobModule,
+    // Dépendance circulaire StructureModule <-> ExportJobModule : un seul import, en forwardRef.
     forwardRef(() => ExportJobModule),
   ],
   controllers: [StructureController],

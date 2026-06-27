@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -8,11 +9,19 @@ import {
   Put,
   Query,
   Request,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
+import { mkdirSync } from 'fs';
+import { randomUUID } from 'crypto';
 import {
   ApiBearerAuth,
   ApiBody,
+  ApiConsumes,
   ApiOperation,
   ApiParam,
   ApiResponse,
@@ -53,6 +62,43 @@ export class JournalEditionController {
   @ApiResponse({ status: 404, description: 'Campagne d abonnement liee introuvable.' })
   store(@Body() payload: CreateJournalEditionDto, @Request() req) {
     return this.service.store(payload, req.user.uuid as string);
+  }
+
+  @Post('upload')
+  @ApiOperation({
+    summary: 'Upload d un fichier d edition (couverture ou version numerique)',
+    description:
+      'Stocke le fichier dans uploads/journals et renvoie son URL relative (a stocker dans cover_image / digital_file). Champ multipart « file ».',
+  })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (_req, _file, cb) => {
+          const dir = './uploads/journals';
+          mkdirSync(dir, { recursive: true });
+          cb(null, dir);
+        },
+        filename: (_req, file, cb) => {
+          cb(null, `${Date.now()}-${randomUUID()}${extname(file.originalname)}`);
+        },
+      }),
+      limits: { fileSize: 25 * 1024 * 1024 }, // 25 Mo
+    }),
+  )
+  @ApiResponse({ status: 201, description: 'Fichier stocke. Renvoie { url, filename }.' })
+  @ApiResponse({ status: 400, description: 'Aucun fichier recu.' })
+  @ApiResponse({ status: 401, description: 'Non autorise.' })
+  uploadFile(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException(
+        'Aucun fichier reçu (champ multipart « file » attendu).',
+      );
+    }
+    return {
+      url: `/uploads/journals/${file.filename}`,
+      filename: file.originalname,
+    };
   }
 
   @Get(':uuid')

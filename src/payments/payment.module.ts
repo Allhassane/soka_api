@@ -10,6 +10,7 @@ import { MemberEntity } from 'src/members/entities/member.entity';
 import { SubscriptionEntity } from 'src/subscriptions/entities/subscription.entity';
 import { DonateEntity } from 'src/donate/entities/donate.entity';
 import { CinetPayService } from './cinetpay.service';
+import { HubService } from './hub.service';
 import { DonatePaymentEntity } from 'src/donate-payment/entities/donate-payment.entity';
 import { SubscriptionPaymentEntity } from 'src/subscription-payment/entities/subscription-payment.entity';
 import { StructureModule } from 'src/structure/structure.module';
@@ -29,8 +30,9 @@ import { ExportJobModule } from '../export-async/export-job.module';
   controllers: [PaymentController],
   providers: [
     PaymentService,
-    CinetPayService
+    CinetPayService,
+    HubService,
   ],
-  exports: [PaymentService],
+  exports: [PaymentService, HubService],
 })
 export class PaymentModule {}

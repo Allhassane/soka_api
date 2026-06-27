@@ -1,6 +1,7 @@
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 import { StructureEntity } from 'src/structure/entities/structure.entity';
+import { ActivityTypeEntity } from 'src/activity-types/entities/activity-type.entity';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -48,6 +49,13 @@ export class ActivityEntity extends DateTimeEntity {
   @Column({ type: 'varchar', length: 64, nullable: true })
   type: string | null;
 
+  @Column({ type: 'char', length: 36, nullable: true })
+  activity_type_uuid: string | null;
+
+  @ManyToOne(() => ActivityTypeEntity, { nullable: true, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'activity_type_uuid', referencedColumnName: 'uuid' })
+  activityType: ActivityTypeEntity | null;
+
   @Column({ type: 'varchar', length: 191, nullable: true })
   location: string | null;
 
@@ -57,6 +65,15 @@ export class ActivityEntity extends DateTimeEntity {
 
   @Column({ type: 'datetime' })
   ends_at: Date;
+
+  @Column({ type: 'int', nullable: true })
+  capacity: number | null;
+
+  @Column({ type: 'boolean', default: false })
+  is_recurring: boolean;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  recurrence_rule: string | null;
 
   @Column({ type: 'longtext', nullable: true })
   organigram: string | null;
@@ -86,6 +103,9 @@ export class ActivityEntity extends DateTimeEntity {
 
   @Column({ type: 'longtext', nullable: true })
   target_responsibility_levels: string | null;
+
+  @Column({ type: 'longtext', nullable: true })
+  target_departments: string | null;
 
   @Column({ type: 'boolean', default: false })
   include_descendants: boolean;

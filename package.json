@@ -44,7 +44,7 @@
     "joi": "^17.13.3",
     "multer": "^2.0.2",
     "mysql2": "^3.15.3",
-    "nodemailer": "^7.0.10",
+    "nodemailer": "^9.0.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",
@@ -107,6 +107,9 @@
     ],
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
+    "moduleNameMapper": {
+      "^src/(.*)$": "<rootDir>/$1"
+    },
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },

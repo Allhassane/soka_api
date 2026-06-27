@@ -43,6 +43,7 @@ export class JournalDestinationService {
     page = 1,
     limit = 10,
     zone_uuid?: string,
+    search?: string,
   ): Promise<{ data: JournalDestinationEntity[]; meta: Omit<PaginateMeta, 'page'> }> {
     const admin = await this.getAdmin(admin_uuid);
     const qb = this.destRepo
@@ -53,6 +54,13 @@ export class JournalDestinationService {
 
     if (zone_uuid) {
       qb.andWhere('destination.zone_uuid = :zone_uuid', { zone_uuid });
+    }
+
+    if (search?.trim()) {
+      qb.andWhere(
+        '(destination.name LIKE :s OR destination.ville LIKE :s OR destination.quartier LIKE :s)',
+        { s: `%${search.trim()}%` },
+      );
     }
 
     const [data, total] = await qb

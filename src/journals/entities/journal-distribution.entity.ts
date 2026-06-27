@@ -10,7 +10,7 @@ import {
 } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { JournalEditionEntity } from './journal-edition.entity';
-import { JournalDestinationEntity } from './journal-destination.entity';
+import { JournalZoneEntity } from './journal-zone.entity';
 
 export enum JournalDistributionStatus {
   PENDING = 'pending',
@@ -27,8 +27,9 @@ export enum NotificationChannel {
 }
 
 /**
- * Distribution d'une édition vers une destination (1 ligne par destination).
- * Trace les alertes envoyées au correspondant et la confirmation de réception.
+ * Distribution d'une édition vers une ZONE (1 ligne par zone).
+ * La quantité provient du besoin dérivé des abonnements ; l'alerte part au
+ * responsable de la zone. Trace l'envoi et la confirmation de réception.
  */
 @Entity({ name: 'journal_distributions' })
 export class JournalDistributionEntity extends DateTimeEntity {
@@ -53,11 +54,14 @@ export class JournalDistributionEntity extends DateTimeEntity {
 
   @Index()
   @Column({ type: 'char', length: 36 })
-  destination_uuid: string;
+  zone_uuid: string;
 
-  @ManyToOne(() => JournalDestinationEntity, { nullable: false })
-  @JoinColumn({ name: 'destination_uuid', referencedColumnName: 'uuid' })
-  destination: JournalDestinationEntity;
+  @ManyToOne(() => JournalZoneEntity, {
+    nullable: false,
+    createForeignKeyConstraints: false,
+  })
+  @JoinColumn({ name: 'zone_uuid', referencedColumnName: 'uuid' })
+  zone: JournalZoneEntity;
 
   /** Quantité prévue / envoyée / livrée */
   @Column({ type: 'int', default: 0 })

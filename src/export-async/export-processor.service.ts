@@ -1,5 +1,5 @@
 // src/export-job/export-processor.service.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ExportJobService } from './export-job.service';
@@ -31,6 +31,9 @@ export class ExportProcessorService {
     @InjectRepository(User)
     private userRepo: Repository<User>,
     private structureService: StructureService,
+    // Dépendance circulaire StructureTreeService <-> ExportProcessorService → forwardRef.
+    @Inject(forwardRef(() => StructureTreeService))
+    private structureTreeService: StructureTreeService,
 
   ) {}
 
@@ -51,7 +54,24 @@ export class ExportProcessorService {
 
       const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
       const member = await this.memberRepo.findOne({ where: { uuid: member_uuid } });
-      const sousGroups = await this.structureService.findByAllChildrens(member_structure_uuid);
+
+      // Périmètre de l'exportateur :
+      //  - ADMIN → AUCUN périmètre : il voit TOUS les paiements de la source. (C'EST LE BUG du
+      //    fichier vide : le compte admin porte une responsabilité sur une PETITE structure
+      //    (ex. un district), donc `responsibilities[0].structure.uuid` n'est PAS vide → l'export
+      //    se scopait à ce district → 0 ligne alors que les paiements viennent de toute l'orga.
+      //    Le repli précédent ne couvrait que le cas « structure absente », pas « petite
+      //    structure ».)
+      //  - RESPONSABLE / MEMBRE → sa structure de responsabilité, à défaut sa structure propre
+      //    (le JWT met souvent `structure: null` quand le niveau de la resp. ≠ niveau de la
+      //    structure du membre — même cause que l'export des membres).
+      const isAdmin = !!admin?.is_admin;
+      const scopeStructureUuid = isAdmin
+        ? null
+        : (member_structure_uuid || member?.structure_uuid || null);
+      const sousGroups = scopeStructureUuid
+        ? await this.structureService.findByAllChildrens(scopeStructureUuid)
+        : [];
 
       await this.exportJobService.updateJobProgress(jobId, 20);
 
@@ -62,11 +82,19 @@ export class ExportProcessorService {
         .leftJoinAndSelect('actor.structure', 'actorStructure')
         .leftJoinAndSelect('p.beneficiary', 'beneficiary')
         .leftJoinAndSelect('beneficiary.structure', 'beneficiaryStructure')
-        .where('p.source_uuid = :source_uuid', { source_uuid })
-        .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups })
-        ;
+        .where('p.source_uuid = :source_uuid', { source_uuid });
 
-      if (status) {
+      // Restreindre au périmètre uniquement s'il existe (sinon : tout le source).
+      if (scopeStructureUuid) {
+        qb.andWhere('actor.structure_uuid IN (:...groups)', {
+          groups: sousGroups.length > 0 ? sousGroups : ['__none__'],
+        });
+      }
+
+      // Filtre de statut. L'option « Tous » du front envoie `status=all` (et non une valeur
+      // vide) : sans ce garde, on faisait `p.status = 'all'` → 0 ligne. 'all' (ou absent) =>
+      // aucun filtre => tous les statuts ; une valeur réelle (success/fail/pending…) filtre.
+      if (status && status !== 'all') {
         qb.andWhere('p.status = :status', { status });
       }
 
@@ -115,45 +143,43 @@ export class ExportProcessorService {
         });
       }
 
-      // Construire les structure trees pour chaque bénéficiaire
+      // Construire les structure trees pour chaque bénéficiaire.
+      // ⚠ getStructureTreeForResponsible recharge TOUTES les structures à chaque
+      // appel → en boucle par bénéficiaire c'est O(N × structures), au point de
+      // paraître « bloqué » sur de gros volumes. On met donc en CACHE par
+      // (structure, niveau) : les nombreux bénéficiaires d'un même sous-groupe ne
+      // déclenchent qu'un seul calcul.
       const beneficiaryStructureTreeMap = new Map<string, any>();
+      const treeCache = new Map<string, any>();
+      const resolveTree = async (
+        structureUuid: string,
+        order: number,
+      ): Promise<any> => {
+        const key = `${structureUuid}:${order}`;
+        if (treeCache.has(key)) return treeCache.get(key);
+        // getStructureTreeForResponsible vit sur StructureTreeService (retiré de
+        // StructureService lors de l'audit P10) ; `order` est accepté mais ignoré
+        // (l'arbre ne dépend que de la structure).
+        const tree = await this.structureTreeService.getStructureTreeForResponsible(
+          structureUuid,
+          order,
+        );
+        treeCache.set(key, tree);
+        return tree;
+      };
 
       for (const p of payments) {
         if (!p.beneficiary?.uuid || !p.beneficiary?.structure_uuid) continue;
 
-        const beneficiaryResponsibilitiesList = responsibilitiesMap.get(p.beneficiary.uuid) || [];
+        const list = responsibilitiesMap.get(p.beneficiary.uuid) || [];
+        const valid = list.filter((r) => r.level_order !== null);
+        const order =
+          valid.length > 0
+            ? Math.min(...valid.map((r) => parseInt(r.level_order)))
+            : 999;
 
-        if (beneficiaryResponsibilitiesList.length > 0) {
-          const validResponsibilities = beneficiaryResponsibilitiesList.filter(r => r.level_order !== null);
-
-          if (validResponsibilities.length > 0) {
-            const highestLevelOrder = Math.min(
-              ...validResponsibilities.map(r => parseInt(r.level_order))
-            );
-
-            // Utilisation correcte du service injecté
-            const tree = await this.structureService.getStructureTreeForResponsible(
-              p.beneficiary.structure_uuid,
-              highestLevelOrder
-            );
-
-            beneficiaryStructureTreeMap.set(p.beneficiary.uuid, tree);
-          } else {
-            // Utilisation correcte du service injecté
-            const tree = await this.structureService.getStructureTreeForResponsible(
-              p.beneficiary.structure_uuid,
-              999
-            );
-            beneficiaryStructureTreeMap.set(p.beneficiary.uuid, tree);
-          }
-        } else {
-          // Utilisation correcte du service injecté
-          const tree = await this.structureService.getStructureTreeForResponsible(
-            p.beneficiary.structure_uuid,
-            999
-          );
-          beneficiaryStructureTreeMap.set(p.beneficiary.uuid, tree);
-        }
+        const tree = await resolveTree(p.beneficiary.structure_uuid, order);
+        beneficiaryStructureTreeMap.set(p.beneficiary.uuid, tree);
       }
 
       await this.exportJobService.updateJobProgress(jobId, 50);
@@ -546,6 +572,3 @@ export class ExportProcessorService {
     }
   }
 }
-
-
-

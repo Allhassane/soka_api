@@ -5,9 +5,12 @@ import {
   Param,
   Post,
   Put,
+  Query,
   Request,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import { Response } from 'express';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -18,7 +21,11 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { JournalDistributionService } from './journal-distribution.service';
-import { AckDeliveryDto, DistributeEditionDto } from './dto/distribute-edition.dto';
+import {
+  AckDeliveryDto,
+  DistributeEditionDto,
+  SweepDistributionsDto,
+} from './dto/distribute-edition.dto';
 
 @ApiBearerAuth()
 @ApiTags('Journal - Distribution')
@@ -86,8 +93,12 @@ export class JournalDistributionController {
   })
   @ApiResponse({ status: 200, description: 'Sweep effectue. Renvoie le compte de late et de relances.' })
   @ApiResponse({ status: 401, description: 'Non autorise.' })
-  sweep(@Request() req) {
-    return this.service.sweepLateAndRemind(req.user.uuid as string);
+  @ApiBody({ type: SweepDistributionsDto, required: false })
+  sweep(@Body() payload: SweepDistributionsDto, @Request() req) {
+    return this.service.sweepLateAndRemind(
+      req.user.uuid as string,
+      payload?.edition_uuid,
+    );
   }
 
   @Get('editions/:uuid/stats')
@@ -112,5 +123,110 @@ export class JournalDistributionController {
   @ApiResponse({ status: 401, description: 'Non autorise.' })
   globalStats(@Request() req) {
     return this.service.globalStats(req.user.uuid as string);
+  }
+
+  @Get('editions/:uuid/needs-by-zone')
+  @ApiOperation({
+    summary: 'Besoin par zone calcule depuis les abonnements',
+    description:
+      "Somme des quantites payees de la campagne liee a l'edition, repartie par zone via la ville du membre (members.city_uuid appartenant aux villes de la zone).",
+  })
+  @ApiParam({ name: 'uuid', description: 'UUID de l edition' })
+  @ApiResponse({ status: 200, description: 'Besoin par zone calcule.' })
+  @ApiResponse({ status: 400, description: 'Edition non liee a une campagne.' })
+  @ApiResponse({ status: 401, description: 'Non autorise.' })
+  @ApiResponse({ status: 404, description: 'Edition introuvable.' })
+  needsByZone(@Param('uuid') edition_uuid: string, @Request() req) {
+    return this.service.computeNeedsByZone(edition_uuid, req.user.uuid as string);
+  }
+
+  @Get('editions/:uuid/zones/:zoneUuid/subscribers')
+  @ApiOperation({
+    summary: 'Abonnes nominatifs d une zone pour une edition',
+    description:
+      "Liste les abonnes (paiements payes de la campagne liee) dont la ville appartient a la zone : nom, matricule, telephone, ville, quantite. Permet de tracer le flow abonne -> ville -> zone.",
+  })
+  @ApiParam({ name: 'uuid', description: 'UUID de l edition' })
+  @ApiParam({ name: 'zoneUuid', description: 'UUID de la zone' })
+  @ApiResponse({ status: 200, description: 'Liste des abonnes de la zone.' })
+  @ApiResponse({ status: 400, description: 'Edition non liee a une campagne.' })
+  @ApiResponse({ status: 401, description: 'Non autorise.' })
+  @ApiResponse({ status: 404, description: 'Edition introuvable.' })
+  zoneSubscribers(
+    @Param('uuid') edition_uuid: string,
+    @Param('zoneUuid') zone_uuid: string,
+    @Request() req,
+  ) {
+    return this.service.subscribersByZone(
+      edition_uuid,
+      zone_uuid,
+      req.user.uuid as string,
+    );
+  }
+
+  @Get('editions/:uuid/printing-report')
+  @ApiOperation({
+    summary: 'Rapport d impression d une edition (3 listings)',
+    description:
+      "Reproduit le fichier Excel PRINTING REPORT depuis le besoin-par-zone : liste d'impression, recap groupe par responsable (sous-totaux) et colisage (etiquettes x/y). Parametre package_size pour la taille de colis.",
+  })
+  @ApiParam({ name: 'uuid', description: 'UUID de l edition' })
+  @ApiResponse({ status: 200, description: 'Rapport d impression calcule.' })
+  @ApiResponse({ status: 400, description: 'Edition non liee a une campagne.' })
+  @ApiResponse({ status: 401, description: 'Non autorise.' })
+  @ApiResponse({ status: 404, description: 'Edition introuvable.' })
+  printingReport(
+    @Param('uuid') edition_uuid: string,
+    @Query('package_size') packageSize: string,
+    @Request() req,
+  ) {
+    return this.service.printingReport(
+      edition_uuid,
+      req.user.uuid as string,
+      packageSize ? Number(packageSize) : undefined,
+    );
+  }
+
+  @Get('editions/:uuid/printing-export')
+  @ApiOperation({
+    summary: 'Export Excel mis en forme du rapport d impression',
+    description:
+      'Genere un classeur .xlsx reproduisant le fichier PRINTING REPORT (RECAP-ABONNES, PRINTING LIST, PACKAGES) avec en-tetes fusionnes, colonne ZONES fusionnee, sous-totaux et total general.',
+  })
+  @ApiParam({ name: 'uuid', description: 'UUID de l edition' })
+  @ApiResponse({ status: 200, description: 'Fichier Excel telecharge.' })
+  async printingReportXlsx(
+    @Param('uuid') edition_uuid: string,
+    @Query('package_size') packageSize: string,
+    @Res() res: Response,
+    @Request() req,
+  ) {
+    const { buffer, filename } = await this.service.buildPrintingWorkbook(
+      edition_uuid,
+      req.user.uuid as string,
+      packageSize ? Number(packageSize) : undefined,
+    );
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"`,
+    );
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+  }
+
+  @Get('members')
+  @ApiOperation({
+    summary: 'Recherche de membres pour le journal',
+    description:
+      'Recherche par nom, prenom, matricule ou telephone. Sert au responsable de zone et au correspondant de destination.',
+  })
+  @ApiResponse({ status: 200, description: 'Liste de membres (max 20).' })
+  @ApiResponse({ status: 401, description: 'Non autorise.' })
+  searchMembers(@Query('q') q: string) {
+    return this.service.searchMembers(q);
   }
 }

@@ -9,6 +9,7 @@ import { User } from 'src/users/entities/user.entity';
 import { MemberEntity } from 'src/members/entities/member.entity';
 import { PaymentModule } from 'src/payments/payment.module';
 import { DonateEntity } from 'src/donate/entities/donate.entity';
+import { SubscriptionPaymentEntity } from 'src/subscription-payment/entities/subscription-payment.entity';
 
 @Module({
   imports: [TypeOrmModule.forFeature(
@@ -16,7 +17,8 @@ import { DonateEntity } from 'src/donate/entities/donate.entity';
       DonatePaymentEntity,
       User,
       MemberEntity,
-      DonateEntity
+      DonateEntity,
+      SubscriptionPaymentEntity
     ]),LogActivitiesModule,UserModule,PaymentModule],
   controllers: [DonatePaymentController],
   providers: [DonatePaymentService],

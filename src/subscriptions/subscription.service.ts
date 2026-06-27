@@ -136,7 +136,29 @@ export class SubscriptionService {
     .andWhere('sp.status = :status', { status: GlobalStatus.SUCCESS })
     .getRawOne();
 
+
   total_campaign_amount = Number(campaignSum?.sum ?? 0);
+
+
+  if (!sousGroups.length) {
+    await this.logService.logAction(
+      'subscriptions-findOne',
+      admin.id,
+      `Consultation de l'abonnement "${subscription.name || subscription.uuid}"`,
+    );
+
+    return {
+      ...subscription,
+      statistics: {
+        total_campaign_amount,
+        total_successful_payments: 0,
+        total_successful_amount: 0,
+        total_members_subscribed: 0,
+        root_structure_uuid: structure_uuid,
+        sous_groups_count: 0,
+      },
+    };
+  }
 
   // Statistiques pour les sous-groupes du responsable
   const responsibleStats = await this.subscriptionPaymentRepo
