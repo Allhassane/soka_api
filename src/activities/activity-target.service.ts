@@ -23,6 +23,7 @@ export interface ResolvedCriteria {
   levels: string[];
   responsibilities: string[];
   responsibility_levels: string[];
+  departments: string[];
   include_descendants: boolean;
   gender: ActivityTargetGender | null;
 }
@@ -87,6 +88,9 @@ export class ActivityTargetService {
       responsibility_levels:
         override?.target_responsibility_levels ??
         this.safeArray(activity?.target_responsibility_levels ?? null),
+      departments:
+        override?.target_departments ??
+        this.safeArray(activity?.target_departments ?? null),
       include_descendants:
         override?.include_descendants ?? activity?.include_descendants ?? false,
       gender: override?.target_gender ?? activity?.target_gender ?? null,
@@ -169,6 +173,10 @@ export class ActivityTargetService {
       qb.andWhere('m.structure_uuid IN (:...structs)', {
         structs: structureScope,
       });
+    }
+
+    if (c.departments.length) {
+      qb.andWhere('m.department_uuid IN (:...depts)', { depts: c.departments });
     }
 
     if (c.gender) {

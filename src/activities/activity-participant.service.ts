@@ -63,43 +63,80 @@ export class ActivityParticipantService {
     payload: AssignParticipantsDto,
     admin_uuid: string,
   ) {
-    if (!payload?.member_uuids?.length) {
-      throw new BadRequestException('Veuillez fournir au moins un membre.');
+    const hasMembers = (payload.member_uuids?.length ?? 0) > 0;
+    const hasGuests = (payload.guests?.length ?? 0) > 0;
+
+    if (!hasMembers && !hasGuests) {
+      throw new BadRequestException(
+        'Veuillez fournir au moins un membre ou un invité.',
+      );
     }
+
     const admin = await this.getAdmin(admin_uuid);
     const activity = await this.activityRepo.findOne({
       where: { uuid: activity_uuid },
     });
     if (!activity) throw new NotFoundException('Activité introuvable');
 
-    const members = await this.memberRepo.find({
-      where: { uuid: In(payload.member_uuids) },
-    });
-    if (members.length !== payload.member_uuids.length) {
-      throw new BadRequestException(
-        'Un ou plusieurs membres sont introuvables.',
-      );
+    const toCreate: ActivityParticipantEntity[] = [];
+    let alreadyAssigned = 0;
+
+    if (hasMembers) {
+      const members = await this.memberRepo.find({
+        where: { uuid: In(payload.member_uuids!) },
+      });
+      if (members.length !== payload.member_uuids!.length) {
+        throw new BadRequestException(
+          'Un ou plusieurs membres sont introuvables.',
+        );
+      }
+
+      const existing = await this.participantRepo.find({
+        where: {
+          activity_uuid,
+          member_uuid: In(payload.member_uuids!),
+        },
+      });
+      alreadyAssigned = existing.length;
+      const existingSet = new Set(existing.map((e) => e.member_uuid));
+
+      members
+        .filter((m) => !existingSet.has(m.uuid))
+        .forEach((m) =>
+          toCreate.push(
+            this.participantRepo.create({
+              activity_uuid,
+              member_uuid: m.uuid,
+              role: payload.role ?? ActivityParticipantRole.PARTICIPANT,
+              structure_uuid_at_invitation: m.structure_uuid ?? null,
+              admin_uuid,
+            }),
+          ),
+        );
     }
 
-    const existing = await this.participantRepo.find({
-      where: {
-        activity_uuid,
-        member_uuid: In(payload.member_uuids),
-      },
-    });
-    const existingSet = new Set(existing.map((e) => e.member_uuid));
-
-    const toCreate = members
-      .filter((m) => !existingSet.has(m.uuid))
-      .map((m) =>
-        this.participantRepo.create({
-          activity_uuid,
-          member_uuid: m.uuid,
-          role: payload.role ?? ActivityParticipantRole.PARTICIPANT,
-          structure_uuid_at_invitation: m.structure_uuid ?? null,
+    if (hasGuests) {
+      for (const guest of payload.guests!) {
+        const guestMember = this.memberRepo.create({
+          firstname: guest.firstname,
+          lastname: guest.lastname,
+          ...(guest.phone ? { phone: guest.phone } : {}),
+          gender: guest.gender,
           admin_uuid,
-        }),
-      );
+          status: 'guest',
+        });
+        const savedGuest = await this.memberRepo.save(guestMember);
+        toCreate.push(
+          this.participantRepo.create({
+            activity_uuid,
+            member_uuid: savedGuest.uuid,
+            role: ActivityParticipantRole.INVITE,
+            structure_uuid_at_invitation: null,
+            admin_uuid,
+          }),
+        );
+      }
+    }
 
     const saved = toCreate.length
       ? await this.participantRepo.save(toCreate)
@@ -108,13 +145,13 @@ export class ActivityParticipantService {
     await this.logService.logAction(
       'activity-participants-assign',
       admin.id,
-      `Assignation de ${saved.length} membre(s) à "${activity.name}" (${existing.length} déjà inscrits)`,
+      `Assignation de ${saved.length} participant(s) à "${activity.name}" (${alreadyAssigned} déjà inscrits)`,
     );
 
     return {
       activity_uuid,
       added: saved.length,
-      already_assigned: existing.length,
+      already_assigned: alreadyAssigned,
       participants: saved,
     };
   }

@@ -55,4 +55,10 @@ export class ResolveTargetsDto {
   @IsOptional()
   @IsEnum(ActivityTargetGender)
   target_gender?: ActivityTargetGender;
+
+  @ApiPropertyOptional({ type: [String], description: 'UUIDs des départements ciblés' })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('all', { each: true })
+  target_departments?: string[];
 }

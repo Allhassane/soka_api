@@ -25,12 +25,17 @@ import { ActivityParticipantService } from './activity-participant.service';
 import { ActivityAttendanceService } from './activity-attendance.service';
 import { ActivityStatsService } from './activity-stats.service';
 import { ActivityTargetService } from './activity-target.service';
+import { ActivityQuotaService } from './activity-quota.service';
+import { ActivityCommitteeService } from './activity-committee.service';
 import { CreateActivityDto } from './dto/create-activity.dto';
 import { UpdateActivityDto } from './dto/update-activity.dto';
 import { AssignParticipantsDto } from './dto/assign-participants.dto';
 import { ResolveTargetsDto } from './dto/resolve-targets.dto';
 import { FilterActivitiesDto } from './dto/filter-activities.dto';
 import { BulkMarkAttendanceDto, MarkAttendanceDto } from './dto/mark-attendance.dto';
+import { CreateActivityQuotaDto, UpdateActivityQuotaDto } from './dto/create-activity-quota.dto';
+import { CreateActivityCommitteeDto, UpdateActivityCommitteeDto } from './dto/create-activity-committee.dto';
+import { CreateActivityCommitteeMemberDto, UpdateActivityCommitteeMemberDto } from './dto/create-activity-committee-member.dto';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 import { ActivityParticipantRole } from './entities/activity-participant.entity';
 
@@ -45,6 +50,8 @@ export class ActivityController {
     private readonly attendanceService: ActivityAttendanceService,
     private readonly statsService: ActivityStatsService,
     private readonly targetService: ActivityTargetService,
+    private readonly quotaService: ActivityQuotaService,
+    private readonly committeeService: ActivityCommitteeService,
   ) {}
 
   // ============================================================
@@ -331,5 +338,191 @@ export class ActivityController {
   @ApiResponse({ status: 404, description: 'Auteur introuvable.' })
   dashboard(@Request() req, @Query('structure_uuid') structure_uuid?: string) {
     return this.statsService.dashboard(req.user.uuid as string, structure_uuid);
+  }
+
+  // ============================================================
+  // QUOTAS
+  // ============================================================
+
+  @Get(':uuid/quotas')
+  @ApiOperation({ summary: 'Liste des quotas par structure pour une activité' })
+  @ApiParam({ name: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Liste des quotas.' })
+  @ApiResponse({ status: 401, description: 'Non autorise.' })
+  @ApiResponse({ status: 404, description: 'Activite introuvable.' })
+  listQuotas(@Param('uuid') activity_uuid: string, @Request() req) {
+    return this.quotaService.list(activity_uuid, req.user.uuid as string);
+  }
+
+  @Get(':uuid/quotas/summary')
+  @ApiOperation({ summary: 'Récapitulatif des quotas alloués/utilisés pour une activité' })
+  @ApiParam({ name: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Récapitulatif des quotas.' })
+  @ApiResponse({ status: 401, description: 'Non autorise.' })
+  @ApiResponse({ status: 404, description: 'Activite introuvable.' })
+  quotaSummary(@Param('uuid') activity_uuid: string, @Request() req) {
+    return this.quotaService.summary(activity_uuid, req.user.uuid as string);
+  }
+
+  @Post(':uuid/quotas')
+  @ApiOperation({ summary: 'Créer un quota pour une structure dans une activité' })
+  @ApiParam({ name: 'uuid' })
+  @ApiBody({ type: CreateActivityQuotaDto })
+  @ApiResponse({ status: 201, description: 'Quota créé avec succès.' })
+  @ApiResponse({ status: 400, description: 'Champs invalides.' })
+  @ApiResponse({ status: 401, description: 'Non autorise.' })
+  @ApiResponse({ status: 404, description: 'Activite ou structure introuvable.' })
+  @ApiResponse({ status: 409, description: 'Quota déjà existant pour cette structure.' })
+  createQuota(
+    @Param('uuid') activity_uuid: string,
+    @Body() payload: CreateActivityQuotaDto,
+    @Request() req,
+  ) {
+    return this.quotaService.create(activity_uuid, payload, req.user.uuid as string);
+  }
+
+  @Put('quotas/:quota_uuid')
+  @ApiOperation({ summary: 'Modifier un quota' })
+  @ApiParam({ name: 'quota_uuid' })
+  @ApiBody({ type: UpdateActivityQuotaDto })
+  @ApiResponse({ status: 200, description: 'Quota modifié.' })
+  @ApiResponse({ status: 400, description: 'Valeur invalide.' })
+  @ApiResponse({ status: 401, description: 'Non autorise.' })
+  @ApiResponse({ status: 404, description: 'Quota introuvable.' })
+  updateQuota(
+    @Param('quota_uuid') uuid: string,
+    @Body() payload: UpdateActivityQuotaDto,
+    @Request() req,
+  ) {
+    return this.quotaService.update(uuid, payload, req.user.uuid as string);
+  }
+
+  @Delete('quotas/:quota_uuid')
+  @ApiOperation({ summary: 'Supprimer un quota (soft delete)' })
+  @ApiParam({ name: 'quota_uuid' })
+  @ApiResponse({ status: 200, description: 'Quota supprimé.' })
+  @ApiResponse({ status: 401, description: 'Non autorise.' })
+  @ApiResponse({ status: 404, description: 'Quota introuvable.' })
+  deleteQuota(@Param('quota_uuid') uuid: string, @Request() req) {
+    return this.quotaService.remove(uuid, req.user.uuid as string);
+  }
+
+  // ============================================================
+  // COMITE D'ORGANISATION
+  // ============================================================
+
+  @Get(':uuid/committees')
+  @ApiOperation({ summary: "Liste des comités d'organisation d'une activité" })
+  @ApiParam({ name: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Liste des comités.' })
+  @ApiResponse({ status: 401, description: 'Non autorise.' })
+  @ApiResponse({ status: 404, description: 'Activite introuvable.' })
+  listCommittees(@Param('uuid') activity_uuid: string, @Request() req) {
+    return this.committeeService.listCommittees(activity_uuid, req.user.uuid as string);
+  }
+
+  @Post(':uuid/committees')
+  @ApiOperation({ summary: "Créer un comité d'organisation pour une activité" })
+  @ApiParam({ name: 'uuid' })
+  @ApiBody({ type: CreateActivityCommitteeDto })
+  @ApiResponse({ status: 201, description: 'Comité créé avec succès.' })
+  @ApiResponse({ status: 400, description: 'Champs invalides.' })
+  @ApiResponse({ status: 401, description: 'Non autorise.' })
+  @ApiResponse({ status: 404, description: 'Activite introuvable.' })
+  createCommittee(
+    @Param('uuid') activity_uuid: string,
+    @Body() payload: CreateActivityCommitteeDto,
+    @Request() req,
+  ) {
+    return this.committeeService.createCommittee(activity_uuid, payload, req.user.uuid as string);
+  }
+
+  @Get('committees/:committee_uuid')
+  @ApiOperation({ summary: "Récupérer un comité par UUID (avec ses membres)" })
+  @ApiParam({ name: 'committee_uuid' })
+  @ApiResponse({ status: 200, description: 'Comité trouvé.' })
+  @ApiResponse({ status: 401, description: 'Non autorise.' })
+  @ApiResponse({ status: 404, description: 'Comité introuvable.' })
+  findOneCommittee(@Param('committee_uuid') uuid: string, @Request() req) {
+    return this.committeeService.findOneCommittee(uuid, req.user.uuid as string);
+  }
+
+  @Put('committees/:committee_uuid')
+  @ApiOperation({ summary: "Modifier un comité d'organisation" })
+  @ApiParam({ name: 'committee_uuid' })
+  @ApiBody({ type: UpdateActivityCommitteeDto })
+  @ApiResponse({ status: 200, description: 'Comité modifié.' })
+  @ApiResponse({ status: 401, description: 'Non autorise.' })
+  @ApiResponse({ status: 404, description: 'Comité introuvable.' })
+  updateCommittee(
+    @Param('committee_uuid') uuid: string,
+    @Body() payload: UpdateActivityCommitteeDto,
+    @Request() req,
+  ) {
+    return this.committeeService.updateCommittee(uuid, payload, req.user.uuid as string);
+  }
+
+  @Delete('committees/:committee_uuid')
+  @ApiOperation({ summary: "Supprimer un comité (soft delete)" })
+  @ApiParam({ name: 'committee_uuid' })
+  @ApiResponse({ status: 200, description: 'Comité supprimé.' })
+  @ApiResponse({ status: 401, description: 'Non autorise.' })
+  @ApiResponse({ status: 404, description: 'Comité introuvable.' })
+  deleteCommittee(@Param('committee_uuid') uuid: string, @Request() req) {
+    return this.committeeService.deleteCommittee(uuid, req.user.uuid as string);
+  }
+
+  // ---- Membres des comités ----
+
+  @Get('committees/:committee_uuid/members')
+  @ApiOperation({ summary: 'Liste des membres d\'un comité' })
+  @ApiParam({ name: 'committee_uuid' })
+  @ApiResponse({ status: 200, description: 'Liste des membres.' })
+  @ApiResponse({ status: 401, description: 'Non autorise.' })
+  @ApiResponse({ status: 404, description: 'Comité introuvable.' })
+  listCommitteeMembers(@Param('committee_uuid') committee_uuid: string, @Request() req) {
+    return this.committeeService.listCommitteeMembers(committee_uuid, req.user.uuid as string);
+  }
+
+  @Post('committees/:committee_uuid/members')
+  @ApiOperation({ summary: 'Ajouter un membre à un comité' })
+  @ApiParam({ name: 'committee_uuid' })
+  @ApiBody({ type: CreateActivityCommitteeMemberDto })
+  @ApiResponse({ status: 201, description: 'Membre ajouté au comité.' })
+  @ApiResponse({ status: 400, description: 'Champs invalides ou déjà président.' })
+  @ApiResponse({ status: 401, description: 'Non autorise.' })
+  @ApiResponse({ status: 404, description: 'Comité ou membre introuvable.' })
+  @ApiResponse({ status: 409, description: 'Membre déjà dans ce comité.' })
+  addCommitteeMember(
+    @Param('committee_uuid') committee_uuid: string,
+    @Body() payload: CreateActivityCommitteeMemberDto,
+    @Request() req,
+  ) {
+    return this.committeeService.addCommitteeMember(committee_uuid, payload, req.user.uuid as string);
+  }
+
+  @Put('committees/members/:member_uuid')
+  @ApiOperation({ summary: 'Modifier le rôle ou la commission d\'un membre du comité' })
+  @ApiParam({ name: 'member_uuid' })
+  @ApiBody({ type: UpdateActivityCommitteeMemberDto })
+  @ApiResponse({ status: 200, description: 'Membre du comité mis à jour.' })
+  @ApiResponse({ status: 401, description: 'Non autorise.' })
+  @ApiResponse({ status: 404, description: 'Membre du comité introuvable.' })
+  updateCommitteeMember(
+    @Param('member_uuid') uuid: string,
+    @Body() payload: UpdateActivityCommitteeMemberDto,
+    @Request() req,
+  ) {
+    return this.committeeService.updateCommitteeMember(uuid, payload, req.user.uuid as string);
+  }
+
+  @Delete('committees/members/:member_uuid')
+  @ApiOperation({ summary: 'Retirer un membre d\'un comité (soft delete)' })
+  @ApiParam({ name: 'member_uuid' })
+  @ApiResponse({ status: 200, description: 'Membre retiré du comité.' })
+  @ApiResponse({ status: 401, description: 'Non autorise.' })
+  @ApiResponse({ status: 404, description: 'Membre du comité introuvable.' })
+  removeCommitteeMember(@Param('member_uuid') uuid: string, @Request() req) {
+    return this.committeeService.removeCommitteeMember(uuid, req.user.uuid as string);
   }
 }
