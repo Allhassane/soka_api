@@ -767,6 +767,73 @@ export class JournalDistributionService {
   }
 
   /**
+   * Résout le chemin de structure (national → sous-groupe) pour un ensemble de
+   * structures « feuilles » (la structure du membre). Remontée EN MÉMOIRE via
+   * parent_uuid (aucun JOIN inter-tables → insensible aux collations).
+   * Renvoie une map : uuid feuille → chemin [{ level, name }] (racine → feuille).
+   */
+  private async resolveStructurePaths(
+    leafUuids: string[],
+  ): Promise<Map<string, { level: string; name: string }[]>> {
+    const result = new Map<string, { level: string; name: string }[]>();
+    const leaves = Array.from(new Set(leafUuids.filter(Boolean)));
+    if (!leaves.length) return result;
+
+    // Charger feuilles + ancêtres, niveau par niveau (max ~8 itérations).
+    const structMap = new Map<
+      string,
+      {
+        name: string;
+        parent_uuid: string | null;
+        level_uuid: string | null;
+      }
+    >();
+    let frontier = leaves.slice();
+    while (frontier.length) {
+      const toLoad = frontier.filter((u) => u && !structMap.has(u));
+      if (!toLoad.length) break;
+      const rows = await this.structureRepo.find({
+        where: { uuid: In(toLoad) },
+        select: ['uuid', 'name', 'parent_uuid', 'level_uuid'],
+      });
+      frontier = [];
+      for (const s of rows) {
+        const parent = (s as { parent_uuid?: string | null }).parent_uuid ?? null;
+        structMap.set(s.uuid, {
+          name: s.name,
+          parent_uuid: parent,
+          level_uuid: (s as { level_uuid?: string | null }).level_uuid ?? null,
+        });
+        if (parent && parent.trim() && !structMap.has(parent)) {
+          frontier.push(parent);
+        }
+      }
+    }
+
+    // Noms des niveaux (table levels) via requête brute.
+    const levelRows: { uuid: string; name: string }[] =
+      await this.structureRepo.manager.query('SELECT uuid, name FROM levels');
+    const levelName = new Map(levelRows.map((l) => [l.uuid, l.name]));
+
+    for (const leaf of leaves) {
+      const path: { level: string; name: string }[] = [];
+      const seen = new Set<string>();
+      let cur: string | null = leaf;
+      while (cur && structMap.has(cur) && !seen.has(cur)) {
+        seen.add(cur);
+        const s = structMap.get(cur)!;
+        path.push({
+          level: s.level_uuid ? (levelName.get(s.level_uuid) ?? '') : '',
+          name: s.name,
+        });
+        cur = s.parent_uuid && s.parent_uuid.trim() ? s.parent_uuid : null;
+      }
+      result.set(leaf, path.reverse()); // racine → feuille
+    }
+    return result;
+  }
+
+  /**
    * Liste NOMINATIVE des abonnés d'une zone pour une édition donnée.
    * Permet de tracer tout le flow : abonné (paiement payé) → sa ville → cette zone.
    * Agrégation en mémoire + requêtes mono-table In(...) → insensible aux collations.
@@ -819,6 +886,7 @@ export class JournalDistributionService {
           'matricule',
           'phone',
           'city_uuid',
+          'structure_uuid',
         ],
       });
       for (const m of members) memberMap.set(m.uuid, m);
@@ -831,6 +899,7 @@ export class JournalDistributionService {
       matricule: string | null;
       phone: string | null;
       city_uuid: string | null;
+      structure_uuid: string | null;
       quantity: number;
     }[] = [];
     const usedCities = new Set<string>();
@@ -845,9 +914,16 @@ export class JournalDistributionService {
         matricule: m.matricule ?? null,
         phone: m.phone ?? null,
         city_uuid: m.city_uuid ?? null,
+        structure_uuid: m.structure_uuid ?? null,
         quantity: p.quantity ?? 0,
       });
     }
+
+    // Chemin de structure complet (national → sous-groupe) par membre, résolu en
+    // remontant parent_uuid EN MÉMOIRE (aucun JOIN → insensible aux collations).
+    const structurePathByLeaf = await this.resolveStructurePaths(
+      rows.map((r) => r.structure_uuid).filter(Boolean) as string[],
+    );
 
     // Noms des villes (In-list, collation-safe)
     const cityNameMap = new Map<string, string>();
@@ -862,6 +938,9 @@ export class JournalDistributionService {
       .map((r) => ({
         ...r,
         city_name: r.city_uuid ? (cityNameMap.get(r.city_uuid) ?? null) : null,
+        structure_path: r.structure_uuid
+          ? (structurePathByLeaf.get(r.structure_uuid) ?? [])
+          : [],
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
 

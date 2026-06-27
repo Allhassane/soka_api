@@ -60,4 +60,22 @@ export class CreateJournalEditionDto {
   @IsInt()
   @Min(0)
   total_printed?: number;
+
+  @ApiPropertyOptional({
+    description: 'URL de la photo de couverture',
+    example: '/uploads/journals/cover.jpg',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  cover_image?: string;
+
+  @ApiPropertyOptional({
+    description: 'URL de la version numérique (PDF)',
+    example: '/uploads/journals/edition.pdf',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  digital_file?: string;
 }

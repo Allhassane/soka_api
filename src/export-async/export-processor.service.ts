@@ -115,45 +115,40 @@ export class ExportProcessorService {
         });
       }
 
-      // Construire les structure trees pour chaque bénéficiaire
+      // Construire les structure trees pour chaque bénéficiaire.
+      // ⚠ getStructureTreeForResponsible recharge TOUTES les structures à chaque
+      // appel → en boucle par bénéficiaire c'est O(N × structures), au point de
+      // paraître « bloqué » sur de gros volumes. On met donc en CACHE par
+      // (structure, niveau) : les nombreux bénéficiaires d'un même sous-groupe ne
+      // déclenchent qu'un seul calcul.
       const beneficiaryStructureTreeMap = new Map<string, any>();
+      const treeCache = new Map<string, any>();
+      const resolveTree = async (
+        structureUuid: string,
+        order: number,
+      ): Promise<any> => {
+        const key = `${structureUuid}:${order}`;
+        if (treeCache.has(key)) return treeCache.get(key);
+        const tree = await this.structureService.getStructureTreeForResponsible(
+          structureUuid,
+          order,
+        );
+        treeCache.set(key, tree);
+        return tree;
+      };
 
       for (const p of payments) {
         if (!p.beneficiary?.uuid || !p.beneficiary?.structure_uuid) continue;
 
-        const beneficiaryResponsibilitiesList = responsibilitiesMap.get(p.beneficiary.uuid) || [];
+        const list = responsibilitiesMap.get(p.beneficiary.uuid) || [];
+        const valid = list.filter((r) => r.level_order !== null);
+        const order =
+          valid.length > 0
+            ? Math.min(...valid.map((r) => parseInt(r.level_order)))
+            : 999;
 
-        if (beneficiaryResponsibilitiesList.length > 0) {
-          const validResponsibilities = beneficiaryResponsibilitiesList.filter(r => r.level_order !== null);
-
-          if (validResponsibilities.length > 0) {
-            const highestLevelOrder = Math.min(
-              ...validResponsibilities.map(r => parseInt(r.level_order))
-            );
-
-            // Utilisation correcte du service injecté
-            const tree = await this.structureService.getStructureTreeForResponsible(
-              p.beneficiary.structure_uuid,
-              highestLevelOrder
-            );
-
-            beneficiaryStructureTreeMap.set(p.beneficiary.uuid, tree);
-          } else {
-            // Utilisation correcte du service injecté
-            const tree = await this.structureService.getStructureTreeForResponsible(
-              p.beneficiary.structure_uuid,
-              999
-            );
-            beneficiaryStructureTreeMap.set(p.beneficiary.uuid, tree);
-          }
-        } else {
-          // Utilisation correcte du service injecté
-          const tree = await this.structureService.getStructureTreeForResponsible(
-            p.beneficiary.structure_uuid,
-            999
-          );
-          beneficiaryStructureTreeMap.set(p.beneficiary.uuid, tree);
-        }
+        const tree = await resolveTree(p.beneficiary.structure_uuid, order);
+        beneficiaryStructureTreeMap.set(p.beneficiary.uuid, tree);
       }
 
       await this.exportJobService.updateJobProgress(jobId, 50);
@@ -546,6 +541,3 @@ export class ExportProcessorService {
     }
   }
 }
-
-
-
