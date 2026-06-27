@@ -169,6 +169,28 @@ export class StructureService {
 
     let parent: StructureEntity | null = null;
     if (updateStructureDto.parent_uuid) {
+      // Anti-boucle : le nouveau parent ne peut être ni la structure elle-même,
+      // ni l'une de ses descendantes (sinon on crée un cycle dans l'arbre).
+      if (updateStructureDto.parent_uuid === uuid) {
+        throw new BadRequestException(
+          'Une structure ne peut pas être son propre parent.',
+        );
+      }
+      const cycle: unknown[] = await this.structureRepo.query(
+        `WITH RECURSIVE up AS (
+           SELECT uuid, parent_uuid FROM structures WHERE uuid = ?
+           UNION ALL
+           SELECT s.uuid, s.parent_uuid FROM structures s
+             JOIN up ON s.uuid = up.parent_uuid
+         )
+         SELECT 1 FROM up WHERE uuid = ? LIMIT 1`,
+        [updateStructureDto.parent_uuid, uuid],
+      );
+      if (cycle.length > 0) {
+        throw new BadRequestException(
+          'Le parent choisi est une sous-structure de cette structure : déplacement impossible (cycle).',
+        );
+      }
       parent = await this.findOne(updateStructureDto.parent_uuid);
     }
 
