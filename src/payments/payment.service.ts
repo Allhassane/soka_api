@@ -158,9 +158,24 @@ export class PaymentService {
     // ------------------------------------------------------
     //  INTÉGRATION HUB PAY
     // ------------------------------------------------------
-    const description = `Paiement ${dto.source} par ${dto.actor_name}`;
+    // Libellé du paiement : il porte le nom du BÉNÉFICIAIRE (et non du payeur).
+    const description = `Paiement ${this.sourceLabelFr(dto.source)} pour ${dto.beneficiary_name}`;
 
-    const hubResponse = await this.hubService.initPayment(total, description);
+    // Métadonnées transmises au guichet SOKA Pay :
+    //  - payerPhone  → pré-remplit le champ « Numéro de téléphone » (modifiable) ;
+    //  - payer/beneficiary name+phone → affichés sur le reçu PDF.
+    const paymentMeta: Record<string, unknown> = {
+      payerName: dto.actor_name,
+      payerPhone: actor.phone ?? '',
+      beneficiaryName: dto.beneficiary_name,
+      beneficiaryPhone: beneficiary.phone ?? '',
+    };
+
+    const hubResponse = await this.hubService.initPayment(
+      total,
+      description,
+      paymentMeta,
+    );
 
     // ------------------------------------------------------
     //  SAUVEGARDE DU PAIEMENT
@@ -1194,5 +1209,19 @@ async findTransactionsForSubGroupsExport(
       .replace(/[^a-zA-Z0-9]/g, '_')
       .replace(/_+/g, '_')
       .toLowerCase();
+  }
+
+  /** Libellé FR de la source de paiement (pour le libellé envoyé au guichet). */
+  private sourceLabelFr(source: PaymentSource): string {
+    switch (source) {
+      case PaymentSource.SUBSCRIPTION:
+        return 'abonnement';
+      case PaymentSource.DONATION:
+        return 'zaïmu';
+      case PaymentSource.SHOP_ITEM:
+        return 'boutique';
+      default:
+        return String(source);
+    }
   }
 }

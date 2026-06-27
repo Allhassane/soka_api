@@ -51,6 +51,7 @@ export class HubService {
   async initPayment(
     amount: number,
     title: string,
+    metadata?: Record<string, unknown>,
     currency = 'XOF',
   ): Promise<{ payment_url: string; transactionId: string }> {
     if (!this.apiKey) {
@@ -64,7 +65,14 @@ export class HubService {
     try {
       const response = await axios.post<HubPaymentLinkResponse>(
         this.apiUrl,
-        { title, amount, currency, returnUrl: this.returnUrl },
+        {
+          title,
+          amount,
+          currency,
+          returnUrl: this.returnUrl,
+          // Identités payeur/bénéficiaire + numéro de pré-remplissage du guichet.
+          ...(metadata ? { metadata } : {}),
+        },
         {
           headers: {
             Authorization: `Bearer ${this.apiKey}`,
