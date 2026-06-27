@@ -12,7 +12,7 @@ import { DonateEntity } from '../donate/entities/donate.entity';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 import { LogActivitiesService } from 'src/log-activities/log-activities.service';
 import { User } from 'src/users/entities/user.entity';
-import { CinetPayService } from './cinetpay.service';
+import { HubService } from './hub.service';
 import { StructureEntity } from 'src/structure/entities/structure.entity';
 import { StructureService } from 'src/structure/structure.service';
 import { DonatePaymentEntity } from 'src/donate-payment/entities/donate-payment.entity';
@@ -59,7 +59,7 @@ export class PaymentService {
 
 
     private readonly logService: LogActivitiesService,
-    private readonly cinetPayService: CinetPayService
+    private readonly hubService: HubService,
   ) { }
 
   // ----------------------------------------------------------
@@ -156,30 +156,11 @@ export class PaymentService {
     const total = unitAmount * quantity;
 
     // ------------------------------------------------------
-    //  INTÉGRATION CINETPAY
+    //  INTÉGRATION HUB PAY
     // ------------------------------------------------------
-
-    // Transaction unique
-    const transactionId = `TRX-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
-
-    // Description lisible dans le dashboard CinetPay
     const description = `Paiement ${dto.source} par ${dto.actor_name}`;
 
-
-    // Appel API CinetPay
-    const cinetResponse = await this.cinetPayService.initPayment(
-      total,
-      description,
-      transactionId,
-      {
-        id: beneficiary.uuid,
-        name: beneficiary.firstname,
-        surname: beneficiary.lastname,
-        email: beneficiary.email ?? '',
-        phone: beneficiary.phone ?? '',
-      }
-    );
-
+    const hubResponse = await this.hubService.initPayment(total, description);
 
     // ------------------------------------------------------
     //  SAUVEGARDE DU PAIEMENT
@@ -187,8 +168,8 @@ export class PaymentService {
     const payment = this.paymentRepo.create({
       ...dto,
       total_amount: total,
-      transaction_id: transactionId,
-      payment_url: cinetResponse.payment_url,
+      transaction_id: hubResponse.transactionId,
+      payment_url: hubResponse.payment_url,
     });
 
     const saved = await this.paymentRepo.save(payment);
@@ -203,9 +184,9 @@ export class PaymentService {
     return {
       message: "Paiement initié avec succès.",
       payment_uuid: saved.uuid,
-      transaction_id: transactionId,
+      transaction_id: hubResponse.transactionId,
       amount: total,
-      payment_url: cinetResponse.payment_url,
+      payment_url: hubResponse.payment_url,
     };
   }
 

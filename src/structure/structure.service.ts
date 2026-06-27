@@ -203,7 +203,7 @@ export class StructureService {
     // 1) Vérifier que le point de départ existe
     const start = await this.structureRepo.findOne({
       where: { uuid },
-      select: ['id', 'uuid'],
+      select: ['id', 'uuid','name'],
     });
     if (!start) {
       throw new NotFoundException('Nœud de départ introuvable');
@@ -212,19 +212,19 @@ export class StructureService {
     // 2) Exécuter le CTE récursif
     const sql = `
       WITH RECURSIVE tree AS (
-        SELECT s.id, s.uuid, s.name, s.parent_id, s.level_id
+        SELECT s.id, s.uuid, s.name, s.parent_id, s.level_uuid
         FROM structures s
         WHERE s.uuid = ?
 
         UNION ALL
 
-        SELECT c.id, c.uuid, c.name, c.parent_id, c.level_id
+        SELECT c.id, c.uuid, c.name, c.parent_id, c.level_uuid
         FROM structures c
         JOIN tree t ON c.parent_id = t.id
       )
       SELECT sg.*
       FROM tree sg
-      JOIN levels l ON l.id = sg.level_id
+      JOIN levels l ON l.uuid = sg.level_uuid
       WHERE l.\`order\` = 7
       ORDER BY sg.name ASC
     `;

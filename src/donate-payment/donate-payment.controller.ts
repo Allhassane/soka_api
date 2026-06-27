@@ -99,6 +99,17 @@ export class DonatePaymentController {
 
 
   @Public()
+  @Post('hub/check/status/:transaction_id')
+  @ApiOperation({ summary: 'Vérifier le statut d’un paiement Hub' })
+  @ApiResponse({ status: 200, description: 'Statut du paiement vérifié' })
+  async hubCheckStatus(@Param('transaction_id') transaction_id: string) {
+    return this.donatePaymentService.confirmHubPayment(
+      { transaction_id },
+      '',
+    );
+  }
+
+  @Public()
   @Post('cinetpay/check/status/:transaction_id')
   @ApiOperation({ summary: 'Vérifier le statut d’un paiement CinetPay' })
   @ApiResponse({ status: 200, description: 'Statut du paiement vérifié' })
