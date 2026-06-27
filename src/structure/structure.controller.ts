@@ -149,10 +149,12 @@ async queueMembersExport(
   @Query('gender') gender?: 'homme' | 'femme',
   @Query('has_gohonzon') has_gohonzon?: boolean,
   @Query('region_uuid') region_uuid?: string,
+  @Query('centre_regional_uuid') centre_regional_uuid?: string,
   @Query('centre_uuid') centre_uuid?: string,
   @Query('chapitre_uuid') chapitre_uuid?: string,
   @Query('district_uuid') district_uuid?: string,
   @Query('groupe_uuid') groupe_uuid?: string,
+  @Query('sous_groupe_uuid') sous_groupe_uuid?: string,
   @Query('department_uuid') department_uuid?: string,
   @Query('division_uuid') division_uuid?: string,
 ) {
@@ -161,10 +163,12 @@ async queueMembersExport(
     gender,
     has_gohonzon,
     region_uuid,
+    centre_regional_uuid,
     centre_uuid,
     chapitre_uuid,
     district_uuid,
     groupe_uuid,
+    sous_groupe_uuid,
     department_uuid,
     division_uuid,
   };
@@ -250,19 +254,23 @@ async downloadMembersExport(
     summary: 'Récupérer les statistiques basées sur la structure du membre connecté',
   })
   @ApiQuery({ name: 'region_uuid', required: false, type: String })
+  @ApiQuery({ name: 'centre_regional_uuid', required: false, type: String })
   @ApiQuery({ name: 'centre_uuid', required: false, type: String })
   @ApiQuery({ name: 'chapitre_uuid', required: false, type: String })
   @ApiQuery({ name: 'district_uuid', required: false, type: String })
   @ApiQuery({ name: 'groupe_uuid', required: false, type: String })
+  @ApiQuery({ name: 'sous_groupe_uuid', required: false, type: String })
   @ApiQuery({ name: 'department_uuid', required: false, type: String })
   @ApiQuery({ name: 'division_uuid', required: false, type: String })
   async getMyStats(
     @Req() req,
     @Query('region_uuid') region_uuid?: string,
+    @Query('centre_regional_uuid') centre_regional_uuid?: string,
     @Query('centre_uuid') centre_uuid?: string,
     @Query('chapitre_uuid') chapitre_uuid?: string,
     @Query('district_uuid') district_uuid?: string,
     @Query('groupe_uuid') groupe_uuid?: string,
+    @Query('sous_groupe_uuid') sous_groupe_uuid?: string,
     @Query('department_uuid') department_uuid?: string,
     @Query('division_uuid') division_uuid?: string,
   ) {
@@ -274,10 +282,12 @@ async downloadMembersExport(
       responsibility_structure_uuid,
       {
         region_uuid,
+        centre_regional_uuid,
         centre_uuid,
         chapitre_uuid,
         district_uuid,
         groupe_uuid,
+        sous_groupe_uuid,
         department_uuid,
         division_uuid,
       }

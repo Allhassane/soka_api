@@ -1,7 +1,7 @@
 -- Table des lignes d'échec d'import (synchronize OFF → création manuelle).
 -- Idempotent. Dédoublonnage par `dedup_key` (matricule | tel:<num> | nom:<...>).
 -- `batch_uuid` (ajout 2026-06-21) : dernier « fichier chargé » (import_batches.uuid) ayant signalé
--- l'échec — permet de regrouper/exporter les erreurs par fichier. Pour une base EXISTANTE, la colonne
+-- l'échec - permet de regrouper/exporter les erreurs par fichier. Pour une base EXISTANTE, la colonne
 -- est ajoutée par `scripts/setup-import-batches.js` (idempotent).
 CREATE TABLE IF NOT EXISTS `import_failures` (
   `id` INT NOT NULL AUTO_INCREMENT,

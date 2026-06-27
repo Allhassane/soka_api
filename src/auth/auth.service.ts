@@ -616,7 +616,7 @@ export class AuthService {
   /**
    * 1re connexion (compte encore au mot de passe par défaut nrh2030) : génère un
    * nouveau mot de passe, l'envoie par SMS, le persiste et lève le flag. AUCUNE
-   * session n'est délivrée — le membre se reconnecte ensuite avec le mot de passe reçu.
+   * session n'est délivrée - le membre se reconnecte ensuite avec le mot de passe reçu.
    * Si le SMS échoue : on NE change RIEN (le compte reste sur nrh2030, retry possible).
    */
   private async handleFirstLogin(user: User) {
@@ -701,7 +701,12 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await this.userRepository.update(
       { id: user.id },
-      { password: hashedPassword },
+      // On lève AUSSI must_change_password : le mot de passe envoyé par SMS est définitif,
+      // le membre doit pouvoir se connecter directement avec. Sans ça, un compte encore au
+      // défaut (must_change_password = true) verrait login() relancer handleFirstLogin, qui
+      // régénère un autre mot de passe et ne délivre aucune session → « le mot de passe reçu
+      // par SMS ne marche pas ».
+      { password: hashedPassword, must_change_password: false },
     );
 
     // Marque l'envoi (anti-spam) seulement quand un SMS part réellement.

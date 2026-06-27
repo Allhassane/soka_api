@@ -32,6 +32,7 @@ export interface MemberStatsFilters {
   chapitre_uuid?: string;
   district_uuid?: string;
   groupe_uuid?: string;
+  sous_groupe_uuid?: string;
   department_uuid?: string;
   division_uuid?: string;
 }
@@ -710,7 +711,7 @@ export class StructureTreeService {
   // --- Cache du dataset « structure_tree » -------------------------------------------
   // Construire la structureMap complète (toutes structures + niveaux + counts +
   // responsables + totaux) coûte plusieurs secondes. Avant, `getStructureTreeForResponsible`
-  // refaisait TOUT ce travail à CHAQUE appel — or il est appelé UNE FOIS PAR MEMBRE dans
+  // refaisait TOUT ce travail à CHAQUE appel - or il est appelé UNE FOIS PAR MEMBRE dans
   // les listes paginées → ~10 rechargements complets/page → ~57 s → timeout passerelle (500).
   // On construit donc la map UNE SEULE FOIS et on la réutilise (TTL court ; map en lecture
   // seule après construction). Le promise est mémoïsé → pas de double construction en
@@ -725,7 +726,7 @@ export class StructureTreeService {
   /**
    * structure_tree filtré pour une structure cible.
    * ⚠ `responsibleLevelOrder` est conservé pour compatibilité d'appel mais n'influence PAS
-   * la sortie (la coupe se fait à la structure cible, pas au niveau) — comportement
+   * la sortie (la coupe se fait à la structure cible, pas au niveau) - comportement
    * identique à l'implémentation précédente. La construction du dataset global est mise en
    * cache et réutilisée pour tous les membres d'une même requête, et le résultat filtré est
    * mémoïsé par `structure_uuid` (deux membres d'une même structure → même arbre).
@@ -875,7 +876,7 @@ export class StructureTreeService {
   /**
    * À partir d'une `structureMap` déjà construite, produit le structure_tree filtré pour
    * UNE structure cible : remontée jusqu'à la racine puis coupe à la structure cible.
-   * FONCTION PURE (aucune requête DB) — c'est ce qui rend l'appel par-membre bon marché.
+   * FONCTION PURE (aucune requête DB) - c'est ce qui rend l'appel par-membre bon marché.
    */
   private buildFilteredTreeFromMap(
     structureMap: Map<string, any>,
@@ -1858,9 +1859,12 @@ export class StructureTreeService {
     }
 
     // 1. Déterminer la structure de base selon les filtres
+    //    (du plus spécifique au plus général : sous-groupe → … → centre régional → région)
     let targetStructureUuid = memberStructureUuid;
 
-    if (filters?.groupe_uuid) {
+    if (filters?.sous_groupe_uuid) {
+      targetStructureUuid = filters.sous_groupe_uuid;
+    } else if (filters?.groupe_uuid) {
       targetStructureUuid = filters.groupe_uuid;
     } else if (filters?.district_uuid) {
       targetStructureUuid = filters.district_uuid;
@@ -1868,6 +1872,8 @@ export class StructureTreeService {
       targetStructureUuid = filters.chapitre_uuid;
     } else if (filters?.centre_uuid) {
       targetStructureUuid = filters.centre_uuid;
+    } else if (filters?.centre_regional_uuid) {
+      targetStructureUuid = filters.centre_regional_uuid;
     } else if (filters?.region_uuid) {
       targetStructureUuid = filters.region_uuid;
     }
@@ -2072,6 +2078,8 @@ export class StructureTreeService {
         breadcrumb.district = { uuid: structure.uuid, name: structure.name };
       } else if (levelName === 'GROUPE') {
         breadcrumb.groupe = { uuid: structure.uuid, name: structure.name };
+      } else if (levelName === 'SOUS_GROUPE') {
+        breadcrumb.sous_groupe = { uuid: structure.uuid, name: structure.name };
       }
 
       currentUuid = structure.parent_uuid ?? null;
@@ -2230,10 +2238,12 @@ export class StructureTreeService {
         let baseStructureUuid = structure_uuid;
 
         if (filterParams?.region_uuid) baseStructureUuid = filterParams.region_uuid;
+        if (filterParams?.centre_regional_uuid) baseStructureUuid = filterParams.centre_regional_uuid;
         if (filterParams?.centre_uuid) baseStructureUuid = filterParams.centre_uuid;
         if (filterParams?.chapitre_uuid) baseStructureUuid = filterParams.chapitre_uuid;
         if (filterParams?.district_uuid) baseStructureUuid = filterParams.district_uuid;
         if (filterParams?.groupe_uuid) baseStructureUuid = filterParams.groupe_uuid;
+        if (filterParams?.sous_groupe_uuid) baseStructureUuid = filterParams.sous_groupe_uuid;
 
         await this.exportJobService.updateJobProgress(job.uuid, 30);
 
@@ -3275,10 +3285,12 @@ export class StructureTreeService {
 
     // Déterminer la structure cible (ordre de priorité du plus spécifique au plus général)
     const targetStructureUuid =
+      filterParams?.sous_groupe_uuid ||
       filterParams?.groupe_uuid ||
       filterParams?.district_uuid ||
       filterParams?.chapitre_uuid ||
       filterParams?.centre_uuid ||
+      filterParams?.centre_regional_uuid ||
       filterParams?.region_uuid ||
       structure_uuid;
 
@@ -3362,9 +3374,12 @@ export class StructureTreeService {
     }
 
     // Déterminer la structure cible
+    //    (du plus spécifique au plus général : sous-groupe → … → centre régional → région)
     let targetStructureUuid = responsibility_structure_uuid;
 
-    if (filters?.groupe_uuid) {
+    if (filters?.sous_groupe_uuid) {
+      targetStructureUuid = filters.sous_groupe_uuid;
+    } else if (filters?.groupe_uuid) {
       targetStructureUuid = filters.groupe_uuid;
     } else if (filters?.district_uuid) {
       targetStructureUuid = filters.district_uuid;
@@ -3372,6 +3387,8 @@ export class StructureTreeService {
       targetStructureUuid = filters.chapitre_uuid;
     } else if (filters?.centre_uuid) {
       targetStructureUuid = filters.centre_uuid;
+    } else if (filters?.centre_regional_uuid) {
+      targetStructureUuid = filters.centre_regional_uuid;
     } else if (filters?.region_uuid) {
       targetStructureUuid = filters.region_uuid;
     }
@@ -3926,9 +3943,12 @@ export class StructureTreeService {
     }
 
     // Déterminer la structure cible
+    //    (du plus spécifique au plus général : sous-groupe → … → centre régional → région)
     let targetStructureUuid = responsibility_structure_uuid;
 
-    if (filters?.groupe_uuid) {
+    if (filters?.sous_groupe_uuid) {
+      targetStructureUuid = filters.sous_groupe_uuid;
+    } else if (filters?.groupe_uuid) {
       targetStructureUuid = filters.groupe_uuid;
     } else if (filters?.district_uuid) {
       targetStructureUuid = filters.district_uuid;
@@ -3936,6 +3956,8 @@ export class StructureTreeService {
       targetStructureUuid = filters.chapitre_uuid;
     } else if (filters?.centre_uuid) {
       targetStructureUuid = filters.centre_uuid;
+    } else if (filters?.centre_regional_uuid) {
+      targetStructureUuid = filters.centre_regional_uuid;
     } else if (filters?.region_uuid) {
       targetStructureUuid = filters.region_uuid;
     }

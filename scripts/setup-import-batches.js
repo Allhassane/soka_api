@@ -1,5 +1,5 @@
 /**
- * setup-import-batches.js — IDEMPOTENT
+ * setup-import-batches.js - IDEMPOTENT
  *
  * Met en place le suivi des erreurs d'import « par fichier chargé » :
  *   1. crée la table `import_batches` (un enregistrement par commit d'import) si absente ;

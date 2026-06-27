@@ -7,6 +7,7 @@ export interface MemberStatsFilters {
   chapitre_uuid?: string;
   district_uuid?: string;
   groupe_uuid?: string;
+  sous_groupe_uuid?: string;
   department_uuid?: string;
   division_uuid?: string;
 }
@@ -44,5 +45,6 @@ export interface MemberStatsResponse {
     chapitre?: { uuid: string; name: string };
     district?: { uuid: string; name: string };
     groupe?: { uuid: string; name: string };
+    sous_groupe?: { uuid: string; name: string };
   };
 }
