@@ -13,10 +13,12 @@ import { MemberEntity } from 'src/members/entities/member.entity';
 import { MakeDonationPaymentDto } from './dto/make-donation-payment';
 import { PaymentSource } from 'src/payments/dto/create-payment.dto';
 import { PaymentService } from 'src/payments/payment.service';
+import { HubService } from 'src/payments/hub.service';
 import axios from 'axios';
 import { PaymentStatus } from 'src/payments/entities/payment.entity';
 import { DonateEntity } from 'src/donate/entities/donate.entity';
 import { DonateCategory } from 'src/shared/enums/donate.enum';
+import { SubscriptionPaymentEntity } from 'src/subscription-payment/entities/subscription-payment.entity';
 
 @Injectable()
 export class DonatePaymentService {
@@ -28,6 +30,9 @@ export class DonatePaymentService {
     private readonly donateCampaignRepo: Repository<DonateEntity>,
 
 
+    @InjectRepository(SubscriptionPaymentEntity)
+    private readonly subscriptionPaymentRepo: Repository<SubscriptionPaymentEntity>,
+
     private readonly logService: LogActivitiesService,
 
     @InjectRepository(User)
@@ -37,6 +42,7 @@ export class DonatePaymentService {
     private readonly memberRepo: Repository<MemberEntity>,
 
     private readonly paymentService: PaymentService,
+    private readonly hubService: HubService,
   ) { }
 
   // ============================================================
@@ -246,6 +252,92 @@ export class DonatePaymentService {
     donation.status = status;
 
     return await this.donateRepo.save(donation);
+  }
+
+  async confirmHubPayment(payload: { transaction_id: string }, admin_uuid: string) {
+    try {
+      const { transaction_id } = payload;
+
+      if (!transaction_id) {
+        throw new BadRequestException('transaction_id manquant');
+      }
+
+      const hubStatus = await this.hubService.checkPaymentStatus(transaction_id);
+
+      const payment = await this.paymentService.findByTransactionIdOrFail(
+        transaction_id,
+        admin_uuid,
+      );
+
+      if (hubStatus.paid === true) {
+        await this.paymentService.updatePayment(payment.uuid, {
+          status: GlobalStatus.SUCCESS,
+          payment_status: PaymentStatus.PAID,
+        });
+
+        const donation = await this.donateRepo.findOne({
+          where: { payment_uuid: payment.uuid },
+        });
+
+        if (donation) {
+          donation.status = GlobalStatus.SUCCESS;
+          await this.donateRepo.save(donation);
+        }
+
+        const subscriptionPayment = await this.subscriptionPaymentRepo.findOne({
+          where: { payment_uuid: payment.uuid },
+        });
+
+        if (subscriptionPayment) {
+          subscriptionPayment.status = GlobalStatus.SUCCESS;
+          await this.subscriptionPaymentRepo.save(subscriptionPayment);
+        }
+
+        return {
+          success: true,
+          message: 'Paiement confirmé avec succès',
+          transaction_id,
+          donation_uuid: donation?.uuid ?? null,
+          hub_payment: hubStatus.payment ?? null,
+        };
+      }
+
+      const hubPaymentStatus = hubStatus.payment?.status?.toLowerCase();
+      const isFailed =
+        hubPaymentStatus === 'failed' ||
+        hubPaymentStatus === 'cancelled' ||
+        hubPaymentStatus === 'canceled';
+
+      if (isFailed) {
+        await this.paymentService.updatePayment(payment.uuid, {
+          status: GlobalStatus.FAILED,
+          payment_status: PaymentStatus.FAILED,
+        });
+
+        const donation = await this.donateRepo.findOne({
+          where: { payment_uuid: payment.uuid },
+        });
+
+        if (donation) {
+          donation.status = GlobalStatus.FAILED;
+          await this.donateRepo.save(donation);
+        }
+
+        throw new BadRequestException('Paiement échoué');
+      }
+
+      throw new BadRequestException('Le paiement est en attente de validation.');
+    } catch (error) {
+      console.error('Erreur vérification Hub :', error.response?.data ?? error.message);
+
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+
+      throw new BadRequestException(
+        error.response?.data?.message ?? error.message,
+      );
+    }
   }
 
   async confirmPayment(payload: any, admin_uuid: string) {
