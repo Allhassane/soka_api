@@ -39,8 +39,14 @@ export class JournalDestinationController {
   @ApiResponse({ status: 200, description: 'Retour paginé' })
   @ApiResponse({ status: 401, description: 'Non autorise.' })
   findAll(@Request() req, @Query() query: JournalDestinationPaginationQueryDto) {
-    const { page, limit, zone_uuid } = query;
-    return this.service.findAll(req.user.uuid as string, page, limit, zone_uuid);
+    const { page, limit, zone_uuid, search } = query;
+    return this.service.findAll(
+      req.user.uuid as string,
+      page,
+      limit,
+      zone_uuid,
+      search,
+    );
   }
 
   @Post()

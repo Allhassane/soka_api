@@ -1,6 +1,7 @@
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 import { StructureEntity } from 'src/structure/entities/structure.entity';
+import { MemberEntity } from 'src/members/entities/member.entity';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -13,6 +14,7 @@ import {
 } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { JournalDestinationEntity } from './journal-destination.entity';
+import { JournalZoneCityEntity } from './journal-zone-city.entity';
 
 /**
  * Zone de distribution du journal.
@@ -47,6 +49,20 @@ export class JournalZoneEntity extends DateTimeEntity {
   @JoinColumn({ name: 'structure_uuid', referencedColumnName: 'uuid' })
   structure: StructureEntity | null;
 
+  /** Responsable de la zone (coordonne la distribution de toutes ses destinations) */
+  @Column({ type: 'char', length: 36, nullable: true })
+  responsible_member_uuid: string | null;
+
+  @ManyToOne(() => MemberEntity, { nullable: true, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'responsible_member_uuid', referencedColumnName: 'uuid' })
+  responsible: MemberEntity | null;
+
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  responsible_phone: string | null;
+
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  responsible_phone_whatsapp: string | null;
+
   @Column({ type: 'longtext', nullable: true })
   history: string;
 
@@ -58,4 +74,8 @@ export class JournalZoneEntity extends DateTimeEntity {
 
   @OneToMany(() => JournalDestinationEntity, (d) => d.zone)
   destinations: JournalDestinationEntity[];
+
+  /** Villes (référentiel cities) couvertes par la zone */
+  @OneToMany(() => JournalZoneCityEntity, (zc) => zc.zone)
+  zoneCities: JournalZoneCityEntity[];
 }

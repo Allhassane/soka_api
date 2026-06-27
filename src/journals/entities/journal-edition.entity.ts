@@ -70,6 +70,14 @@ export class JournalEditionEntity extends DateTimeEntity {
   @Column({ type: 'int', default: 0 })
   total_printed: number;
 
+  /** Photo de couverture (URL relative, ex : /uploads/journals/xxx.jpg) — facultatif */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  cover_image: string | null;
+
+  /** Version numérique de l'édition (URL relative du PDF) — facultatif */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  digital_file: string | null;
+
   @Column({ type: 'longtext', nullable: true })
   history: string;
 

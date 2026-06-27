@@ -78,19 +78,80 @@ export class ExportProcessorService {
       //console.log('paiements trouvés:', payments);
       await this.exportJobService.updateJobProgress(jobId, 40);
 
+      // Récupérer les responsabilités des bénéficiaires
+      const beneficiaryUuids = payments
+        .map(p => p.beneficiary?.uuid)
+        .filter(Boolean);
+
+      let beneficiaryResponsibilities: any[] = [];
+      if (beneficiaryUuids.length > 0) {
+        beneficiaryResponsibilities = await this.memberRepo
+          .createQueryBuilder('m')
+          .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
+          .innerJoin('responsibilities', 'r', 'r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL')
+          .leftJoin('levels', 'l', 'l.uuid = r.level_uuid')
+          .select([
+            'm.uuid AS member_uuid',
+            'r.uuid AS responsibility_uuid',
+            'r.name AS responsibility_name',
+            'r.level_uuid AS level_uuid',
+            'l.name AS level_name',
+            'l.order AS level_order',
+          ])
+          .where('m.uuid IN (:...uuids)', { uuids: beneficiaryUuids })
+          .andWhere('m.deleted_at IS NULL')
+          .getRawMany();
+      }
+
+      // Grouper les responsabilités par bénéficiaire
+      const responsibilitiesMap = new Map<string, any[]>();
+      for (const br of beneficiaryResponsibilities) {
+        if (!responsibilitiesMap.has(br.member_uuid)) {
+          responsibilitiesMap.set(br.member_uuid, []);
+        }
+        responsibilitiesMap.get(br.member_uuid)!.push({
+          uuid: br.responsibility_uuid,
+          name: br.responsibility_name,
+          level_uuid: br.level_uuid,
+          level_name: br.level_name,
+          level_order: br.level_order,
+        });
+      }
+
       // Construire les structure trees pour chaque bénéficiaire.
-      // Résolveur PAR REQUÊTE (service optimisé) : un seul build lourd, mémoïsé par structure.
-      // L'arbre ne dépend que de la structure du bénéficiaire (le niveau de responsabilité
-      // n'influence pas la coupe) → la requête de responsabilités par-bénéficiaire devenait inutile.
+      // ⚠ getStructureTreeForResponsible recharge TOUTES les structures à chaque
+      // appel → en boucle par bénéficiaire c'est O(N × structures), au point de
+      // paraître « bloqué » sur de gros volumes. On met donc en CACHE par
+      // (structure, niveau) : les nombreux bénéficiaires d'un même sous-groupe ne
+      // déclenchent qu'un seul calcul.
       const beneficiaryStructureTreeMap = new Map<string, any>();
-      const resolveTree = await this.structureTreeService.createStructureTreeResolver();
+      const treeCache = new Map<string, any>();
+      const resolveTree = async (
+        structureUuid: string,
+        order: number,
+      ): Promise<any> => {
+        const key = `${structureUuid}:${order}`;
+        if (treeCache.has(key)) return treeCache.get(key);
+        const tree = await this.structureService.getStructureTreeForResponsible(
+          structureUuid,
+          order,
+        );
+        treeCache.set(key, tree);
+        return tree;
+      };
 
       for (const p of payments) {
         if (!p.beneficiary?.uuid || !p.beneficiary?.structure_uuid) continue;
-        beneficiaryStructureTreeMap.set(
-          p.beneficiary.uuid,
-          resolveTree(p.beneficiary.structure_uuid),
-        );
+
+        const list = responsibilitiesMap.get(p.beneficiary.uuid) || [];
+        const valid = list.filter((r) => r.level_order !== null);
+        const order =
+          valid.length > 0
+            ? Math.min(...valid.map((r) => parseInt(r.level_order)))
+            : 999;
+
+        const tree = await resolveTree(p.beneficiary.structure_uuid, order);
+        beneficiaryStructureTreeMap.set(p.beneficiary.uuid, tree);
       }
 
       await this.exportJobService.updateJobProgress(jobId, 50);
@@ -483,6 +544,3 @@ export class ExportProcessorService {
     }
   }
 }
-
-
-
