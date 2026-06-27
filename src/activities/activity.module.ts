@@ -3,11 +3,16 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ActivityEntity } from './entities/activity.entity';
 import { ActivityParticipantEntity } from './entities/activity-participant.entity';
 import { ActivityAttendanceEntity } from './entities/activity-attendance.entity';
+import { ActivityQuotaEntity } from './entities/activity-quota.entity';
+import { ActivityCommitteeEntity } from './entities/activity-committee.entity';
+import { ActivityCommitteeMemberEntity } from './entities/activity-committee-member.entity';
 import { ActivityService } from './activity.service';
 import { ActivityParticipantService } from './activity-participant.service';
 import { ActivityAttendanceService } from './activity-attendance.service';
 import { ActivityStatsService } from './activity-stats.service';
 import { ActivityTargetService } from './activity-target.service';
+import { ActivityQuotaService } from './activity-quota.service';
+import { ActivityCommitteeService } from './activity-committee.service';
 import { ActivityController } from './activity.controller';
 import { LogActivitiesModule } from 'src/log-activities/log-activities.module';
 import { UserModule } from 'src/users/user.module';
@@ -22,6 +27,9 @@ import { StructureEntity } from 'src/structure/entities/structure.entity';
       ActivityEntity,
       ActivityParticipantEntity,
       ActivityAttendanceEntity,
+      ActivityQuotaEntity,
+      ActivityCommitteeEntity,
+      ActivityCommitteeMemberEntity,
       User,
       MemberEntity,
       StructureEntity,
@@ -37,6 +45,8 @@ import { StructureEntity } from 'src/structure/entities/structure.entity';
     ActivityAttendanceService,
     ActivityStatsService,
     ActivityTargetService,
+    ActivityQuotaService,
+    ActivityCommitteeService,
   ],
   exports: [
     ActivityService,
@@ -44,6 +54,8 @@ import { StructureEntity } from 'src/structure/entities/structure.entity';
     ActivityAttendanceService,
     ActivityStatsService,
     ActivityTargetService,
+    ActivityQuotaService,
+    ActivityCommitteeService,
   ],
 })
 export class ActivityModule {}

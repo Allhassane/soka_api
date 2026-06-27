@@ -5,12 +5,14 @@ import {
   IsBoolean,
   IsDate,
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import {
@@ -88,11 +90,16 @@ export class CreateActivityDto {
   @IsString()
   description?: string;
 
-  @ApiPropertyOptional({ description: 'Type' })
+  @ApiPropertyOptional({ description: 'Type (texte libre, déprécié)' })
   @IsOptional()
   @IsString()
   @MaxLength(64)
   type?: string;
+
+  @ApiPropertyOptional({ description: 'UUID du type d\'activité' })
+  @IsOptional()
+  @IsUUID()
+  activity_type_uuid?: string;
 
   @ApiPropertyOptional({ description: 'Lieu' })
   @IsOptional()
@@ -111,6 +118,25 @@ export class CreateActivityDto {
   @IsDate({ message: 'Date de fin invalide' })
   @IsNotEmpty()
   ends_at: Date;
+
+  @ApiPropertyOptional({ description: 'Capacité du lieu (nombre de places)', minimum: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  capacity?: number;
+
+  @ApiPropertyOptional({ description: 'Activité récurrente', default: false })
+  @IsOptional()
+  @IsBoolean()
+  is_recurring?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Règle de récurrence (ex: "weekly:sunday", "monthly:3rd-sunday", "monthly:custom")',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  recurrence_rule?: string;
 
   @ApiPropertyOptional({
     type: OrganigramDto,
@@ -171,6 +197,15 @@ export class CreateActivityDto {
   @IsArray()
   @IsUUID('all', { each: true })
   target_responsibility_levels?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'UUIDs des départements ciblés (hommes, femmes, jeunesse, etc.)',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('all', { each: true })
+  target_departments?: string[];
 
   @ApiPropertyOptional({
     description: 'Inclure recursivement les sous-structures',
