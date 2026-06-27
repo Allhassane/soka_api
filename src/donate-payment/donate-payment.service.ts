@@ -88,6 +88,7 @@ export class DonatePaymentService {
         where: {
           donate_uuid: donate.uuid,
           beneficiary_uuid: beneficiary.uuid,
+          status: GlobalStatus.SUCCESS,
         },
       });
 

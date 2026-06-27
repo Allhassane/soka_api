@@ -79,6 +79,7 @@ export class SubscriptionPaymentService {
         where: {
           subscription_uuid: subscription.uuid,
           beneficiary_uuid: beneficiary.uuid,
+          status: GlobalStatus.SUCCESS,
         },
       });
 
