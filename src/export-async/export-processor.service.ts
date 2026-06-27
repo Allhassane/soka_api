@@ -54,7 +54,24 @@ export class ExportProcessorService {
 
       const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
       const member = await this.memberRepo.findOne({ where: { uuid: member_uuid } });
-      const sousGroups = await this.structureService.findByAllChildrens(member_structure_uuid);
+
+      // Périmètre de l'exportateur :
+      //  - ADMIN → AUCUN périmètre : il voit TOUS les paiements de la source. (C'EST LE BUG du
+      //    fichier vide : le compte admin porte une responsabilité sur une PETITE structure
+      //    (ex. un district), donc `responsibilities[0].structure.uuid` n'est PAS vide → l'export
+      //    se scopait à ce district → 0 ligne alors que les paiements viennent de toute l'orga.
+      //    Le repli précédent ne couvrait que le cas « structure absente », pas « petite
+      //    structure ».)
+      //  - RESPONSABLE / MEMBRE → sa structure de responsabilité, à défaut sa structure propre
+      //    (le JWT met souvent `structure: null` quand le niveau de la resp. ≠ niveau de la
+      //    structure du membre — même cause que l'export des membres).
+      const isAdmin = !!admin?.is_admin;
+      const scopeStructureUuid = isAdmin
+        ? null
+        : (member_structure_uuid || member?.structure_uuid || null);
+      const sousGroups = scopeStructureUuid
+        ? await this.structureService.findByAllChildrens(scopeStructureUuid)
+        : [];
 
       await this.exportJobService.updateJobProgress(jobId, 20);
 
@@ -65,11 +82,19 @@ export class ExportProcessorService {
         .leftJoinAndSelect('actor.structure', 'actorStructure')
         .leftJoinAndSelect('p.beneficiary', 'beneficiary')
         .leftJoinAndSelect('beneficiary.structure', 'beneficiaryStructure')
-        .where('p.source_uuid = :source_uuid', { source_uuid })
-        .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups })
-        ;
+        .where('p.source_uuid = :source_uuid', { source_uuid });
 
-      if (status) {
+      // Restreindre au périmètre uniquement s'il existe (sinon : tout le source).
+      if (scopeStructureUuid) {
+        qb.andWhere('actor.structure_uuid IN (:...groups)', {
+          groups: sousGroups.length > 0 ? sousGroups : ['__none__'],
+        });
+      }
+
+      // Filtre de statut. L'option « Tous » du front envoie `status=all` (et non une valeur
+      // vide) : sans ce garde, on faisait `p.status = 'all'` → 0 ligne. 'all' (ou absent) =>
+      // aucun filtre => tous les statuts ; une valeur réelle (success/fail/pending…) filtre.
+      if (status && status !== 'all') {
         qb.andWhere('p.status = :status', { status });
       }
 

@@ -963,6 +963,87 @@ export class StructureTreeService {
     };
   }
 
+  /**
+   * Résolveur LÉGER de structure_tree par membre — pour les LISTES de membres.
+   *
+   * Perf : `createStructureTreeResolver` (ci-dessus) appelle `buildStructureMapWithTotals`
+   * qui charge ~3562 structures via TypeORM `getMany()` + COMPTE tous les membres + joint
+   * TOUS les responsables + bâtit un arbre de 3600 nœuds avec totaux → ~1,5–2 s PAR requête
+   * de liste. Or le front (MembreTable / breadcrumb) ne lit du `structure_tree` que le
+   * **chemin d'ancêtres** (`name` / `level_name`) — jamais les compteurs ni les responsables.
+   * Ici : une seule requête BRUTE légère (uuid/name/level_uuid/parent_uuid, sans hydratation),
+   * puis chemin racine→structure construit en mémoire, mémoïsé par structure. Compteurs à 0
+   * (non lus). Même forme de sortie que `createStructureTreeResolver`.
+   */
+  public async createLightStructureTreeResolver(): Promise<
+    (structureUuid: string | null | undefined) => any
+  > {
+    const structs: Array<{
+      uuid: string;
+      name: string;
+      level_uuid: string | null;
+      parent_uuid: string | null;
+    }> = await this.structureRepository.query(
+      `SELECT uuid, name, level_uuid, parent_uuid FROM structures WHERE deleted_at IS NULL`,
+    );
+    const levels = await this.levelRepository.find();
+    const levelNameMap = new Map(levels.map(l => [l.uuid, l.name]));
+
+    const lite = new Map<
+      string,
+      { uuid: string; name: string; level_uuid: string | null; level_name: string; parent_uuid: string | null }
+    >();
+    for (const s of structs) {
+      const parentUuid = s.parent_uuid && s.parent_uuid.trim() !== '' ? s.parent_uuid : null;
+      lite.set(s.uuid, {
+        uuid: s.uuid,
+        name: s.name,
+        level_uuid: s.level_uuid ?? null,
+        level_name: s.level_uuid ? (levelNameMap.get(s.level_uuid) ?? 'Inconnu') : 'Inconnu',
+        parent_uuid: parentUuid,
+      });
+    }
+
+    const memo = new Map<string, any>();
+    return (structureUuid) => {
+      if (!structureUuid || !lite.has(structureUuid)) return null;
+      if (memo.has(structureUuid)) return memo.get(structureUuid);
+
+      // Chemin cible → racine (garde anti-cycle), nœuds frais (forme identique, compteurs à 0).
+      const path: any[] = [];
+      const seen = new Set<string>();
+      let cur: string | null | undefined = structureUuid;
+      while (cur && lite.has(cur) && !seen.has(cur)) {
+        seen.add(cur);
+        const s = lite.get(cur)!;
+        path.push({
+          uuid: s.uuid,
+          name: s.name,
+          level_uuid: s.level_uuid,
+          level_name: s.level_name,
+          parent_uuid: s.parent_uuid,
+          direct_members_count: 0,
+          total_members_count: 0,
+          sub_groups_count: 0,
+          responsibles: [],
+          children: [],
+        });
+        cur = s.parent_uuid;
+      }
+
+      // Chaîner racine → … → cible (on parcourt de la cible vers la racine).
+      let child: any = null;
+      let root: any = null;
+      for (const node of path) {
+        if (child) node.children = [child];
+        child = node;
+        root = node;
+      }
+      memo.set(structureUuid, root);
+      return root;
+    };
+  }
+
 
   /**
    * Récupère les membres avec leur structure_tree pour l'utilisateur connecté
@@ -1122,7 +1203,7 @@ export class StructureTreeService {
     // Construire les structure_tree pour chaque membre
     const memberStructureTreeMap = new Map<string, any>();
 
-    const resolveTree = await this.createStructureTreeResolver();
+    const resolveTree = await this.createLightStructureTreeResolver();
     for (const m of members) {
       if (!m.structure_uuid) continue;
       // L'arbre ne dépend que de la structure du membre (le niveau de responsabilité
@@ -1349,7 +1430,7 @@ export class StructureTreeService {
     // Construire les structure_tree pour chaque membre
     const memberStructureTreeMap = new Map<string, any>();
 
-    const resolveTree = await this.createStructureTreeResolver();
+    const resolveTree = await this.createLightStructureTreeResolver();
     for (const m of members) {
       if (!m.structure_uuid) continue;
       // L'arbre ne dépend que de la structure du membre (le niveau de responsabilité
@@ -2302,12 +2383,20 @@ export class StructureTreeService {
     where: { uuid: memberUuid },
   });
 
-  if (!member || !structureUuid) {
+  if (!member) {
+    throw new NotFoundException('Utilisateur non associé à un membre');
+  }
+
+  // Repli sur la structure propre du membre quand aucun scope n'est fourni (utilisateur
+  // sans responsabilité) — identique à getMemberStatsByConnectedUser, pour que l'export
+  // scope comme l'affichage du tableau de bord au lieu de sortir TOUS les membres.
+  const effectiveStructureUuid = structureUuid || member.structure_uuid;
+  if (!effectiveStructureUuid) {
     throw new NotFoundException('Structure du membre non trouvée');
   }
 
   // Récupérer toutes les sous-structures accessibles
-  const allStructureUuids = await this.getAllSubStructureUuids(structureUuid);
+  const allStructureUuids = await this.getAllSubStructureUuids(effectiveStructureUuid);
 
   // Construire la requête de base pour les membres
   let membersQuery = this.memberRepository
@@ -3489,13 +3578,21 @@ export class StructureTreeService {
       where: { uuid: memberUuid },
     });
 
-    if (!member || !responsibility_structure_uuid) {
-      throw new NotFoundException('Structure du membre non trouvée');
+    if (!member) {
+      throw new NotFoundException('Utilisateur non associé à un membre');
     }
 
     // Déterminer la structure cible
     //    (du plus spécifique au plus général : sous-groupe → … → centre régional → région)
-    let targetStructureUuid = responsibility_structure_uuid;
+    //
+    // Base = structure de la responsabilité (issue du JWT). À défaut → structure propre du
+    // membre. Le JWT pose souvent `structure: null` quand le NIVEAU de la responsabilité ≠
+    // niveau de la structure du membre (ex. resp. « GROUPE » mais membre rattaché à un
+    // « CHAPITRE ») ; avant, `!responsibility_structure_uuid` levait un 404 et l'export par
+    // catégorie était INUTILISABLE pour ces responsables — même avec un filtre fourni. Ce
+    // repli aligne l'export sur getMemberStatsByConnectedUser (le tableau de bord) : on scope
+    // donc toujours à une structure réelle, jamais à « tous les membres ».
+    let targetStructureUuid = responsibility_structure_uuid ?? member.structure_uuid;
 
     if (filters?.sous_groupe_uuid) {
       targetStructureUuid = filters.sous_groupe_uuid;
@@ -3511,6 +3608,12 @@ export class StructureTreeService {
       targetStructureUuid = filters.centre_regional_uuid;
     } else if (filters?.region_uuid) {
       targetStructureUuid = filters.region_uuid;
+    }
+
+    // Garde-fou : sans structure cible (membre sans structure ET sans filtre), on refuse
+    // plutôt que de risquer un export non scopé (« tous les membres »).
+    if (!targetStructureUuid) {
+      throw new NotFoundException('Structure cible introuvable pour cet export');
     }
 
     // Récupérer les sous-structures
