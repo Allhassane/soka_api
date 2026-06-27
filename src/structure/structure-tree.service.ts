@@ -1,9 +1,11 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { StructureEntity } from './entities/structure.entity';
 import { MemberEntity } from '../members/entities/member.entity';
 import { LevelEntity } from '../level/entities/level.entity';
+import { ResponsibilityEntity } from '../responsibilities/entities/responsibility.entity';
+import { MemberResponsibilityEntity } from '../member-responsibility/entities/member-responsibility.entity';
 import { ResponsibleInfo, StructureNode } from 'src/shared/interfaces/structure-node.interface';
 import { StructureMembersStats } from 'src/shared/interfaces/StructureMembersStats';
 import { AuthService } from 'src/auth/auth.service';
@@ -91,8 +93,14 @@ export class StructureTreeService {
     private memberRepository: Repository<MemberEntity>,
     @InjectRepository(LevelEntity)
     private levelRepository: Repository<LevelEntity>,
+    @InjectRepository(ResponsibilityEntity)
+    private responsibilityRepository: Repository<ResponsibilityEntity>,
+    @InjectRepository(MemberResponsibilityEntity)
+    private memberResponsibilityRepository: Repository<MemberResponsibilityEntity>,
 
     private exportJobService: ExportJobService,
+    // Dépendance circulaire ExportProcessorService <-> StructureTreeService → forwardRef.
+    @Inject(forwardRef(() => ExportProcessorService))
     private exportProcessorService: ExportProcessorService,
 
   ) { }
@@ -106,7 +114,6 @@ export class StructureTreeService {
       .getMany();
 
     if (structures.length === 0) {
-      console.log('Aucune structure dans la base de données');
       return [];
     }
 
@@ -932,6 +939,30 @@ export class StructureTreeService {
     return filterTree(rootStructure, pathToRoot);
   }
 
+  /**
+   * Résolveur de structure_tree PAR REQUÊTE pour les traitements par-membre.
+   *
+   * Construit la `structureMap` lourde UNE SEULE FOIS (à l'appel), puis renvoie une fonction
+   * pure mémoïsée par `structure_uuid` (deux membres d'une même structure → même arbre, calculé
+   * une fois). Contrairement à `getStructureTreeForResponsible` (cache statique TTL partagé entre
+   * requêtes/workers), les données sont TOUJOURS fraîches et l'état n'est pas partagé : à privilégier
+   * pour les listes interactives. `responsibleLevelOrder` n'influence pas la sortie (la coupe se fait
+   * à la structure cible) → un simple `structure_uuid` suffit.
+   */
+  public async createStructureTreeResolver(): Promise<
+    (structureUuid: string | null | undefined) => any
+  > {
+    const structureMap = await this.buildStructureMapWithTotals();
+    const memo = new Map<string, any>();
+    return (structureUuid) => {
+      if (!structureUuid || structureMap.size === 0) return null;
+      if (memo.has(structureUuid)) return memo.get(structureUuid);
+      const tree = this.buildFilteredTreeFromMap(structureMap, structureUuid);
+      memo.set(structureUuid, tree);
+      return tree;
+    };
+  }
+
 
   /**
    * Récupère les membres avec leur structure_tree pour l'utilisateur connecté
@@ -1091,42 +1122,12 @@ export class StructureTreeService {
     // Construire les structure_tree pour chaque membre
     const memberStructureTreeMap = new Map<string, any>();
 
+    const resolveTree = await this.createStructureTreeResolver();
     for (const m of members) {
       if (!m.structure_uuid) continue;
-
-      const memberResponsibilitiesList = responsibilitiesMap.get(m.uuid) || [];
-
-      // Si le membre a des responsabilités, utiliser le niveau le plus haut
-      if (memberResponsibilitiesList.length > 0) {
-        const validResponsibilities = memberResponsibilitiesList.filter(r => r.level_order !== null);
-
-        if (validResponsibilities.length > 0) {
-          const highestLevelOrder = Math.min(
-            ...validResponsibilities.map(r => parseInt(r.level_order))
-          );
-
-          const tree = await this.getStructureTreeForResponsible(
-            m.structure_uuid,
-            highestLevelOrder
-          );
-
-          memberStructureTreeMap.set(m.uuid, tree);
-        } else {
-          // Pas de level_order valide, utiliser l'arbre complet
-          const tree = await this.getStructureTreeForResponsible(
-            m.structure_uuid,
-            999
-          );
-          memberStructureTreeMap.set(m.uuid, tree);
-        }
-      } else {
-        // Pas de responsabilité, afficher l'arbre complet depuis sa structure
-        const tree = await this.getStructureTreeForResponsible(
-          m.structure_uuid,
-          999
-        );
-        memberStructureTreeMap.set(m.uuid, tree);
-      }
+      // L'arbre ne dépend que de la structure du membre (le niveau de responsabilité
+      // n'influence pas la coupe) → résolveur par-requête, mémoïsé par structure.
+      memberStructureTreeMap.set(m.uuid, resolveTree(m.structure_uuid));
     }
 
     // Formater les membres avec leurs responsabilités et structure_tree
@@ -1348,42 +1349,12 @@ export class StructureTreeService {
     // Construire les structure_tree pour chaque membre
     const memberStructureTreeMap = new Map<string, any>();
 
+    const resolveTree = await this.createStructureTreeResolver();
     for (const m of members) {
       if (!m.structure_uuid) continue;
-
-      const memberResponsibilitiesList = responsibilitiesMap.get(m.uuid) || [];
-
-      // Si le membre a des responsabilités, utiliser le niveau le plus haut
-      if (memberResponsibilitiesList.length > 0) {
-        const validResponsibilities = memberResponsibilitiesList.filter(r => r.level_order !== null);
-
-        if (validResponsibilities.length > 0) {
-          const highestLevelOrder = Math.min(
-            ...validResponsibilities.map(r => parseInt(r.level_order))
-          );
-
-          const tree = await this.getStructureTreeForResponsible(
-            m.structure_uuid,
-            highestLevelOrder
-          );
-
-          memberStructureTreeMap.set(m.uuid, tree);
-        } else {
-          // Pas de level_order valide, utiliser l'arbre complet
-          const tree = await this.getStructureTreeForResponsible(
-            m.structure_uuid,
-            999
-          );
-          memberStructureTreeMap.set(m.uuid, tree);
-        }
-      } else {
-        // Pas de responsabilité, afficher l'arbre complet depuis sa structure
-        const tree = await this.getStructureTreeForResponsible(
-          m.structure_uuid,
-          999
-        );
-        memberStructureTreeMap.set(m.uuid, tree);
-      }
+      // L'arbre ne dépend que de la structure du membre (le niveau de responsabilité
+      // n'influence pas la coupe) → résolveur par-requête, mémoïsé par structure.
+      memberStructureTreeMap.set(m.uuid, resolveTree(m.structure_uuid));
     }
 
     // Formater les membres avec leurs responsabilités et structure_tree
@@ -3225,6 +3196,155 @@ export class StructureTreeService {
     });
 
     return workbook;
+  }
+
+  async getCommitteeResponsibles(
+    memberUuid?: string,
+    responsibilityStructureUuid?: string,
+  ) {
+    let targetStructure: StructureEntity | null = null;
+
+    if (responsibilityStructureUuid) {
+      targetStructure = await this.structureRepository.findOne({
+        where: { uuid: responsibilityStructureUuid },
+        relations: ['level', 'parent'],
+      });
+      if (!targetStructure) {
+        throw new NotFoundException('Structure non trouvée');
+      }
+    } else if (memberUuid) {
+      const member = await this.memberRepository.findOne({
+        where: { uuid: memberUuid },
+        relations: ['structure'],
+      });
+      if (!member) {
+        throw new NotFoundException('Membre non trouvé');
+      }
+      if (!member.structure_uuid) {
+        throw new BadRequestException(
+          'Le membre n\'a pas de structure d\'appartenance',
+        );
+      }
+      targetStructure = await this.structureRepository.findOne({
+        where: { uuid: member.structure_uuid },
+        relations: ['level', 'parent'],
+      });
+      if (!targetStructure) {
+        throw new NotFoundException(
+          'Structure d\'appartenance non trouvée',
+        );
+      }
+    } else {
+      throw new BadRequestException(
+        'Vous devez être associé à une structure',
+      );
+    }
+
+    if (!targetStructure.level_uuid) {
+      return {
+        structure: {
+          uuid: targetStructure.uuid,
+          name: targetStructure.name,
+          level: null,
+          parent: targetStructure.parent ? { uuid: targetStructure.parent.uuid, name: targetStructure.parent.name } : null,
+        },
+        responsibles: [],
+        vacant_responsibilities: [],
+      };
+    }
+
+    const responsibilities = await this.responsibilityRepository.find({
+      where: { level_uuid: targetStructure.level_uuid, status: 'enable' },
+    });
+
+    // Récupérer la structure cible ET toutes ses sous-structures (enfants, petits-enfants, etc.)
+    const allStructureUuids: string[] = [targetStructure.uuid];
+
+    const getDescendants = async (parentUuid: string) => {
+      const children = await this.structureRepository.find({
+        where: { parent_uuid: parentUuid },
+        select: ['uuid'],
+      });
+      for (const child of children) {
+        allStructureUuids.push(child.uuid);
+        await getDescendants(child.uuid);
+      }
+    };
+
+    await getDescendants(targetStructure.uuid);
+
+    const responsibles: any[] = [];
+    const assignedResponsibilityUuids = new Set<string>();
+
+    for (const responsibility of responsibilities) {
+      const query = this.memberResponsibilityRepository
+        .createQueryBuilder('mr')
+        .leftJoinAndSelect('mr.member', 'm', 'm.uuid = mr.member_uuid')
+        .leftJoinAndSelect('mr.responsibility', 'r', 'r.uuid = mr.responsibility_uuid')
+        .where('mr.responsibility_uuid = :responsibility_uuid', {
+          responsibility_uuid: responsibility.uuid,
+        })
+        .andWhere('m.structure_uuid IN (:...structure_uuids)', {
+          structure_uuids: allStructureUuids,
+        });
+
+      const memberResponsibilities = await query
+        .orderBy('mr.priority', 'DESC')
+        .addOrderBy('m.firstname', 'ASC')
+        .getMany();
+
+      if (memberResponsibilities.length > 0) {
+        assignedResponsibilityUuids.add(responsibility.uuid);
+        for (const mr of memberResponsibilities) {
+          if (mr.member) {
+            responsibles.push({
+              responsibility: {
+                uuid: responsibility.uuid,
+                name: responsibility.name,
+                slug: responsibility.slug,
+                gender: responsibility.gender,
+              },
+              member: {
+                uuid: mr.member.uuid,
+                firstname: mr.member.firstname,
+                lastname: mr.member.lastname,
+                picture: mr.member.picture,
+                phone: mr.member.phone,
+                phone_whatsapp: mr.member.phone_whatsapp,
+                email: mr.member.email,
+              },
+              priority: mr.priority,
+            });
+          }
+        }
+      }
+    }
+
+    const vacantResponsibilities = responsibilities
+      .filter((r) => !assignedResponsibilityUuids.has(r.uuid))
+      .map((r) => ({
+        uuid: r.uuid,
+        name: r.name,
+        slug: r.slug,
+        gender: r.gender,
+      }));
+
+    return {
+      structure: {
+        uuid: targetStructure.uuid,
+        name: targetStructure.name,
+        level: targetStructure.level ? {
+          uuid: targetStructure.level.uuid,
+          name: targetStructure.level.name,
+        } : null,
+        parent: targetStructure.parent ? {
+          uuid: targetStructure.parent.uuid,
+          name: targetStructure.parent.name,
+        } : null,
+      },
+      responsibles,
+      vacant_responsibilities: vacantResponsibilities,
+    };
   }
 
   private async generateExportFileName_(structure_uuid: string, filterParams: any): Promise<string> {

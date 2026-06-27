@@ -674,7 +674,4 @@ async exportStatCategory(
     });
   }
 
-
-
-
 }

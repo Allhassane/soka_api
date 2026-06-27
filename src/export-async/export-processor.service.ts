@@ -1,5 +1,5 @@
 // src/export-job/export-processor.service.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ExportJobService } from './export-job.service';
@@ -31,6 +31,9 @@ export class ExportProcessorService {
     @InjectRepository(User)
     private userRepo: Repository<User>,
     private structureService: StructureService,
+    // Dépendance circulaire StructureTreeService <-> ExportProcessorService → forwardRef.
+    @Inject(forwardRef(() => StructureTreeService))
+    private structureTreeService: StructureTreeService,
 
   ) {}
 
@@ -75,85 +78,19 @@ export class ExportProcessorService {
       //console.log('paiements trouvés:', payments);
       await this.exportJobService.updateJobProgress(jobId, 40);
 
-      // Récupérer les responsabilités des bénéficiaires
-      const beneficiaryUuids = payments
-        .map(p => p.beneficiary?.uuid)
-        .filter(Boolean);
-
-      let beneficiaryResponsibilities: any[] = [];
-      if (beneficiaryUuids.length > 0) {
-        beneficiaryResponsibilities = await this.memberRepo
-          .createQueryBuilder('m')
-          .innerJoin('member_responsibilities', 'mr', 'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL')
-          .innerJoin('responsibilities', 'r', 'r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL')
-          .leftJoin('levels', 'l', 'l.uuid = r.level_uuid')
-          .select([
-            'm.uuid AS member_uuid',
-            'r.uuid AS responsibility_uuid',
-            'r.name AS responsibility_name',
-            'r.level_uuid AS level_uuid',
-            'l.name AS level_name',
-            'l.order AS level_order',
-          ])
-          .where('m.uuid IN (:...uuids)', { uuids: beneficiaryUuids })
-          .andWhere('m.deleted_at IS NULL')
-          .getRawMany();
-      }
-
-      // Grouper les responsabilités par bénéficiaire
-      const responsibilitiesMap = new Map<string, any[]>();
-      for (const br of beneficiaryResponsibilities) {
-        if (!responsibilitiesMap.has(br.member_uuid)) {
-          responsibilitiesMap.set(br.member_uuid, []);
-        }
-        responsibilitiesMap.get(br.member_uuid)!.push({
-          uuid: br.responsibility_uuid,
-          name: br.responsibility_name,
-          level_uuid: br.level_uuid,
-          level_name: br.level_name,
-          level_order: br.level_order,
-        });
-      }
-
-      // Construire les structure trees pour chaque bénéficiaire
+      // Construire les structure trees pour chaque bénéficiaire.
+      // Résolveur PAR REQUÊTE (service optimisé) : un seul build lourd, mémoïsé par structure.
+      // L'arbre ne dépend que de la structure du bénéficiaire (le niveau de responsabilité
+      // n'influence pas la coupe) → la requête de responsabilités par-bénéficiaire devenait inutile.
       const beneficiaryStructureTreeMap = new Map<string, any>();
+      const resolveTree = await this.structureTreeService.createStructureTreeResolver();
 
       for (const p of payments) {
         if (!p.beneficiary?.uuid || !p.beneficiary?.structure_uuid) continue;
-
-        const beneficiaryResponsibilitiesList = responsibilitiesMap.get(p.beneficiary.uuid) || [];
-
-        if (beneficiaryResponsibilitiesList.length > 0) {
-          const validResponsibilities = beneficiaryResponsibilitiesList.filter(r => r.level_order !== null);
-
-          if (validResponsibilities.length > 0) {
-            const highestLevelOrder = Math.min(
-              ...validResponsibilities.map(r => parseInt(r.level_order))
-            );
-
-            // Utilisation correcte du service injecté
-            const tree = await this.structureService.getStructureTreeForResponsible(
-              p.beneficiary.structure_uuid,
-              highestLevelOrder
-            );
-
-            beneficiaryStructureTreeMap.set(p.beneficiary.uuid, tree);
-          } else {
-            // Utilisation correcte du service injecté
-            const tree = await this.structureService.getStructureTreeForResponsible(
-              p.beneficiary.structure_uuid,
-              999
-            );
-            beneficiaryStructureTreeMap.set(p.beneficiary.uuid, tree);
-          }
-        } else {
-          // Utilisation correcte du service injecté
-          const tree = await this.structureService.getStructureTreeForResponsible(
-            p.beneficiary.structure_uuid,
-            999
-          );
-          beneficiaryStructureTreeMap.set(p.beneficiary.uuid, tree);
-        }
+        beneficiaryStructureTreeMap.set(
+          p.beneficiary.uuid,
+          resolveTree(p.beneficiary.structure_uuid),
+        );
       }
 
       await this.exportJobService.updateJobProgress(jobId, 50);

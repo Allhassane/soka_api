@@ -1,5 +1,6 @@
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
 import { Entity, PrimaryGeneratedColumn, Column, BeforeInsert, BeforeUpdate} from 'typeorm';
+import { v4 as uuidv4 } from 'uuid';
 
 function slugify(s: string) {
   return s
@@ -34,6 +35,14 @@ export class FormationEntity extends DateTimeEntity {
   @BeforeUpdate()
   generateSlug() {
     if (this.name) this.slug = slugify(this.name);
+  }
+
+  // La colonne réelle `formations.uuid` a un DEFAULT NULL (synchronize OFF), donc le
+  // `default: () => '(UUID())'` ci-dessus n'est jamais appliqué → les formations créées
+  // arriveraient avec uuid = NULL. On génère donc l'uuid en amont, comme CountryEntity.
+  @BeforeInsert()
+  generateUuid() {
+    if (!this.uuid) this.uuid = uuidv4();
   }
 
 }

@@ -22,26 +22,28 @@ export class MemberAccessoryEntity extends DateTimeEntity {
   @Column({ unique: true })
   uuid: string;
 
-  @ApiProperty({ description: "UUID du membre (User)" })
-  @Column({ type: 'uuid' })
+  @ApiProperty({ description: "UUID du membre" })
+  @Column({ type: 'varchar', length: 36 })
   member_uuid: string;
 
   @ApiProperty({ description: "UUID de l'accessoire" })
-  @Column({ type: 'uuid' })
+  @Column({ type: 'varchar', length: 36 })
   accessory_uuid: string;
 
+  // Les liens réels sont portés par les colonnes *_uuid (member_id/accessory_id
+  // historiques restaient NULL). On joint donc sur uuid, comme MemberResponsibilityEntity.
   @ManyToOne(() => MemberEntity, (member) => member.member_accessories, {
     onDelete: 'CASCADE',
     eager: false,
   })
-  @JoinColumn({ name: 'member_id', referencedColumnName: 'id' })
+  @JoinColumn({ name: 'member_uuid', referencedColumnName: 'uuid' })
   member: MemberEntity;
 
   @ManyToOne(() => AccessoryEntity, (accessory) => accessory.member_accessories, {
     onDelete: 'CASCADE',
     eager: false,
   })
-  @JoinColumn({ name: 'accessory_id', referencedColumnName: 'id' })
+  @JoinColumn({ name: 'accessory_uuid', referencedColumnName: 'uuid' })
   accessory: AccessoryEntity;
 
   @BeforeInsert()
