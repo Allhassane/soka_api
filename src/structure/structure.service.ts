@@ -288,8 +288,18 @@ export class StructureService {
       if (p) parent = { uuid: p.uuid, name: p.name };
     }
 
-    // Responsables rattachés à cette structure (membres de la structure ayant une responsabilité).
-    const rows = await this.memberRepository
+    // Responsables du comité de cette structure.
+    // ⚠ Un responsable n'habite PAS forcément la structure qu'il dirige : un responsable
+    // de district vit dans un sous-groupe DU district, pas au district même. Sa
+    // responsabilité porte le NIVEAU (district), et auth.service rattache cette
+    // responsabilité à l'ancêtre de la structure du membre au niveau correspondant
+    // (findStructureByLevelUuid). On reproduit la même logique : le comité de S =
+    // les membres habitant dans le SOUS-ARBRE de S qui portent une responsabilité du
+    // NIVEAU de S. Dans le sous-arbre de S, la seule structure au niveau de S est S
+    // elle-même → le rattachement est exact.
+    const subtreeUuids = await this.getSubtreeUuids(structureUuid);
+
+    const rowsQb = this.memberRepository
       .createQueryBuilder('m')
       .innerJoin(
         'member_responsibilities',
@@ -315,9 +325,22 @@ export class StructureService {
         'r.gender AS responsibility_gender',
         'mr.priority AS priority',
       ])
-      .where('m.structure_uuid = :structureUuid', { structureUuid })
-      .andWhere('m.deleted_at IS NULL')
-      .getRawMany();
+      .where('m.structure_uuid IN (:...subtreeUuids)', { subtreeUuids })
+      .andWhere('m.deleted_at IS NULL');
+
+    if (structure.level_uuid) {
+      // Filtre sur le niveau de S : ne garde que les responsabilités de ce palier
+      // (sinon on remonterait aussi les responsables des paliers inférieurs du sous-arbre).
+      rowsQb.andWhere('r.level_uuid = :levelUuid', {
+        levelUuid: structure.level_uuid,
+      });
+    } else {
+      // Pas de niveau connu (cas dégradé) : on retombe sur l'ancien comportement strict
+      // pour éviter de déverser tout le sous-arbre.
+      rowsQb.andWhere('m.structure_uuid = :structureUuid', { structureUuid });
+    }
+
+    const rows = await rowsQb.getRawMany();
 
     const responsibles = rows.map((row) => ({
       responsibility: {
@@ -400,6 +423,42 @@ export class StructureService {
     }
 
     return this.getCommittee(structureUuid);
+  }
+
+  /**
+   * UUID de la structure + tous ses descendants (sous-arbre), via UNE requête (uuid +
+   * parent_uuid de toutes les structures) puis BFS itératif en mémoire avec garde
+   * anti-cycle. Même approche que StructureTreeService.getAllSubStructureUuids (non
+   * injecté ici pour éviter une dépendance circulaire entre services structure).
+   */
+  private async getSubtreeUuids(structureUuid: string): Promise<string[]> {
+    const all = await this.structureRepo.find({
+      select: ['uuid', 'parent_uuid'],
+    });
+
+    const childrenByParent = new Map<string, string[]>();
+    for (const s of all) {
+      const parent =
+        s.parent_uuid && s.parent_uuid.trim() !== '' ? s.parent_uuid : null;
+      if (!parent) continue;
+      const bucket = childrenByParent.get(parent);
+      if (bucket) bucket.push(s.uuid);
+      else childrenByParent.set(parent, [s.uuid]);
+    }
+
+    const result: string[] = [];
+    const seen = new Set<string>();
+    const stack: string[] = [structureUuid];
+    while (stack.length > 0) {
+      const uuid = stack.pop() as string;
+      if (seen.has(uuid)) continue;
+      seen.add(uuid);
+      result.push(uuid);
+      const kids = childrenByParent.get(uuid);
+      if (kids) stack.push(...kids);
+    }
+
+    return result;
   }
 
 }
