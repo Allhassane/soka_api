@@ -125,6 +125,13 @@ export class CreateActivityDto {
   @Min(1)
   capacity?: number;
 
+  @ApiPropertyOptional({ description: 'Quota par centre (places allouées par structure centre)', minimum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  quota_per_centre?: number;
+
   @ApiPropertyOptional({ description: 'Activité récurrente', default: false })
   @IsOptional()
   @IsBoolean()

@@ -69,6 +69,9 @@ export class ActivityEntity extends DateTimeEntity {
   @Column({ type: 'int', nullable: true })
   capacity: number | null;
 
+  @Column({ type: 'int', nullable: true })
+  quota_per_centre: number | null;
+
   @Column({ type: 'boolean', default: false })
   is_recurring: boolean;
 

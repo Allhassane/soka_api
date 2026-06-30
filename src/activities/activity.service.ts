@@ -132,6 +132,7 @@ export class ActivityService {
       starts_at: payload.starts_at,
       ends_at: payload.ends_at,
       capacity: payload.capacity ?? null,
+      quota_per_centre: payload.quota_per_centre ?? null,
       is_recurring: payload.is_recurring ?? false,
       recurrence_rule: payload.recurrence_rule ?? null,
       structure_uuid: payload.structure_uuid ?? null,
