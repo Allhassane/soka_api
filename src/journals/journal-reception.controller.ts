@@ -57,6 +57,21 @@ export class JournalReceptionController {
     return this.service.receptionStats(edition_uuid, req.user.uuid as string);
   }
 
+  @Get('editions/:uuid/reception-analytics')
+  @ApiOperation({
+    summary: 'Tableau de bord analytique du suivi de distribution aux membres',
+    description:
+      'Timeline cumulée des membres servis, rollup par région, classement/retards par district, suivi par responsable de district.',
+  })
+  @ApiParam({ name: 'uuid', description: "UUID de l'édition" })
+  @ApiResponse({ status: 200, description: 'Analytique de réception.' })
+  receptionAnalytics(@Param('uuid') edition_uuid: string, @Request() req) {
+    return this.service.receptionAnalytics(
+      edition_uuid,
+      req.user.uuid as string,
+    );
+  }
+
   @Put('editions/:uuid/districts/:districtUuid/reception')
   @ApiOperation({
     summary: "Valider la réception du lot d'un district",
