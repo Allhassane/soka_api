@@ -172,6 +172,7 @@ export class JournalReceptionService {
   private async resolveDistrictResponsibles(
     districtUuids: string[],
     districtLevelUuid: string | null,
+    levelName: Map<string, string>,
   ): Promise<
     Map<string, { member_uuid: string; name: string; phone: string | null }>
   > {
@@ -179,62 +180,54 @@ export class JournalReceptionService {
       string,
       { member_uuid: string; name: string; phone: string | null }
     >();
-    const ids = Array.from(new Set(districtUuids.filter(Boolean)));
-    if (!ids.length) return out;
+    const ids = new Set(districtUuids.filter(Boolean));
+    if (!ids.size || !districtLevelUuid) return out;
 
-    // Membres positionnés exactement au district (mono-table members)
-    const members = await this.memberRepo.find({
-      where: { structure_uuid: In(ids) },
-      select: ['uuid', 'firstname', 'lastname', 'phone', 'structure_uuid'],
-    });
+    // 1) Membres portant une responsabilité de NIVEAU district. Le membre peut
+    //    être positionné sous le district (sous-groupe…) tout en étant le
+    //    responsable du district — comme dans auth.service, on remonte ensuite
+    //    jusqu'au maillon district de sa structure. JOIN interne utf8mb4 (pas de
+    //    JOIN vers members) → collation-safe.
+    const rows: { member_uuid: string }[] =
+      await this.structureRepo.manager.query(
+        `SELECT DISTINCT mr.member_uuid AS member_uuid
+         FROM member_responsibilities mr
+         INNER JOIN responsibilities r
+           ON r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL
+         WHERE mr.deleted_at IS NULL AND r.level_uuid = ?`,
+        [districtLevelUuid],
+      );
+    const respUuids = Array.from(
+      new Set(rows.map((r) => r.member_uuid).filter(Boolean)),
+    );
+    if (!respUuids.length) return out;
+
+    // 2) Charger ces membres (mono-table members, par lots)
+    const members: MemberEntity[] = [];
+    const chunk = 500;
+    for (let i = 0; i < respUuids.length; i += chunk) {
+      const ms = await this.memberRepo.find({
+        where: { uuid: In(respUuids.slice(i, i + chunk)) },
+        select: ['uuid', 'firstname', 'lastname', 'phone', 'structure_uuid'],
+      });
+      members.push(...ms);
+    }
     if (!members.length) return out;
 
-    const memberUuids = members.map((m) => m.uuid);
-    // Responsabilités de ces membres (member_responsibilities ⨝ responsibilities,
-    // toutes deux utf8mb4 → JOIN interne sûr ; pas de JOIN vers members).
-    const placeholders = memberUuids.map(() => '?').join(',');
-    const respRows: {
-      member_uuid: string;
-      level_uuid: string | null;
-    }[] = await this.structureRepo.manager.query(
-      `SELECT mr.member_uuid AS member_uuid, r.level_uuid AS level_uuid
-       FROM member_responsibilities mr
-       INNER JOIN responsibilities r
-         ON r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL
-       WHERE mr.deleted_at IS NULL AND mr.member_uuid IN (${placeholders})`,
-      memberUuids,
+    // 3) Remonter chaque responsable jusqu'à son district, mapper aux districts demandés
+    const chains = await this.resolveChains(
+      members.map((m) => m.structure_uuid).filter(Boolean) as string[],
+      levelName,
     );
-    const respByMember = new Map<string, string | null>();
-    for (const r of respRows) {
-      // priorité à une responsabilité de niveau district
-      if (
-        !respByMember.has(r.member_uuid) ||
-        (districtLevelUuid && r.level_uuid === districtLevelUuid)
-      ) {
-        respByMember.set(r.member_uuid, r.level_uuid ?? null);
-      }
-    }
-
-    // Sélection d'un responsable par district
-    const byDistrict = new Map<string, MemberEntity[]>();
     for (const m of members) {
-      const d = m.structure_uuid!;
-      if (!byDistrict.has(d)) byDistrict.set(d, []);
-      byDistrict.get(d)!.push(m);
-    }
-    for (const [district, list] of byDistrict.entries()) {
-      const score = (m: MemberEntity) => {
-        if (!respByMember.has(m.uuid)) return 0; // pas de responsabilité
-        return districtLevelUuid && respByMember.get(m.uuid) === districtLevelUuid
-          ? 2 // responsabilité de niveau district
-          : 1; // autre responsabilité
-      };
-      const best = list.slice().sort((a, b) => score(b) - score(a))[0];
-      if (best && score(best) > 0) {
-        out.set(district, {
-          member_uuid: best.uuid,
-          name: `${best.lastname ?? ''} ${best.firstname ?? ''}`.trim(),
-          phone: best.phone ?? null,
+      if (!m.structure_uuid) continue;
+      const chain = chains.get(m.structure_uuid) ?? [];
+      const dUuid = chain.find((c) => c.level_uuid === districtLevelUuid)?.uuid;
+      if (dUuid && ids.has(dUuid) && !out.has(dUuid)) {
+        out.set(dUuid, {
+          member_uuid: m.uuid,
+          name: `${m.lastname ?? ''} ${m.firstname ?? ''}`.trim(),
+          phone: m.phone ?? null,
         });
       }
     }
@@ -362,6 +355,7 @@ export class JournalReceptionService {
     const responsibles = await this.resolveDistrictResponsibles(
       realDistrictUuids,
       districtLevelUuid,
+      levelName,
     );
 
     // 8) Assemblage + statut
@@ -475,6 +469,141 @@ export class JournalReceptionService {
     };
   }
 
+  /**
+   * Tableau de bord ANALYTIQUE du suivi de distribution aux membres :
+   *  - timeline : courbe cumulée des membres servis jour par jour ;
+   *  - by_region : rollup par région ;
+   *  - by_district : districts triés (retards d'abord) ;
+   *  - by_responsible : suivi par responsable de district.
+   */
+  async receptionAnalytics(edition_uuid: string, admin_uuid: string) {
+    const view = await this.buildView(edition_uuid, admin_uuid);
+    const districts = view.districts;
+    const round1 = (n: number) => Math.round(n * 10) / 10;
+
+    // 1) Timeline cumulée (sur les received_at des membres servis)
+    const dayCount = new Map<string, number>();
+    for (const d of districts) {
+      for (const m of d.members) {
+        if (m.received && m.received_at) {
+          const k = new Date(m.received_at).toISOString().slice(0, 10);
+          dayCount.set(k, (dayCount.get(k) ?? 0) + 1);
+        }
+      }
+    }
+    let cumulative = 0;
+    const timeline = Array.from(dayCount.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, count]) => {
+        cumulative += count;
+        return { date, count, cumulative };
+      });
+
+    // 2) Rollup par région
+    const regionMap = new Map<
+      string,
+      {
+        region: string;
+        member_total: number;
+        member_received: number;
+        districts_total: number;
+        districts_received: number;
+        districts_late: number;
+      }
+    >();
+    for (const d of districts) {
+      const key = d.region || 'Sans région';
+      if (!regionMap.has(key)) {
+        regionMap.set(key, {
+          region: key,
+          member_total: 0,
+          member_received: 0,
+          districts_total: 0,
+          districts_received: 0,
+          districts_late: 0,
+        });
+      }
+      const r = regionMap.get(key)!;
+      r.member_total += d.member_total;
+      r.member_received += d.member_received;
+      r.districts_total += 1;
+      if (d.status === 'received') r.districts_received += 1;
+      if (d.status === 'late') r.districts_late += 1;
+    }
+    const by_region = Array.from(regionMap.values())
+      .map((r) => ({
+        ...r,
+        member_pending: r.member_total - r.member_received,
+        reception_rate: r.member_total
+          ? round1((r.member_received / r.member_total) * 100)
+          : 0,
+      }))
+      .sort((a, b) => b.reception_rate - a.reception_rate);
+
+    // 3) Suivi par responsable de district
+    const respMap = new Map<
+      string,
+      {
+        responsible: string;
+        phone: string | null;
+        districts: number;
+        lots_received: number;
+        member_total: number;
+        member_received: number;
+        district_names: string[];
+      }
+    >();
+    for (const d of districts) {
+      const key = d.responsible_name || 'Non défini';
+      if (!respMap.has(key)) {
+        respMap.set(key, {
+          responsible: key,
+          phone: d.responsible_phone ?? null,
+          districts: 0,
+          lots_received: 0,
+          member_total: 0,
+          member_received: 0,
+          district_names: [],
+        });
+      }
+      const r = respMap.get(key)!;
+      r.districts += 1;
+      if (d.lot_received) r.lots_received += 1;
+      r.member_total += d.member_total;
+      r.member_received += d.member_received;
+      r.district_names.push(d.district_name);
+    }
+    const by_responsible = Array.from(respMap.values())
+      .map((r) => ({
+        ...r,
+        member_pending: r.member_total - r.member_received,
+        reception_rate: r.member_total
+          ? round1((r.member_received / r.member_total) * 100)
+          : 0,
+      }))
+      // les moins avancés d'abord (à relancer)
+      .sort((a, b) => a.reception_rate - b.reception_rate);
+
+    // 4) Districts triés (retards d'abord, puis taux croissant)
+    const by_district = districts
+      .map(({ members, ...rest }) => rest)
+      .sort((a, b) => {
+        const rank = (s: string) =>
+          s === 'late' ? 0 : s === 'pending' ? 1 : 2;
+        const r = rank(a.status) - rank(b.status);
+        return r !== 0 ? r : a.reception_rate - b.reception_rate;
+      });
+
+    return {
+      edition: view.edition,
+      summary: view.summary,
+      timeline,
+      by_region,
+      by_district,
+      by_responsible,
+    };
+  }
+
   /** Valide (ou annule) la réception du LOT d'un district. */
   async validateDistrictLot(
     edition_uuid: string,
@@ -489,10 +618,11 @@ export class JournalReceptionService {
     });
     if (!edition) throw new NotFoundException('Édition introuvable');
 
-    const { districtLevelUuid } = await this.loadLevels();
+    const { districtLevelUuid, levelName } = await this.loadLevels();
     const responsibles = await this.resolveDistrictResponsibles(
       [district_uuid],
       districtLevelUuid,
+      levelName,
     );
     let resp = responsibles.get(district_uuid) ?? null;
     // repli : validateur = utilisateur connecté
