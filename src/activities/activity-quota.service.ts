@@ -103,6 +103,60 @@ export class ActivityQuotaService {
     return updated;
   }
 
+  /**
+   * Retrouve le quota dont la structure est un ancêtre (au sens large, y compris
+   * elle-même) de la structure donnée — permet de faire remonter un membre de sa
+   * structure feuille (Sous-groupe) vers le quota alloué à son "centre" (ou tout
+   * autre palier auquel un quota a été défini pour cette activité).
+   */
+  private async findQuotaForStructure(
+    activity_uuid: string,
+    structure_uuid: string,
+  ): Promise<ActivityQuotaEntity | null> {
+    const quotas = await this.quotaRepo.find({ where: { activity_uuid } });
+    if (!quotas.length) return null;
+    const quotaByStructure = new Map(quotas.map((q) => [q.structure_uuid, q]));
+
+    let currentUuid: string | null = structure_uuid;
+    const visited = new Set<string>();
+    while (currentUuid && !visited.has(currentUuid)) {
+      visited.add(currentUuid);
+      const match = quotaByStructure.get(currentUuid);
+      if (match) return match;
+      const structure = await this.structureRepo.findOne({
+        where: { uuid: currentUuid },
+        select: ['parent_uuid'],
+      });
+      currentUuid = structure?.parent_uuid ?? null;
+    }
+    return null;
+  }
+
+  /**
+   * Ajuste le quota_used du "centre" (ou autre palier) concerné quand un membre
+   * devient disponible/participant (+1) ou est retiré (-1). No-op si l'activité
+   * n'a pas de quotas définis ou si aucun quota ne couvre la structure du membre.
+   * Saturé entre 0 et quota_allocated (même invariant que la mise à jour manuelle).
+   */
+  async adjustUsedForMemberStructure(
+    activity_uuid: string,
+    structure_uuid: string | null | undefined,
+    delta: 1 | -1,
+  ): Promise<void> {
+    if (!structure_uuid) return;
+    const quota = await this.findQuotaForStructure(activity_uuid, structure_uuid);
+    if (!quota) return;
+
+    const next =
+      delta > 0
+        ? Math.min(quota.quota_allocated, quota.quota_used + 1)
+        : Math.max(0, quota.quota_used - 1);
+    if (next === quota.quota_used) return;
+
+    quota.quota_used = next;
+    await this.quotaRepo.save(quota);
+  }
+
   async remove(uuid: string, admin_uuid: string) {
     const admin = await this.getAdmin(admin_uuid);
     const quota = await this.quotaRepo.findOne({ where: { uuid } });

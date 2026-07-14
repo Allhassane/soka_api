@@ -15,6 +15,7 @@ import { MemberEntity } from 'src/members/entities/member.entity';
 import { User } from 'src/users/entities/user.entity';
 import { LogActivitiesService } from 'src/log-activities/log-activities.service';
 import { AssignParticipantsDto } from './dto/assign-participants.dto';
+import { ActivityQuotaService } from './activity-quota.service';
 
 @Injectable()
 export class ActivityParticipantService {
@@ -28,6 +29,7 @@ export class ActivityParticipantService {
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     private readonly logService: LogActivitiesService,
+    private readonly quotaService: ActivityQuotaService,
   ) {}
 
   private async getAdmin(uuid: string) {
@@ -79,6 +81,7 @@ export class ActivityParticipantService {
     if (!activity) throw new NotFoundException('Activité introuvable');
 
     const toCreate: ActivityParticipantEntity[] = [];
+    const toRestore: ActivityParticipantEntity[] = [];
     let alreadyAssigned = 0;
 
     if (hasMembers) {
@@ -91,17 +94,40 @@ export class ActivityParticipantService {
         );
       }
 
+      // withDeleted: la contrainte unique (activity_uuid, member_uuid) porte sur la
+      // ligne physique même soft-supprimée -> un participant décoché puis recoché
+      // doit être RÉACTIVÉ, pas réinséré (sinon violation de contrainte unique).
       const existing = await this.participantRepo.find({
         where: {
           activity_uuid,
           member_uuid: In(payload.member_uuids!),
         },
+        withDeleted: true,
       });
-      alreadyAssigned = existing.length;
-      const existingSet = new Set(existing.map((e) => e.member_uuid));
+      const activeExisting = existing.filter((e) => !e.deleted_at);
+      const softDeletedExisting = existing.filter((e) => !!e.deleted_at);
+      alreadyAssigned = activeExisting.length;
+      const handledUuids = new Set(existing.map((e) => e.member_uuid));
+
+      if (softDeletedExisting.length) {
+        // restore() est la seule façon fiable de remettre deleted_at à NULL en base
+        // (un save() avec deleted_at=undefined n'y touche pas, TypeORM l'ignorerait).
+        await this.participantRepo.restore(
+          softDeletedExisting.map((p) => p.id),
+        );
+        softDeletedExisting.forEach((p) => {
+          const member = members.find((m) => m.uuid === p.member_uuid);
+          p.deleted_at = undefined;
+          p.role = payload.role ?? ActivityParticipantRole.PARTICIPANT;
+          p.structure_uuid_at_invitation =
+            member?.structure_uuid ?? p.structure_uuid_at_invitation;
+          p.admin_uuid = admin_uuid;
+          toRestore.push(p);
+        });
+      }
 
       members
-        .filter((m) => !existingSet.has(m.uuid))
+        .filter((m) => !handledUuids.has(m.uuid))
         .forEach((m) =>
           toCreate.push(
             this.participantRepo.create({
@@ -141,18 +167,30 @@ export class ActivityParticipantService {
     const saved = toCreate.length
       ? await this.participantRepo.save(toCreate)
       : [];
+    const restored = toRestore.length
+      ? await this.participantRepo.save(toRestore)
+      : [];
+    const allSaved = [...saved, ...restored];
+
+    for (const p of allSaved) {
+      await this.quotaService.adjustUsedForMemberStructure(
+        activity_uuid,
+        p.structure_uuid_at_invitation,
+        1,
+      );
+    }
 
     await this.logService.logAction(
       'activity-participants-assign',
       admin.id,
-      `Assignation de ${saved.length} participant(s) à "${activity.name}" (${alreadyAssigned} déjà inscrits)`,
+      `Assignation de ${allSaved.length} participant(s) à "${activity.name}" (${alreadyAssigned} déjà inscrits)`,
     );
 
     return {
       activity_uuid,
-      added: saved.length,
+      added: allSaved.length,
       already_assigned: alreadyAssigned,
-      participants: saved,
+      participants: allSaved,
     };
   }
 
@@ -163,6 +201,12 @@ export class ActivityParticipantService {
       relations: ['activity', 'member'],
     });
     if (!participant) throw new NotFoundException('Participant introuvable');
+
+    await this.quotaService.adjustUsedForMemberStructure(
+      participant.activity_uuid,
+      participant.structure_uuid_at_invitation ?? participant.member?.structure_uuid,
+      -1,
+    );
 
     await this.logService.logAction(
       'activity-participant-remove',

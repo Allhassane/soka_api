@@ -193,15 +193,17 @@ export class ActivityTargetService {
       // INNER JOIN pour responsables uniquement, LEFT JOIN sinon
       const joinKind =
         c.scope === ActivityTargetScope.RESPONSABLES_ONLY ? 'innerJoin' : 'leftJoin';
+      // Les liens réels sont portés par les colonnes *_uuid (member_id/responsibility_id
+      // sont NULL sur les lignes migrées, cf. MemberResponsibilityEntity).
       qb[joinKind](
         'member_responsibilities',
         'mr',
-        'mr.member_id = m.id AND mr.deleted_at IS NULL',
+        'mr.member_uuid = m.uuid AND mr.deleted_at IS NULL',
       );
       qb[joinKind](
         'responsibilities',
         'r',
-        'r.id = mr.responsibility_id AND r.deleted_at IS NULL',
+        'r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL',
       );
 
       if (c.responsibilities.length) {

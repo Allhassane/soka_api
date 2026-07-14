@@ -61,15 +61,6 @@ export class CreateActivityTypeDto {
   @MaxLength(255)
   default_recurrence_rule?: string;
 
-  @ApiPropertyOptional({
-    description:
-      "Niveau d'exécution attendu : national | region | centre | district | groupe | sous_groupe",
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(64)
-  execution_level?: string;
-
   @ApiPropertyOptional({ description: "Statut : 'enable' ou 'disable'", default: 'enable' })
   @IsOptional()
   @IsString()

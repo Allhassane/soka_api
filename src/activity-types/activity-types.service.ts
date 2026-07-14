@@ -69,7 +69,6 @@ export class ActivityTypesService {
       requires_quota: payload.requires_quota ?? false,
       requires_committee: payload.requires_committee ?? false,
       default_recurrence_rule: payload.default_recurrence_rule ?? null,
-      execution_level: payload.execution_level ?? null,
       admin_uuid,
     });
     const saved = await this.activityTypeRepo.save(item);
@@ -96,8 +95,6 @@ export class ActivityTypesService {
     if (payload.requires_committee !== undefined) item.requires_committee = payload.requires_committee;
     if (payload.default_recurrence_rule !== undefined)
       item.default_recurrence_rule = payload.default_recurrence_rule ?? null;
-    if (payload.execution_level !== undefined)
-      item.execution_level = payload.execution_level ?? null;
     if (payload.status !== undefined) item.status = payload.status;
 
     const updated = await this.activityTypeRepo.save(item);
