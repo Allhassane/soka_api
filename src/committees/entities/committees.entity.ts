@@ -1,5 +1,6 @@
 import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
-import { Entity, PrimaryGeneratedColumn, Column, BeforeInsert, BeforeUpdate } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, BeforeInsert, BeforeUpdate, OneToMany } from 'typeorm';
+import { CommitteeMemberEntity } from './committee-member.entity';
 
 function slugify(s: string) {
   return s
@@ -31,8 +32,15 @@ export class CommitteesEntity extends DateTimeEntity {
   @Column({ type: 'varchar', length: 36 })
   admin_uuid: string;
 
+  /** Membre désigné responsable du comité (assigné par un admin). */
+  @Column({ type: 'char', length: 36, nullable: true })
+  responsible_member_uuid: string | null;
+
   @Column({ type: 'varchar', length: 36, default: 'enable' })
   status: string;
+
+  @OneToMany(() => CommitteeMemberEntity, (cm) => cm.committee)
+  members: CommitteeMemberEntity[];
 
   @BeforeInsert()
   @BeforeUpdate()
