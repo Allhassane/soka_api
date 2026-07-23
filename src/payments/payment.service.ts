@@ -21,7 +21,7 @@ import { TransactionWithDetails } from './types/transaction-with-details.type';
 import axios from 'axios';
 import * as ExcelJS from 'exceljs';
 import { Response } from 'express';
-import { ExportJobService } from 'src/export-async/export-job.service';
+import { ExportJobService, ExportJobFilters } from 'src/export-async/export-job.service';
 import { ExportProcessorService } from 'src/export-async/export-processor.service';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -1127,8 +1127,13 @@ async findTransactionsForSubGroupsExport(
   }
 
 
-  async getUserExports(user_uuid: string, page: number = 1, limit: number = 20) {
-    return this.exportJobService.getUserJobs(user_uuid, page, limit);
+  async getUserExports(
+    user_uuid: string,
+    page: number = 1,
+    limit: number = 20,
+    filters: ExportJobFilters = {},
+  ) {
+    return this.exportJobService.getUserJobs(user_uuid, page, limit, filters);
   }
 
 

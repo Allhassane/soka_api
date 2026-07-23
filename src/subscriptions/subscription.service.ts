@@ -27,6 +27,56 @@ export class SubscriptionService {
     private readonly structureService: StructureService,
   ) {}
 
+  /**
+   * ACTION PRIORITAIRE « Abonnements » : campagnes OUVERTES que l'utilisateur
+   * connecté n'a pas encore souscrites.
+   *  - ouverte = statut STARTED et date du jour dans [starts_at, stops_at] ;
+   *  - « non souscrite » = aucun paiement RÉUSSI où le membre est bénéficiaire.
+   */
+  async getOpenToSubscribe(user_uuid: string) {
+    const user = await this.userRepo.findOne({ where: { uuid: user_uuid } });
+    if (!user) {
+      throw new NotFoundException("Identifiant de l'auteur introuvable");
+    }
+    const memberUuid = user.member_uuid ?? null;
+    const now = new Date();
+
+    const open = await this.subscriptionRepo
+      .createQueryBuilder('s')
+      .where('s.status = :status', { status: GlobalStatus.STARTED })
+      .andWhere('s.starts_at <= :now', { now })
+      .andWhere('s.stops_at >= :now', { now })
+      .orderBy('s.stops_at', 'ASC')
+      .getMany();
+
+    // Campagnes déjà souscrites par le membre (paiement réussi, bénéficiaire).
+    let subscribed = new Set<string>();
+    if (memberUuid && open.length) {
+      const paid = await this.subscriptionPaymentRepo.find({
+        where: {
+          beneficiary_uuid: memberUuid,
+          status: GlobalStatus.SUCCESS,
+        },
+        select: ['subscription_uuid'],
+      });
+      subscribed = new Set(paid.map((p) => p.subscription_uuid));
+    }
+
+    const campaigns = open
+      .filter((s) => !subscribed.has(s.uuid))
+      .map((s) => ({
+        uuid: s.uuid,
+        name: s.name,
+        year: s.year,
+        amount: s.amount,
+        starts_at: s.starts_at,
+        stops_at: s.stops_at,
+        max_payments_per_beneficiary: s.max_payments_per_beneficiary,
+      }));
+
+    return { campaigns, total: campaigns.length };
+  }
+
   async findAll(
     admin_uuid: string,
     page = 1,

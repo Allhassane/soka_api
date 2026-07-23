@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -44,10 +45,28 @@ type ReceptionDistrict = {
   lot_received: boolean;
   lot_received_at: Date | null;
   status: 'received' | 'pending' | 'late';
+  /** L'utilisateur connecté peut-il valider ce district (écriture) ? */
+  can_validate: boolean;
   members: ReceptionMember[];
 };
 
 const NO_DISTRICT = '__none__';
+
+/**
+ * Périmètre d'action de l'utilisateur connecté.
+ * - `all` : admin ou responsable NATIONAL → voit et valide tout.
+ * - `scopeRootUuid` : racine du sous-arbre visible (LECTURE). null si `all`.
+ * - `directDistrictUuids` : districts dont l'utilisateur est le responsable
+ *   DIRECT (ÉCRITURE). Modèle strict : seul le responsable direct valide.
+ */
+type UserScope = {
+  all: boolean;
+  scopeRootUuid: string | null;
+  scopeLevelName: string | null;
+  directDistrictUuids: Set<string>;
+  /** member_uuid de l'utilisateur connecté (pour le self-service). */
+  memberUuid: string | null;
+};
 
 /**
  * Suivi de la RÉCEPTION structurelle d'une édition (cascade District → Membre),
@@ -234,9 +253,123 @@ export class JournalReceptionService {
     return out;
   }
 
+  /**
+   * Résout le PÉRIMÈTRE de l'utilisateur connecté à partir de sa structure et
+   * de ses responsabilités (niveaux). Sécurité :
+   *  - admin (`is_admin`) ou responsable NATIONAL → périmètre total ;
+   *  - sinon LECTURE = sous-arbre de la structure au niveau le plus élevé
+   *    détenu ; ÉCRITURE = uniquement le(s) district(s) dont il est le
+   *    responsable direct (modèle strict).
+   */
+  private async resolveUserScope(admin_uuid: string): Promise<UserScope> {
+    const admin = await this.getAdmin(admin_uuid);
+    const memberUuid = admin.member_uuid ?? null;
+    const strictEmpty: UserScope = {
+      all: false,
+      scopeRootUuid: null,
+      scopeLevelName: null,
+      directDistrictUuids: new Set<string>(),
+      memberUuid,
+    };
+
+    // Admin applicatif → tout
+    if ((admin as { is_admin?: boolean }).is_admin) {
+      return {
+        all: true,
+        scopeRootUuid: null,
+        scopeLevelName: 'ADMIN',
+        directDistrictUuids: new Set<string>(),
+        memberUuid,
+      };
+    }
+    if (!admin.member_uuid) return strictEmpty;
+
+    const member = await this.memberRepo.findOne({
+      where: { uuid: admin.member_uuid },
+      select: ['uuid', 'structure_uuid'],
+    });
+
+    // Niveaux de responsabilité détenus par le membre (collation-safe : pas de
+    // JOIN vers members).
+    const rows: { level_uuid: string; level_name: string; level_order: number }[] =
+      await this.structureRepo.manager.query(
+        `SELECT DISTINCT l.uuid AS level_uuid, l.name AS level_name, l.\`order\` AS level_order
+         FROM member_responsibilities mr
+         INNER JOIN responsibilities r
+           ON r.uuid = mr.responsibility_uuid AND r.deleted_at IS NULL
+         INNER JOIN levels l ON l.uuid = r.level_uuid
+         WHERE mr.deleted_at IS NULL AND mr.member_uuid = ?`,
+        [admin.member_uuid],
+      );
+
+    // Responsable NATIONAL (order 0) → tout
+    const isNational = rows.some(
+      (r) =>
+        Number(r.level_order) === 0 ||
+        (r.level_name ?? '').toUpperCase() === 'NATIONAL',
+    );
+    if (isNational) {
+      return {
+        all: true,
+        scopeRootUuid: null,
+        scopeLevelName: 'NATIONAL',
+        directDistrictUuids: new Set<string>(),
+        memberUuid,
+      };
+    }
+
+    if (!rows.length || !member?.structure_uuid) return strictEmpty;
+
+    const { levelName, districtLevelUuid } = await this.loadLevels();
+    const chains = await this.resolveChains([member.structure_uuid], levelName);
+    const chain = chains.get(member.structure_uuid) ?? []; // racine → feuille
+    const heldLevelUuids = new Set(rows.map((r) => r.level_uuid));
+
+    // LECTURE : nœud le plus haut (proche racine) de la chaîne dont le niveau
+    // est détenu par l'utilisateur = racine du périmètre visible.
+    let scopeRootUuid: string | null = null;
+    let scopeLevelName: string | null = null;
+    for (const node of chain) {
+      if (node.level_uuid && heldLevelUuids.has(node.level_uuid)) {
+        scopeRootUuid = node.uuid;
+        scopeLevelName = node.level_name;
+        break;
+      }
+    }
+    if (!scopeRootUuid) scopeRootUuid = member.structure_uuid; // repli restrictif
+
+    // ÉCRITURE : district(s) dont l'utilisateur est le responsable DIRECT.
+    const directDistrictUuids = new Set<string>();
+    const holdsDistrict = !!districtLevelUuid && heldLevelUuids.has(districtLevelUuid);
+    if (holdsDistrict && districtLevelUuid) {
+      const districtNode = chain.find((c) => c.level_uuid === districtLevelUuid);
+      if (districtNode) directDistrictUuids.add(districtNode.uuid);
+    }
+
+    return {
+      all: false,
+      scopeRootUuid,
+      scopeLevelName,
+      directDistrictUuids,
+      memberUuid,
+    };
+  }
+
+  /** True si l'utilisateur peut VALIDER (écriture) le district donné. */
+  private canValidateDistrict(scope: UserScope, districtUuid: string | null) {
+    if (scope.all) return true;
+    if (!districtUuid) return false;
+    return scope.directDistrictUuids.has(districtUuid);
+  }
+
   /** Construit la vue complète de réception (districts + membres + état). */
-  private async buildView(edition_uuid: string, admin_uuid: string) {
+  private async buildView(
+    edition_uuid: string,
+    admin_uuid: string,
+    scope?: UserScope,
+  ) {
     await this.getAdmin(admin_uuid);
+    const userScope = scope ?? (await this.resolveUserScope(admin_uuid));
     const edition = await this.editionRepo.findOne({
       where: { uuid: edition_uuid },
     });
@@ -317,6 +450,19 @@ export class JournalReceptionService {
       const chain = m.structure_uuid
         ? (chains.get(m.structure_uuid) ?? [])
         : [];
+      // SÉCURITÉ (lecture) : ne conserver que les membres du périmètre de
+      // l'utilisateur (sous-arbre de scopeRoot). Admin/national = tout.
+      if (
+        !userScope.all &&
+        userScope.scopeRootUuid &&
+        !chain.some((c) => c.uuid === userScope.scopeRootUuid)
+      ) {
+        continue;
+      }
+      // Utilisateur sans périmètre (ni admin, ni responsable) → ne voit rien.
+      if (!userScope.all && !userScope.scopeRootUuid) {
+        continue;
+      }
       const districtNode = districtLevelUuid
         ? chain.find((c) => c.level_uuid === districtLevelUuid)
         : undefined;
@@ -400,6 +546,7 @@ export class JournalReceptionService {
           lot_received,
           lot_received_at: rec?.received_at ?? null,
           status,
+          can_validate: this.canValidateDistrict(userScope, d.district_uuid),
           members,
         };
       },
@@ -432,8 +579,17 @@ export class JournalReceptionService {
         number: edition.number,
         month: edition.month,
         year: edition.year,
+        status: edition.status,
+        // La distribution est « démarrée » quand status === 'started'.
+        distribution_started: edition.status === GlobalStatus.STARTED,
         distribution_start_at: edition.distribution_start_at,
         distribution_deadline_at: edition.distribution_deadline_at,
+      },
+      scope: {
+        all: userScope.all,
+        level: userScope.scopeLevelName,
+        can_validate_any:
+          userScope.all || userScope.directDistrictUuids.size > 0,
       },
       summary: {
         districts_total,
@@ -604,6 +760,167 @@ export class JournalReceptionService {
     };
   }
 
+  /**
+   * ACTIONS PRIORITAIRES de l'utilisateur connecté (panneau dashboard).
+   * Modèle self-service, par édition démarrée :
+   *  - `lots`         : lots district à VALIDER (responsable direct / admin /
+   *                     national), non encore réceptionnés → ils DISPARAISSENT
+   *                     une fois validés ;
+   *  - `my_reception` : la PROPRE réception de l'utilisateur (bénéficiaire),
+   *                     tant qu'il ne l'a pas cochée ; `lot_received` indique
+   *                     si le bouton est actif (le lot doit être reçu d'abord).
+   */
+  async getPriorityActions(admin_uuid: string) {
+    const scope = await this.resolveUserScope(admin_uuid);
+
+    const editions = await this.editionRepo.find({
+      where: { status: GlobalStatus.STARTED },
+      order: { distribution_start_at: 'DESC' },
+      take: 8,
+    });
+
+    const { levelName, districtLevelUuid } = await this.loadLevels();
+
+    // District du membre connecté (pour « ma réception »)
+    let myDistrict: string | null = null;
+    if (scope.memberUuid) {
+      const me = await this.memberRepo.findOne({
+        where: { uuid: scope.memberUuid },
+        select: ['uuid', 'structure_uuid'],
+      });
+      if (me?.structure_uuid) {
+        const chains = await this.resolveChains([me.structure_uuid], levelName);
+        const chain = chains.get(me.structure_uuid) ?? [];
+        myDistrict =
+          (districtLevelUuid &&
+            chain.find((c) => c.level_uuid === districtLevelUuid)?.uuid) ||
+          null;
+      }
+    }
+
+    // Le panneau reste TOUJOURS au niveau du district de l'utilisateur — même
+    // pour un admin/national — pour ne pas alourdir la page. Un admin garde ses
+    // droits plus larges ailleurs (page détail d'édition).
+    const canValidateOwn =
+      !!myDistrict &&
+      (scope.all || scope.directDistrictUuids.has(myDistrict));
+    // Scope restreint au seul district de l'utilisateur (lecture + validation).
+    const panelScope: UserScope | null =
+      canValidateOwn && myDistrict
+        ? {
+            all: false,
+            scopeRootUuid: myDistrict,
+            scopeLevelName: scope.scopeLevelName,
+            directDistrictUuids: new Set<string>([myDistrict]),
+            memberUuid: scope.memberUuid,
+          }
+        : null;
+
+    const editionSummary = (ed: JournalEditionEntity) => ({
+      uuid: ed.uuid,
+      title: ed.title,
+      number: ed.number,
+      month: ed.month,
+      year: ed.year,
+      status: ed.status,
+      distribution_started: ed.status === GlobalStatus.STARTED,
+      distribution_start_at: ed.distribution_start_at,
+      distribution_deadline_at: ed.distribution_deadline_at,
+    });
+
+    const out: any[] = [];
+    let lots_pending = 0;
+    let my_pending = 0;
+    const rank = (s: string) => (s === 'late' ? 0 : s === 'pending' ? 1 : 2);
+
+    for (const ed of editions) {
+      // 1) LOTS à valider — UNIQUEMENT le district de l'utilisateur, non reçus.
+      let lots: any[] = [];
+      let editionObj: unknown = editionSummary(ed);
+      if (panelScope) {
+        const view = await this.buildView(ed.uuid, admin_uuid, panelScope).catch(
+          () => null,
+        );
+        if (view) {
+          editionObj = view.edition;
+          lots = view.districts
+            .filter(
+              (d) =>
+                d.district_uuid === myDistrict &&
+                d.can_validate &&
+                !d.lot_received,
+            )
+            .map((d) => ({
+              district_uuid: d.district_uuid,
+              district_name: d.district_name,
+              region: d.region,
+              status: d.status,
+              member_total: d.member_total,
+              member_received: d.member_received,
+              member_pending: d.member_total - d.member_received,
+            }))
+            .sort((a, b) => rank(a.status) - rank(b.status));
+        }
+      }
+
+      // 2) MA RÉCEPTION (self-service) — bénéficiaire pas encore coché.
+      let my_reception: unknown = null;
+      if (scope.memberUuid && ed.subscription_uuid && myDistrict) {
+        const pays = await this.subPaymentRepo.find({
+          where: {
+            subscription_uuid: ed.subscription_uuid,
+            beneficiary_uuid: scope.memberUuid,
+            status: In([GlobalStatus.SUCCESS, GlobalStatus.COMPLETED]),
+          },
+        });
+        const quantity = pays.reduce((s, p) => s + (p.quantity ?? 0), 0);
+        if (pays.length && quantity > 0) {
+          const rec = await this.memberRecRepo.findOne({
+            where: { edition_uuid: ed.uuid, member_uuid: scope.memberUuid },
+          });
+          // déjà coché → on ne l'affiche plus (il disparaît)
+          if (!rec?.received_at) {
+            const lotRec = await this.districtRecRepo.findOne({
+              where: { edition_uuid: ed.uuid, district_uuid: myDistrict },
+            });
+            const ds = await this.structureRepo.findOne({
+              where: { uuid: myDistrict },
+              select: ['uuid', 'name'],
+            });
+            my_reception = {
+              member_uuid: scope.memberUuid,
+              district_uuid: myDistrict,
+              district_name: ds?.name ?? null,
+              quantity,
+              // bouton actif uniquement si le lot du district est réceptionné
+              lot_received: !!lotRec?.received_at,
+            };
+            my_pending += 1;
+          }
+        }
+      }
+
+      lots_pending += lots.length;
+      if (lots.length || my_reception) {
+        out.push({ edition: editionObj, lots, my_reception });
+      }
+    }
+
+    return {
+      scope: {
+        all: scope.all,
+        level: scope.scopeLevelName,
+        can_validate_any: canValidateOwn,
+      },
+      totals: {
+        editions: out.length,
+        lots_pending,
+        my_pending,
+      },
+      editions: out,
+    };
+  }
+
   /** Valide (ou annule) la réception du LOT d'un district. */
   async validateDistrictLot(
     edition_uuid: string,
@@ -617,6 +934,22 @@ export class JournalReceptionService {
       where: { uuid: edition_uuid },
     });
     if (!edition) throw new NotFoundException('Édition introuvable');
+
+    // La validation n'est possible que si la distribution est DÉMARRÉE.
+    if (edition.status !== GlobalStatus.STARTED) {
+      throw new BadRequestException(
+        "La distribution de cette édition n'est pas encore démarrée.",
+      );
+    }
+
+    // SÉCURITÉ : seul le responsable DIRECT du district (ou national/admin)
+    // peut valider la réception de son lot.
+    const scope = await this.resolveUserScope(admin_uuid);
+    if (!this.canValidateDistrict(scope, district_uuid)) {
+      throw new ForbiddenException(
+        "Vous n'êtes pas autorisé à valider la réception de ce district.",
+      );
+    }
 
     const { districtLevelUuid, levelName } = await this.loadLevels();
     const responsibles = await this.resolveDistrictResponsibles(
@@ -682,26 +1015,59 @@ export class JournalReceptionService {
     });
     if (!edition) throw new NotFoundException('Édition introuvable');
 
-    // District de rattachement (fourni par le front, sinon dérivé)
-    let district = district_uuid ?? null;
-    if (!district) {
-      const m = await this.memberRepo.findOne({
-        where: { uuid: member_uuid },
-        select: ['uuid', 'structure_uuid'],
-      });
-      if (m?.structure_uuid) {
-        const { levelName, districtLevelUuid } = await this.loadLevels();
-        const chains = await this.resolveChains(
-          [m.structure_uuid],
-          levelName,
+    // La validation n'est possible que si la distribution est DÉMARRÉE.
+    if (edition.status !== GlobalStatus.STARTED) {
+      throw new BadRequestException(
+        "La distribution de cette édition n'est pas encore démarrée.",
+      );
+    }
+
+    // District RÉEL du membre (dérivé de sa structure) — sert de base à
+    // l'autorisation. On NE fait PAS confiance au district fourni par le front
+    // pour le contrôle de sécurité.
+    let realDistrict: string | null = null;
+    const m = await this.memberRepo.findOne({
+      where: { uuid: member_uuid },
+      select: ['uuid', 'structure_uuid'],
+    });
+    if (m?.structure_uuid) {
+      const { levelName, districtLevelUuid } = await this.loadLevels();
+      const chains = await this.resolveChains([m.structure_uuid], levelName);
+      const chain = chains.get(m.structure_uuid) ?? [];
+      realDistrict =
+        (districtLevelUuid &&
+          chain.find((c) => c.level_uuid === districtLevelUuid)?.uuid) ||
+        null;
+    }
+
+    // SÉCURITÉ (self-service) : chaque membre marque UNIQUEMENT la réception de
+    // son propre journal. Exception : admin / responsable national.
+    const scope = await this.resolveUserScope(admin_uuid);
+    const isSelf = !!scope.memberUuid && scope.memberUuid === member_uuid;
+    if (!scope.all && !isSelf) {
+      throw new ForbiddenException(
+        'Chaque membre marque uniquement la réception de son propre journal.',
+      );
+    }
+
+    // CONDITION : le lot du district doit avoir été réceptionné par le
+    // responsable avant que le membre puisse marquer sa réception
+    // (sauf admin / national).
+    if (!scope.all) {
+      const lotRec = realDistrict
+        ? await this.districtRecRepo.findOne({
+            where: { edition_uuid, district_uuid: realDistrict },
+          })
+        : null;
+      if (!lotRec?.received_at) {
+        throw new ForbiddenException(
+          "Le lot de votre district n'a pas encore été réceptionné par le responsable du district.",
         );
-        const chain = chains.get(m.structure_uuid) ?? [];
-        district =
-          (districtLevelUuid &&
-            chain.find((c) => c.level_uuid === districtLevelUuid)?.uuid) ||
-          null;
       }
     }
+
+    // District de rattachement stocké : celui fourni, sinon le district réel.
+    const district = district_uuid ?? realDistrict;
 
     let rec = await this.memberRecRepo.findOne({
       where: { edition_uuid, member_uuid },

@@ -28,6 +28,17 @@ import {
 export class JournalReceptionController {
   constructor(private readonly service: JournalReceptionService) {}
 
+  @Get('priority-actions')
+  @ApiOperation({
+    summary: "Actions prioritaires de l'utilisateur connecté",
+    description:
+      "Agrège les éditions dont la distribution est démarrée, restreintes au périmètre de l'utilisateur : lots district à valider et membres en attente de réception.",
+  })
+  @ApiResponse({ status: 200, description: 'Actions prioritaires (périmètre).' })
+  priorityActions(@Request() req) {
+    return this.service.getPriorityActions(req.user.uuid as string);
+  }
+
   @Get('editions/:uuid/reception')
   @ApiOperation({
     summary: 'Réception par district (cascade District → Membre)',
