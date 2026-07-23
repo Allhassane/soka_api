@@ -703,6 +703,7 @@ export class JournalReceptionService {
         responsible: string;
         phone: string | null;
         districts: number;
+        districts_late: number;
         lots_received: number;
         member_total: number;
         member_received: number;
@@ -716,6 +717,7 @@ export class JournalReceptionService {
           responsible: key,
           phone: d.responsible_phone ?? null,
           districts: 0,
+          districts_late: 0,
           lots_received: 0,
           member_total: 0,
           member_received: 0,
@@ -724,6 +726,7 @@ export class JournalReceptionService {
       }
       const r = respMap.get(key)!;
       r.districts += 1;
+      if (d.status === 'late') r.districts_late += 1;
       if (d.lot_received) r.lots_received += 1;
       r.member_total += d.member_total;
       r.member_received += d.member_received;
