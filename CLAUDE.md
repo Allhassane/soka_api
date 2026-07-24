@@ -43,9 +43,11 @@ périodique. Rester dans son module ; prévenir avant de toucher aux fichiers pa
 - Toute **migration TypeORM** : coordonner (une migration touche `soka_db` pour tout le monde).
 
 **Périmètre du module `membres`** (mon focus) : `src/members` + `src/member-responsibility`,
-`src/member-accessories`, `src/member-travel`. Dépend des référentiels partagés (civilités, villes,
-structures, niveaux) — les **lire** sans les modifier.
+`src/member-accessories`, `src/member-travel`, `src/member-transfer`.
+Dépend des référentiels partagés (civilités, villes, structures, niveaux) — les **lire** sans les
+modifier.
 👉 Carte détaillée (périmètre + surface de couplage + impact merge) : **`docs/MODULE-MEMBRES.md`**.
+👉 Spécification du **transfert de membres entre structures** : **`docs/TRANSFERT-MEMBRES.md`**.
 
 ## Architecture
 
@@ -76,6 +78,8 @@ structures, niveaux) — les **lire** sans les modifier.
 ### Structure & hiérarchie — `src/structure`, `src/level`, `src/location`
 - **StructureEntity** — une entité organisationnelle dans l'arbre hiérarchique.
 - **LevelEntity** (`level`) — le niveau/rang d'une structure dans la hiérarchie (définit la profondeur).
+- Paliers réels (noms en dur dans `buildBreadcrumb`) :
+  `NATIONAL → REGION → CENTRE_REGIONAL → CENTRE → CHAPITRE → DISTRICT → GROUPE → SOUS_GROUPE`.
 - Découpage géographique : **CountryEntity**, **CityEntity**, **DepartmentEntity**,
   **DivisionEntity**, **OrganisationCityEntity** (villes rattachées à une organisation).
 
@@ -112,6 +116,8 @@ Sous-système de diffusion d'un journal (édition → zones → réception) :
 - **RolePermissionEntity** — liaison rôle ↔ permission.
 - Un utilisateur reçoit des rôles → rôles portent des permissions → renvoyées au front dans
   `global_permissions` (voir gotcha permissions dans `web/CLAUDE.md`).
+- ⚠️ **En pratique, `user_roles` est VIDE** : les permissions d'un non-admin viennent du rôle
+  porté par sa **responsabilité** — voir le gotcha ci-dessous.
 
 ### Import / Export asynchrone — `src/import`, `src/export-async`
 - **ImportBatchEntity** / **ImportFailureEntity** — imports en masse et leurs échecs.
@@ -161,14 +167,69 @@ services) : abonnements et dons.
   `@BeforeInsert` génèrent l'uuid ; un insert qui contourne l'ORM peut laisser un `uuid` NULL
   (déjà rencontré sur `jobs` — cf. correctifs SQL passés).
 
+- **🚫 Jamais de `DEFAULT (UUID())` dans une migration.** Blocage **binlog STATEMENT** déjà
+  rencontré sur cette base (cf. en-tête de `1781400000000-CreateJournalModule`). Et comme
+  `synchronize` est OFF, un `default: () => '(UUID())'` déclaré sur une entité n'atteint jamais
+  le schéma réel → colonne sans défaut → `uuid` NULL. **Convention : colonne `uuid` CHAR(36)
+  sans défaut + hook `@BeforeInsert` côté entité** (modèle : `MemberEntity.ensureUuid()`).
+  ⚠️ Certaines entités anciennes déclarent encore ce default trompeur — ne pas s'y fier.
+
 - **Jointures : uuid vs id incohérent selon les tables.** La majorité des relations joignent sur
-  `uuid` (`referencedColumnName: 'uuid'`), mais **`role_permissions` et `user_roles` joignent sur
-  les FK numériques** (`role_id`, `permission_id`, `user_id`). Vérifier le `@JoinColumn` de
-  l'entité avant d'écrire une jointure manuelle ou un QueryBuilder.
+  `uuid` (`referencedColumnName: 'uuid'`). Les **entités** `RolePermissionEntity` et `UserRole`
+  déclarent au contraire des `@JoinColumn` sur les FK numériques (`role_id`, `permission_id`,
+  `user_id`). Vérifier le `@JoinColumn` de l'entité avant d'écrire une jointure manuelle.
+
+- **🚨 `roles_permissions` : ce que déclare l'entité ≠ ce qu'il y a en base** (vérifié le
+  2026-07-22 sur `soka_db`).
+  - La table s'appelle **`roles_permissions`** (pluriel des deux côtés), pas `role_permissions`.
+  - Ses colonnes **`role_id` et `permission_id` valent `0` sur TOUTES les lignes** ; le lien réel
+    passe par **`role_uuid` / `permission_uuid`**. C'est bien ce que lit le code applicatif
+    (`RoleService.findGlobalPermissions`). Une requête filtrant sur `permission_id` ne remonte
+    donc **rien**.
+  - `roles.id` est lui-même un **CHAR(36)** égal à `roles.uuid`, pas un entier.
+  - La table n'a **ni `created_at`/`updated_at` ni `deleted_at`**.
+  ⇒ Même famille de piège que `member_responsibilities` : toujours joindre sur les colonnes
+  `*_uuid`.
 
 - **Abonnements/dons = pas de relation ORM.** Pour retrouver les paiements d'un membre, filtrer
   `SubscriptionPaymentEntity` / `DonatePaymentEntity` sur `beneficiary_uuid` (ou `actor_uuid`) —
   il n'y a pas de `@OneToMany` à charger via `relations:`.
+- **⚠️ Un responsable n'habite PAS la structure qu'il dirige.** Un responsable de district vit dans
+  un sous-groupe *du* district. Sa responsabilité porte le **niveau** (`responsibilities.level_uuid`),
+  jamais une structure : le rattachement est **calculé** en remontant les ancêtres du membre jusqu'au
+  niveau correspondant (`auth.service.ts` → `findStructureByLevelUuid` ; même logique dans
+  `structure.service.ts` → `getCommittee`). Ne jamais chercher un responsable par
+  `structure_uuid = <la structure dirigée>` : ça ne remonte rien.
+  👉 Corollaire — **règle d'ancre** : quand un membre change de structure, une responsabilité de
+  niveau L est conservée **ssi** `ancêtre(structure_nouvelle, L) == ancêtre(structure_ancienne, L)`.
+  Détail et cas de référence dans `docs/TRANSFERT-MEMBRES.md` §5.
+
+- **🚨 Déplacer un membre : deux chemins, une seule règle.** `members.structure_uuid` ne se
+  réécrit que par le workflow de transfert **ou** par `PUT /members/:uuid`. Les deux appellent
+  `ResponsibilityAnchorService` (`src/member-transfer`, exporté par `MemberTransferModule`) —
+  **ne jamais réimplémenter la règle d'ancre localement**, deux copies divergent toujours.
+  Conséquences côté `PUT` : un changement qui **traverse une frontière de district** est refusé
+  en **400** (« passez par une demande de transfert »), et un déplacement intra-district
+  soft-delete les responsabilités dont l'ancre a changé. Seule exception, volontaire : un membre
+  rattaché **au-dessus** du district (anomalie des 104 membres sur un CHAPITRE) n'a pas de
+  district source — il n'est bloqué ni ici ni par le workflow, sinon il serait immobile à vie.
+
+- **🚨 D'où viennent réellement les permissions d'un non-admin** (vérifié le 2026-07-23) :
+  `user_roles` est **vide** — personne n'a de rôle utilisateur direct. `auth.service.ts` bascule
+  donc sur le repli `permissionsSource: 'responsibility_role'` : il prend la responsabilité du
+  **niveau le plus haut**, lit son `responsibilities.role_uuid`, et charge les permissions de ce
+  rôle. Les 31 responsabilités pointent aujourd'hui **toutes vers le rôle `RESPONSABLE`**.
+  ⇒ Pour ouvrir une fonctionnalité aux responsables, attribuer la permission au rôle **porté par
+  les responsabilités**. L'attribuer à un rôle utilisateur n'aurait aucun effet.
+  ⇒ Un slug absent de la table `permissions` = refusé pour tout le monde **sauf `is_admin`**
+  (`PermissionsGuard` court-circuite sur `is_admin`). C'est le cas aujourd'hui de
+  `membres_modifier_un_membre`, exigé par `PUT /members/:uuid` mais **inexistant en base**.
+
+- **Périmètre d'un non-admin = `assertTargetWithinPerimeter()`** (`structure-tree.service.ts`) :
+  ses structures de responsabilité + leur sous-arbre. **C'est la vraie barrière d'autorisation
+  hiérarchique** — la réutiliser plutôt que réinventer un contrôle. Le grisage côté front n'est
+  qu'un confort.
+
 - **Login = phone_number + password**, pas email. Le guard local attend ces champs.
 - **Migrations manuelles.** `synchronize` doit rester **off** ; passer par
   `migration:generate` / `migration:run`. Ne jamais laisser TypeORM modifier `soka_db` en auto.

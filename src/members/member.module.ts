@@ -25,6 +25,7 @@ import { DepartmentEntity } from 'src/departments/entities/department.entity';
 import { DivisionEntity } from 'src/divisions/entities/division.entity';
 import { StructureEntity } from 'src/structure/entities/structure.entity';
 import { ResponsibilityEntity } from 'src/responsibilities/entities/responsibility.entity';
+import { MemberTransferModule } from 'src/member-transfer/member-transfer.module';
 
 @Module({
   imports: [
@@ -53,6 +54,10 @@ import { ResponsibilityEntity } from 'src/responsibilities/entities/responsibili
     AccessoryModule,
     MemberAccessoryModule,
     StructureModule,
+
+    // Règle d'ancre R8 (`ResponsibilityAnchorService`) : `PUT /members/:uuid` doit appliquer
+    // la même règle que le workflow de transfert. Cf. `docs/TRANSFERT-MEMBRES.md` §5.
+    MemberTransferModule,
 
     forwardRef(() => MemberResponsibilityModule),
   ],

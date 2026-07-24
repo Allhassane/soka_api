@@ -8,6 +8,19 @@
 
 **Chiffres :** 2 repos · 37 fichiers · 180 nœuds (api : 25 fichiers / 115 · web : 12 / 65).
 
+> ⚠️ **Carte antérieure au chantier « transfert de membres » (livré les 2026-07-22/23).** Les
+> chiffres ci-dessous **ne comptent pas** `api/src/member-transfer/` (entités, service,
+> contrôleur, `ResponsibilityAnchorService`, migrations) ni, côté web,
+> `services/member-transfer.ts`, `hooks/useMemberTransfer.ts`, `types/member-transfer.ts`,
+> `components/member-transfer/`, `app/(dashboard)/membres/transferts/`. Deux couplages
+> **nouveaux** à connaître avant le merge global :
+> - `api/src/members/member.module.ts` importe désormais `MemberTransferModule` (règle d'ancre
+>   R8 partagée avec `PUT /members/:uuid` — cf. `TRANSFERT-MEMBRES.md` §5) ;
+> - `web/config/menus.ts` (fichier transverse) porte une entrée « Transferts ».
+>
+> **Ne pas corriger ces chiffres à la main** : relancer `graphify update .` puis régénérer
+> l'analyse de périmètre.
+
 ## Vue d'ensemble
 
 ```mermaid
