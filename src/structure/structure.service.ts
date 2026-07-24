@@ -35,7 +35,13 @@ export class StructureService {
     page = 1,
     limit = 10,
     search?: string,
-  ): Promise<{ data: StructureEntity[]; meta: Omit<PaginateMeta, 'page'> }> {
+  ): Promise<{
+    data: (StructureEntity & {
+      level_name: string | null;
+      parent_name: string | null;
+    })[];
+    meta: Omit<PaginateMeta, 'page'>;
+  }> {
     const qb = this.structureRepo
       .createQueryBuilder('structure')
       .orderBy('structure.created_at', 'DESC');
@@ -51,8 +57,42 @@ export class StructureService {
       .take(limit)
       .getManyAndCount();
 
+    // Enrichissement : niveau + parent, pour désambiguïser à l'affichage des
+    // structures homonymes (ex. plusieurs « OSAKA » à des niveaux/parents
+    // différents). Résolu en masse sur la page courante (≤ limit lignes).
+    const levelUuids = Array.from(
+      new Set(
+        data.map((s) => s.level_uuid).filter((v): v is string => !!v),
+      ),
+    );
+    const parentUuids = Array.from(
+      new Set(
+        data.map((s) => s.parent_uuid).filter((v): v is string => !!v),
+      ),
+    );
+
+    const [levels, parents] = await Promise.all([
+      levelUuids.length
+        ? this.levelRepository.find({ where: { uuid: In(levelUuids) } })
+        : Promise.resolve([]),
+      parentUuids.length
+        ? this.structureRepo.find({
+            where: { uuid: In(parentUuids) },
+            select: ['uuid', 'name'],
+          })
+        : Promise.resolve([]),
+    ]);
+    const levelName = new Map(levels.map((l) => [l.uuid, l.name]));
+    const parentName = new Map(parents.map((p) => [p.uuid, p.name]));
+
+    const enriched = data.map((s) => ({
+      ...s,
+      level_name: s.level_uuid ? (levelName.get(s.level_uuid) ?? null) : null,
+      parent_name: s.parent_uuid ? (parentName.get(s.parent_uuid) ?? null) : null,
+    }));
+
     return {
-      data,
+      data: enriched,
       meta: buildPaginationMeta({ total, page, perPage: limit }),
     };
   }

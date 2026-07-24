@@ -1,0 +1,616 @@
+﻿ville;city_uuid;membres_non_desservis;type
+"Abidjan";b6d85b66-10e6-4fd1-a714-c251e2177e2c;2729;ville_sans_zone
+"San-Pédro";bb01b924-de3b-48f1-a06c-e938c11e0869;248;ville_sans_zone
+"Gagnoa";47f5995b-abd6-4368-b63c-9e20fbdc0847;222;ville_sans_zone
+"Bingerville";1c6b7f01-ede1-43af-a094-864e87b715e9;186;ville_sans_zone
+"BOUAKE";e33ebd55-d276-4c68-83db-9be2af5c89d9;160;ville_sans_zone
+"Daloa";ffd55c06-f74d-4d76-9d05-b1ba556c8d71;150;ville_sans_zone
+"Oumé";43a7bc3b-a90f-44e1-bf93-f671f262726d;118;ville_sans_zone
+"Yamoussoukro";16f673d6-9e95-45d3-834c-5a3173c3c12a;98;ville_sans_zone
+"KORHOGO";6b3af242-17cb-452a-89a7-90ea196c97c0;96;ville_sans_zone
+"Abobo";1c0ae9cd-3335-4c1c-b9bf-5539263365f9;92;ville_sans_zone
+"Man";4f5ec55c-06f5-4b58-8def-cba5280c3787;84;ville_sans_zone
+"Soubré";8ff83663-1581-4e0d-8499-318b663fc3b7;75;ville_sans_zone
+"GALEBRE";cb691014-b7b2-4165-851e-70baef4773e8;73;ville_sans_zone
+"Sinfra";2ec3676a-574c-4bb8-a348-694ff28c7c83;70;ville_sans_zone
+"Bouaflé";087e82dd-d10d-434b-a2ca-9b6562338096;69;ville_sans_zone
+"TOUMODI";ff0a5303-3a33-44fa-8852-08595d0058f0;59;ville_sans_zone
+"Grand-Béréby";46a9e507-1c00-4c48-9445-4d07f8e052a0;58;ville_sans_zone
+"Abengourou";607534dc-99fc-4dbd-b426-f2387bfdea93;54;ville_sans_zone
+"Gbonné";791121df-3c4f-40b8-9b8e-28c327c4e463;49;ville_sans_zone
+"Gonzagueville";0323267f-7d67-43d9-a45a-ccbb89f38f3c;46;ville_sans_zone
+"DUEKOUE";508e8315-e049-4391-b3b8-f3091c2e56c7;42;ville_sans_zone
+"ZUENOULA";316acf4e-ecaa-40bc-931e-381d14b2b002;41;ville_sans_zone
+"VAVOUA";ebc9baec-9fb8-4bc3-a2ca-ba6718a70698;41;ville_sans_zone
+"IRIEFLA";c292232a-c37e-4c9f-8304-a11e7fc15298;38;ville_sans_zone
+"DAOUKRO";671020bf-57d1-4545-8031-2c69a3513d2d;38;ville_sans_zone
+"Zagné";6bd9a7d7-415a-45a3-8126-99b343e8d06b;35;ville_sans_zone
+"Yopougon";42b0caa7-07c8-49e4-a231-1e786c55a1e9;35;ville_sans_zone
+"Danané";a2028883-1f4e-40de-8936-97bb198fb762;34;ville_sans_zone
+"Kononfla";58251f16-8802-4226-9e95-503becc33980;34;ville_sans_zone
+"Ouragahio";9a6b9a5a-812b-4e43-8920-302293cd64ae;31;ville_sans_zone
+"Diégonéfla";169c842d-0886-448f-aff9-c3c1b227b43a;29;ville_sans_zone
+"M'BATTO";d246955f-cd0f-4748-b4a2-f57584346668;29;ville_sans_zone
+"Napié";dcbda5d6-e4b9-4c91-976d-3ba6555d17b1;28;ville_sans_zone
+"Guiglo";1665d656-2b22-4d5f-8f3a-bc7edcbc7e5d;26;ville_sans_zone
+"BRIZEBOUA";1d673fa5-d904-4133-95ca-41a883314345;24;ville_sans_zone
+"TAPEGUHE";540bbde6-f8f4-44b4-9c33-8865733d3ab8;24;ville_sans_zone
+"Issia";25e0ac83-9f6a-4dcf-8afd-9b6d95af0084;23;ville_sans_zone
+"COCODY BLOCKHAUSS";f3f46ef7-e689-4034-9e93-0f9bee2d079c;22;ville_sans_zone
+"Toulepleu";0a06cc43-25bd-485b-a51e-f1b66c7bdb13;22;ville_sans_zone
+"Dougroupalégnoa";2c7bdd6e-271f-4af8-84a2-9ad4c7975ca7;22;ville_sans_zone
+"Biankouma";b9393261-2ebc-4498-bc1d-864418bd81c1;21;ville_sans_zone
+"Guibéroua";42ed0766-21ba-4238-bce4-e5504a0494fc;21;ville_sans_zone
+"TABOU";208e2c17-10f9-41c8-98b3-73ab9bf370a8;21;ville_sans_zone
+"Touba";8b36de69-2cc9-4a7a-8d76-4ffa3877790f;20;ville_sans_zone
+"Agnibilékrou";176cfa5d-5849-44a2-b914-a6b671faf909;20;ville_sans_zone
+"BIMBRESSO";a61c623c-d301-43db-81e5-85ea22731233;20;ville_sans_zone
+"Katiola";a1642aa1-4e24-4751-9163-4487ad3b6d15;20;ville_sans_zone
+"Bondoukou";3c646cc9-aee5-4e95-a2a8-8d06ae64bcf9;19;ville_sans_zone
+"Ayamé";b57bd3bc-6dab-4a63-a907-1654472d773c;18;ville_sans_zone
+"GABIA";09aaa8e9-9e6f-411e-8394-b465587ddf0a;18;ville_sans_zone
+"M'BENGUE";040d2838-73fa-4a01-8b4f-bd3a2f11e779;17;ville_sans_zone
+"Ferkessédougou";526706b5-8fea-4030-a021-4eb90b78bd8b;17;ville_sans_zone
+"Azaguié";5af673d2-a1ce-4822-9d1a-4d3011fe5e87;17;ville_sans_zone
+"Bin-Houyé";dad9958f-a79e-481b-a0fb-4d12c163f7e1;17;ville_sans_zone
+"MANFLA";0ba3df1f-facf-4092-b92f-123266257e9e;16;ville_sans_zone
+"DOUKOUYA";9c873684-6cf4-4dea-a59d-128b38ca7ff9;16;ville_sans_zone
+"Adiaké";1a3284d9-9ee9-4f86-ad06-14321f6e8a2d;16;ville_sans_zone
+"Kouadiokro";d10c436e-8fe4-4e28-a352-942996585bf9;15;ville_sans_zone
+"Songon";4496bcb8-adc7-4188-900b-9618a8d18e66;15;ville_sans_zone
+"Saïoua";037d57fc-4cd9-4641-ac2d-3eb78edca8d7;14;ville_sans_zone
+"Bazré";0bc901ff-3284-4ab7-aa1b-a17793e253fd;14;ville_sans_zone
+"Dimbokro";ce29b461-2466-448e-943c-ec85a24f925e;14;ville_sans_zone
+"SEGUELA";60612194-895f-40b7-8d05-6929320a4f2b;14;ville_sans_zone
+"KANI";57a5f71b-603c-4b17-9aa1-5fbe3b3a7c53;14;ville_sans_zone
+"NONOUA";60304b32-fa7d-4f88-837f-c58e5da8f2b7;14;ville_sans_zone
+"Assié-Akpessé";15455954-5804-4e46-879f-47d4beff7490;14;ville_sans_zone
+"BOUAFLA";cf0df2d2-4f72-4e1f-9b24-ebd5db892ef6;13;ville_sans_zone
+"Kéibla";eef49fb2-9057-450e-9a66-e88fea7a0295;13;ville_sans_zone
+"Arrah";b83f3b4e-d817-4ed3-908d-eccfcf6bf035;12;ville_sans_zone
+"ATTIENKAHA";16e398b4-38c4-41d8-80d1-621f12c981a3;12;ville_sans_zone
+"BROUDOUME";c3329c62-fbe0-4f72-ba8f-cb75446c6442;12;ville_sans_zone
+"GOGOGUHÉ";70a55a57-f698-46af-939b-e96610172011;12;ville_sans_zone
+"Kouassi Kouassikro";604ca78e-20b9-4b76-8fec-e790fe56b308;12;ville_sans_zone
+"GOUETIMBA";57bb775f-cd22-4ee4-a0f7-d6ea4570dc0c;12;ville_sans_zone
+"SIKABOUTOU";f0c0bc15-899d-471a-8f65-9131e825ba2e;11;ville_sans_zone
+"JEAN-FOLLY";8ee5d68c-31e4-4491-8e05-a9de3c1f1480;11;ville_sans_zone
+"Boundiali";f8f2de8b-a3de-4dd5-912c-431c4f2ed764;11;ville_sans_zone
+"Kouétinfla";85a8af46-70f5-414f-bec3-17c2e54043d5;11;ville_sans_zone
+"Brobo";538a15fa-7d40-427f-ab12-6db1bdd92ca0;11;ville_sans_zone
+"Ananguié (Adzopé)";b7fe6197-0fc6-486f-b4f4-72c1ddce243d;11;ville_sans_zone
+"PISSEKOU";209f4efe-b18d-4c2c-b536-737e2f19b8c0;10;ville_sans_zone
+"Assié-Koumassi";90de5f80-c7a2-4a95-a999-ed0c21e6e895;10;ville_sans_zone
+"BEAGO";6d9d99e5-254f-495c-a5d0-d4709592825f;10;ville_sans_zone
+"Zéménafla-V";c3b42db9-caa8-409e-8be7-245eaed94da1;10;ville_sans_zone
+"Banguié 2";86d46c59-ba29-404b-8fe5-b7fa07781be5;10;ville_sans_zone
+"Sakassou";ac2bdb36-292f-4fd9-a4ab-d2926d6159ea;10;ville_sans_zone
+"Huafla";999ea8ad-302e-4766-aabe-ec04d31adb85;10;ville_sans_zone
+"Bayota";d7df6978-8bae-4c0b-893c-16022e757fb0;10;ville_sans_zone
+"KOFFISSIOKAHA";277c60ea-bbbc-404b-a427-424ab6969b88;10;ville_sans_zone
+"DEUX PLATEAUX";1a5c1950-4ab4-4dc3-bf05-32ca84360a72;9;ville_sans_zone
+"Yaou";b268a3cb-692b-4844-8ff8-d26214161c67;8;ville_sans_zone
+"Méagui";d3821a51-f19f-4185-a676-b7cdf35de5ca;8;ville_sans_zone
+"Gabiadji";89d16128-076d-4ffc-ab6e-f24593059030;8;ville_sans_zone
+"PAMBARIBA";e8c57dde-e4fb-4339-99b8-a913949f876c;8;ville_sans_zone
+"Dignago";e8267deb-6650-49f0-b260-48ccd7ba74df;8;ville_sans_zone
+"KOTOBI";7758ebd7-7b46-464c-b692-f073fc28608c;8;ville_sans_zone
+"Borotou-Koro";81afb32c-0c43-4a9a-a546-8b478546dd26;8;ville_sans_zone
+"Bonon";5be57f79-5a7b-4d97-8c6d-3a29b1524b2e;8;ville_sans_zone
+"Ouangolodougou";03879f64-8967-488b-96ba-1f88cddb1002;7;ville_sans_zone
+"ANGUEDEDOU";b44492ab-cb67-49ae-906f-d458459f0693;7;ville_sans_zone
+"KOSSIHOUEN";b0271844-5b7f-49c0-9f59-084653265021;7;ville_sans_zone
+"Sassandra";ffe62352-dbf3-4ceb-aa6c-0872577a3c6d;7;ville_sans_zone
+"S/P YOPOHUE";06145ace-56a5-4d4f-9b6c-09703fb3bcbd;7;ville_sans_zone
+"Assèkro";d87cc554-09b9-4220-9b5c-4c114a93e003;7;ville_sans_zone
+"Locodjro / Cité ADDOHA";9abce7c1-751c-4e30-a7e3-ee95ab5adf2e;7;ville_sans_zone
+"Zaguiéta";fb4245d3-79b3-45fc-bbda-98384cc1e682;7;ville_sans_zone
+"BECEDI";96c2dc9f-bcd6-4ce3-a9b4-b694fe8126ee;7;ville_sans_zone
+"GAZAHIO";2b9b1b55-a88d-47e2-9d9d-6002bd934fe4;7;ville_sans_zone
+"TIAPOUM";02258b4a-688e-4ea4-9868-b5fdaa41b540;7;ville_sans_zone
+"Odienné";d5d9485c-1034-4dee-9705-a1eeb0cadcae;7;ville_sans_zone
+"Zoukougbeu";3cad7f0b-711f-4e88-b8f0-06fd43d6e2a5;7;ville_sans_zone
+"Gnagbodougnoa";679e44dd-e46e-4e7e-9198-4cbfa3ad2bf2;7;ville_sans_zone
+"BEINLEU";2b7bdb78-f635-4f98-b930-d8158f283e37;7;ville_sans_zone
+"DJIBROSSO";48b4a701-e93a-4338-98c8-e71e9d8a79cb;6;ville_sans_zone
+"GUEPAHOUO";8048db7e-34d2-41fd-a3e5-7d593cfaed7e;6;ville_sans_zone
+"BOBOUA";79b9fa93-03ea-4651-a145-e7103ae4bf42;6;ville_sans_zone
+"Biankouman";eaa8eb56-3f01-4dab-97a5-11112ad85126;6;ville_sans_zone
+"CHANTIER LIADE";44d962eb-f127-456e-9f49-efb7553f0bf1;6;ville_sans_zone
+"Soungassou";0f9f0cf0-77c1-4b96-8c4d-33406fa06807;6;ville_sans_zone
+"MILLIONNAIRE";3af5709a-c179-4448-9a28-eafe9af1f053;6;ville_sans_zone
+"Lolobo (Yamoussoukro)";c817ab5f-f95e-4578-92a1-821062763d04;6;ville_sans_zone
+"DJIMPREDOUO";2da1dd46-100a-4a4b-ac76-ea40d9fa1e75;6;ville_sans_zone
+"Tiébissou";6cf69f27-e9bd-4837-ac46-39d2a15cc8de;6;ville_sans_zone
+"BROZAN";81ccd8f3-00b2-498d-ba42-2d3280dc60e0;6;ville_sans_zone
+"AKOUEDO ATTIE";14b9a90f-70a1-4e5b-a100-53561c30efac;6;ville_sans_zone
+"BOLIA";e60d4aec-2bd4-4bf8-9768-73aad8b0eb36;6;ville_sans_zone
+"CNRA BIMBRESSO";d31ea79f-46ff-458d-82da-bd85c9c4708d;6;ville_sans_zone
+"BOUGROU BOBOLOUA";ebc93348-90bd-4bad-a717-434f4983c9eb;5;ville_sans_zone
+"Abobodoumé";d928bf60-124d-4d66-a8b4-edc6588c1474;5;ville_sans_zone
+"MONDOUKOU";4cda10aa-344c-43d7-8ec3-b5be3feedbfa;5;ville_sans_zone
+"Mankono";5241c369-ca5f-4222-a1a9-1ae91b1c58b2;5;ville_sans_zone
+"CARREFOUR BIMBRESSO";472d0814-df83-46e6-a486-7953e04ecad5;5;ville_sans_zone
+"DJIMPOUNINDOUO";f5470a02-6d21-4b0a-878a-9ed9469c331a;5;ville_sans_zone
+"Béoumi";78c57238-9261-4b33-825d-9b2e1c458879;5;ville_sans_zone
+"Frondobo";0e586d73-8dae-4323-8800-9999da43cb0d;5;ville_sans_zone
+"Booda";0d7a63c3-9180-47cf-bd34-a7419b47a5e1;5;ville_sans_zone
+"BONGOUANOU";d2899138-79db-4108-a850-9bf0e7320d22;5;ville_sans_zone
+"NIAPRAHIO";35464226-df99-4b49-90a1-c5083e7ed2e1;5;ville_sans_zone
+"GRABO";f296d80e-57f3-4e7d-bca7-b9c4af4fc3cf;5;ville_sans_zone
+"Bodokro";64c5e0dc-c7fa-4812-b95a-1d8350ba008c;5;ville_sans_zone
+"AGNI ASSIKASSO";cd30b7a9-9f85-446f-b2c8-ba032d00b66a;5;ville_sans_zone
+"SERIHIO";753a8a9d-71dc-430e-8bba-e1147e92d534;5;ville_sans_zone
+"Ahoué";bf368614-17c5-4196-b803-cbebce4209d3;5;ville_sans_zone
+"Buyo (Côte d'Ivoire)";7eacf7f0-84d9-44b3-94b8-ba0ee887d024;5;ville_sans_zone
+"GBIGBIKOU";2cd7712a-ca4c-48e0-9fd0-8742834232dc;5;ville_sans_zone
+"Facobly";ee9a645f-640b-4173-a967-1836fc24693f;5;ville_sans_zone
+"KEHI GBAHI";6e481835-4da4-4c41-babf-62f5b220d546;5;ville_sans_zone
+"SONGON-TE";d559b690-b21d-4273-9f6a-6dd995eb1173;5;ville_sans_zone
+"Yakassé-Feyassé";81b0eb76-b7ff-48f2-ac2e-337ff8bfe282;5;ville_sans_zone
+"Irobo";d6488094-f192-49d8-8759-e677bd5af1e9;5;ville_sans_zone
+"Tioro";2eadcea9-2424-485b-88d2-4cec0433c7c5;5;ville_sans_zone
+"Kossou";c97a2999-9eed-4716-bc2b-02e8cfc20746;5;ville_sans_zone
+"KOKUMBO";8eb8ee79-5aad-42a3-ac23-710c852070ea;5;ville_sans_zone
+"ATTINGUIÉ";1577254a-4ee2-4266-a5be-6a908c31be2e;5;ville_sans_zone
+"CHC";09213248-b742-4c27-8a0e-284920cfc64c;5;ville_sans_zone
+"Koubi";e217e04d-de75-4d6e-86f0-9e259ed60651;4;ville_sans_zone
+"TIEPA";854ea0d8-559b-4154-b951-08e5fcd349f5;4;ville_sans_zone
+"Sinématiali";fdb631a9-a4f5-43dd-bd3a-bd66ed7392af;4;ville_sans_zone
+"CHANTIER LADE";d185778f-5403-4506-81ee-155646313cab;4;ville_sans_zone
+"BLAISEKRO";b0fb2a29-4b9b-45b2-a90c-eeaad5886fd7;4;ville_sans_zone
+"KOKOUEZO";8d5d1282-1624-4bcd-8ff4-582b06ae5257;4;ville_sans_zone
+"ZAGUINEU";8d807e2f-956d-43bd-a9cc-deef5b826ab7;4;ville_sans_zone
+"PARIS LEONA";4bf158be-7ddb-4190-b392-d98320c6ac61;4;ville_sans_zone
+"BELIER";f15d2eff-4464-4c0f-bfcb-edd0e789d506;4;ville_sans_zone
+"ATTECOUBE ESPOIR";4718cf91-0616-4b6f-9c5d-2f51ed99acdf;4;ville_sans_zone
+"GUEZEM";ffc6b3de-e504-4d0e-9457-66249910ac37;4;ville_sans_zone
+"Timbé";51985f12-4959-433a-ba30-34999b9996ec;4;ville_sans_zone
+"NEKA";19e0a168-562c-4202-b29f-9119627662bb;4;ville_sans_zone
+"Kpapékou";11c19988-58c7-4cfd-9e80-20c83f47ffa1;4;ville_sans_zone
+"Bouna";8d2572af-9f80-489b-9c00-c3d8fc5f6cc2;4;ville_sans_zone
+"AKAFOUKRO";a7c80209-0f4b-4592-a5f3-85b37b59882d;4;ville_sans_zone
+"COCODY-VILLAGE";515658e6-a728-48e8-bf59-0f27b924612d;4;ville_sans_zone
+"Koffi Adoukro";8f673f40-f1f1-473c-9c59-ba1163b464ac;4;ville_sans_zone
+"ABADJIN DOUME";b6dd3cdf-01cb-4512-bbbd-fb7754d6632a;4;ville_sans_zone
+"PARA";d9c38700-3310-4dac-a37b-4e82ab25b609;4;ville_sans_zone
+"Gbagbam";d61322db-0b85-41dd-b611-86394f445b53;4;ville_sans_zone
+"DABAKALA";7b1453cd-fc6a-4ecc-bc08-88d4a85f1b48;4;ville_sans_zone
+"Mahapleu";6858ded9-2850-4447-8246-4403b96692cd;4;ville_sans_zone
+"PRODOMO";862e71ed-1256-46db-a519-cd2ed51f9c97;4;ville_sans_zone
+"GOHITAFLA";3b9c25ed-f29f-408f-8992-8ba47f93eac0;4;ville_sans_zone
+"BANGOLO";714ef53a-43ea-42b2-b615-bdf7d3d2b915;4;ville_sans_zone
+"N'GATTAKRO";f32aa5f0-5a64-4b54-93c2-dcef76961b0a;4;ville_sans_zone
+"Lazarekro";92e8c4d1-e6bc-4c53-a309-2e3c752df603;4;ville_sans_zone
+"KLOPOU-FACOBLY";636e33fe-3229-4032-b5db-1e245ed36e5e;4;ville_sans_zone
+"BANCO RESIDENTIEL";7d4b86c5-7407-4ddb-ab00-dc115eb27814;3;ville_sans_zone
+"KOKOUMBO";4e7f0807-ead4-4ce1-866b-ea6728ea2f9c;3;ville_sans_zone
+"Bouakro";20b73b51-7dc1-47a0-b3d5-79cf2a7808f1;3;ville_sans_zone
+"M'BROU";783ed5d6-ca0d-4c24-8f14-208a6a4aaa2f;3;ville_sans_zone
+"DERRIERE WHARF";403c9be6-4f79-4f5c-864d-7b8ba6e0e2c1;3;ville_sans_zone
+"AKOUPÉ";471ed24d-2f0a-4076-af41-e7cf63447f71;3;ville_sans_zone
+"VRIDI CIE";bc4cb396-5f5e-4088-a698-74b27418fb4d;3;ville_sans_zone
+"Banguié2";b052a203-071f-4ee4-ab22-9eeb96eb28bc;3;ville_sans_zone
+"ADJOUFOU";2b668f5d-c4fe-451e-b130-7dbe51e24dae;3;ville_sans_zone
+"OUETOMBA";6d749ee7-9b55-46bd-b800-93df6e786760;3;ville_sans_zone
+"GNATO";b39b5a6e-092a-412c-a15b-d6730cc0b79c;3;ville_sans_zone
+"PORT BOUET CENTRE";84937ad7-df2a-44d0-ace4-ee9e092ecfbd;3;ville_sans_zone
+"ADJAME HABITAT";9750a5cc-db45-4d81-9848-2cd9b86d2597;3;ville_sans_zone
+"Koun-Fao";0425685c-0682-459e-9de1-26fd4cb196c9;3;ville_sans_zone
+"Akakouamekro";0c2b90a2-92c6-4dcb-829e-9fece587fcd4;3;ville_sans_zone
+"COCODY SAINT-JEAN";f5841540-6614-4e3e-a865-0f33dd8000ec;3;ville_sans_zone
+"TCHEGBEKAHA";074b3b1d-3d36-4594-a403-59367d17387c;3;ville_sans_zone
+"Aboisso-Comoé";389fa333-a58d-486f-949d-ca5581b74a19;3;ville_sans_zone
+"Téapleu";cbf1611d-06a3-401d-9383-0e43d156a28b;3;ville_sans_zone
+"DAGBAHIO CHANTIER";8308eb0b-cb32-45ab-8e3a-e1cdd32f53c6;3;ville_sans_zone
+"Abikro";14e9e97b-95b2-4907-9b88-756bc92280f0;3;ville_sans_zone
+"Dabouyo";409a1153-4e5b-4f89-949b-633e2c60c804;3;ville_sans_zone
+"Ebilassokro";533d923f-5828-418a-845b-0f11f37ae778;3;ville_sans_zone
+"ZINZENOU";ce6c0017-049b-46bc-8020-4659a605e01a;3;ville_sans_zone
+"Yopougon Académie";63077acf-7fe1-4b62-855d-a595b0147490;3;ville_sans_zone
+"KRISSERAHIO";b159b41b-4114-4a2b-834e-da71c2e1560f;3;ville_sans_zone
+"ZAHIBOHIO S/P BAYOTA";5694c37b-585c-404f-9f8b-49aa3102baa4;3;ville_sans_zone
+"Assinie-Mafia";5ae74a2c-e1d1-41fd-9a54-078463f69b3e;3;ville_sans_zone
+"Tiéningboué";77ae1c80-7462-4552-98b2-d4a138bfcfef;3;ville_sans_zone
+"Diamarakro";82b5ecf3-d197-4c79-946b-4f0cd0df3e09;3;ville_sans_zone
+"Sirasso";855bc32b-8655-4eb7-9b08-9f468a6b31f8;3;ville_sans_zone
+"Ando-Kékrénou";2a3762e6-0d6a-4945-992c-253649ff0a1f;3;ville_sans_zone
+"INCHALLAH";5687b4f4-d515-4479-ab54-ef7a8d2a150a;3;ville_sans_zone
+"BRIHI";0daad8ac-06f1-441f-903b-8d98d3782546;3;ville_sans_zone
+"DJEKANOU";0406f2fb-996e-4127-8886-c744b5ef9308;3;ville_sans_zone
+"Doropo";4f8e57df-f3a6-4226-b4e9-5633d8b40127;3;ville_sans_zone
+"Konankro";19b90680-25e2-4ac5-a18b-352fa12a8182;3;ville_sans_zone
+"DERRIERE WARF";80191767-03b5-4219-9d7e-28ed49a032bb;3;ville_sans_zone
+"MOSSIKRO";63d67d98-c57d-4545-a8af-1236e305b23e;3;ville_sans_zone
+"SIDECI";17b7337e-74fe-4914-bafc-0a70dfaa7b87;3;ville_sans_zone
+"ADJAME LATIN";c56271d1-b4d8-4728-885f-355372194c44;3;ville_sans_zone
+"Niakaramandougou";d2f1449d-1197-44fb-b604-2735e8f0168d;3;ville_sans_zone
+"Maféré";0a28976f-4d70-45e9-af9a-a885f9204cc3;3;ville_sans_zone
+"Dianra-Village";3bd913ae-57bf-42b2-bf54-ceac526c958d;3;ville_sans_zone
+"Krégbé";8d1cea48-6252-402c-9bf3-d67c0e0bfceb;3;ville_sans_zone
+"LEBAM";c48c18a0-327f-4ad7-9795-88bb80e4ac56;3;ville_sans_zone
+"petit bassam";591edb51-9592-4f51-88d7-3c0a9e990de3;3;ville_sans_zone
+"VRIDI CANAL";13243ae1-3ad8-410f-baf1-36cd4f99d490;3;ville_sans_zone
+"BOODA/TONLA";fe0282cc-61ac-44e1-9d85-19b4a0e1f940;3;ville_sans_zone
+"Gesco";aba16394-baea-4a05-93f1-c26632bd9983;3;ville_sans_zone
+"GRAND GBASSI";b31ce914-470e-4cf9-b107-6afcf5f8f635;3;ville_sans_zone
+"GENDARMERIE 32";776414bd-d985-44ce-adec-67c702766a45;3;ville_sans_zone
+"AYEWAHI";b9630ee1-035b-4951-bd71-0cd30c0e6903;3;ville_sans_zone
+"GUEYO";e52dd95f-9a90-4947-a950-848ae9202fe7;3;ville_sans_zone
+"BLOLEQUIN";85fb9260-532f-4b55-8bad-7d5c5cbe9690;3;ville_sans_zone
+"ZOKROBOUO";cd54dfd2-90e9-43bb-94f0-527759dd820e;3;ville_sans_zone
+"Sogefia";e43bf4cf-9130-4278-b1bd-fafd66ad2470;3;ville_sans_zone
+"Taabo";a9c7387d-4aff-4c0c-8ffa-6f54c88da93f;3;ville_sans_zone
+"GONATE";be409bc3-ca21-4077-9b51-2c8cf610a2a0;3;ville_sans_zone
+"RIVERA GOLF";31baae7f-773b-4446-8730-a99a4a397915;2;ville_sans_zone
+"BABA /SAN PEDRO";8a260500-f332-4944-bdb6-0c4f32fda8ee;2;ville_sans_zone
+"FRESCO";5810b6b6-46b8-4ba7-b2b2-88a45285d44f;2;ville_sans_zone
+"DJIMKPAREDOUO";0c2883c5-f093-4a79-8497-6f3beef0c912;2;ville_sans_zone
+"Kolia";a4ed1cec-9e55-467c-bdf7-bcae10249d7a;2;ville_sans_zone
+"TIPADIPA";8a087f05-53e3-4248-8956-cb0ce81ca222;2;ville_sans_zone
+"SOPIM";64e91906-76db-4bd3-9636-9efb2011a4ff;2;ville_sans_zone
+"NIOUBOUA";25e3747c-b7dd-43cf-9f9b-3f45839bba72;2;ville_sans_zone
+"PORT-BOUET OCEAN";bac212af-aa1e-48f2-a921-3432c60fa54b;2;ville_sans_zone
+"ZAGUIGUIA";ba70d5fc-a0be-46dc-a140-13c78aea5c88;2;ville_sans_zone
+"Remblais";e5d7297b-77cb-417c-a7b0-b931eaec384e;2;ville_sans_zone
+"YOKOBOUE";8c7da27f-f6cc-42cf-8de9-f993a7d2b4fe;2;ville_sans_zone
+"Koonan";b2ad3195-c1b0-4feb-9598-add2fd09a960;2;ville_sans_zone
+"FANNY";de61fcc5-3c03-4c52-a159-9c1adf0558c4;2;ville_sans_zone
+"YOPOUGON (MILLIONNAIRE)";0cbcfa94-49ea-4f2d-8073-5c9c38305612;2;ville_sans_zone
+"Satama-Sokoura";409284ed-a4d0-424f-8f18-c40ae80ad717;2;ville_sans_zone
+"Serifina";4913a0d0-a3e6-482f-926f-8ef4c3f46a99;2;ville_sans_zone
+"Tanda";6942ce32-662d-4521-b065-bd79c6d1e39f;2;ville_sans_zone
+"SIDECI T42";0975a9c0-621d-428f-8fd5-e5e9eaf36b04;2;ville_sans_zone
+"Azaguie-ahoua";7ed2ab79-3c92-4e4e-9bb0-fbbcc3e584e2;2;ville_sans_zone
+"Ahouabo";43b68f71-4f0a-4b23-b3a3-abba05c642d3;2;ville_sans_zone
+"TAGOURA";04b0c7af-cc81-44fa-893d-487598d9101d;2;ville_sans_zone
+"Tafiré";e308efd6-fb94-4103-a8f8-03632b8efe02;2;ville_sans_zone
+"COCODY CITE DES ARTS";f7908770-7aa5-4af7-802c-b357b081b79e;2;ville_sans_zone
+"ALLOKOKRO";327521c3-7b36-43c9-b0f8-cfaa2b0bcd0f;2;ville_sans_zone
+"BEZIAKA";29cb9e3d-f563-4011-a121-65e6f63badeb;2;ville_sans_zone
+"Guitry";51510fbe-08af-4526-866e-5065c5ef5677;2;ville_sans_zone
+"BABA";b84256ec-a720-40dc-9f2e-0524d007e6b8;2;ville_sans_zone
+"DJEBONOUA";8e6bf237-463e-4d4e-9c6c-6bddc75dd44f;2;ville_sans_zone
+"GONZAGUEVILLE 2 POTEAUX";546b125d-e7f9-40dc-b070-ac80c572df01;2;ville_sans_zone
+"Logroan (Daloa Sud)";87501acd-7ed1-4ba8-bf4b-671c648147c8;2;ville_sans_zone
+"BELIEHOA";77105bc8-0329-4700-9680-345aea0baf11;2;ville_sans_zone
+"Soukourougban";d1d68ffe-6f80-45e3-a57c-882b27e63cb5;2;ville_sans_zone
+"AHOUANOU2";078e084d-e1a2-49ed-9744-75c4278713cd;2;ville_sans_zone
+"GOMENEBERI";050ca1ce-12a1-4cc7-bc7d-566bdbb4d7ec;2;ville_sans_zone
+"Résidentiel";4a98e5b4-1300-4095-92af-3daa76eec372;2;ville_sans_zone
+"ANGODA(TOUMODI)";73edfe29-443b-43ac-b760-de943bd114b9;2;ville_sans_zone
+"Koukroutié";8a076462-e87f-42ff-91e5-80625b8226ea;2;ville_sans_zone
+"CNRA/SAVANE/DABOU";7d23e165-28ca-467b-a584-45e7c170fddb;2;ville_sans_zone
+"DIAPOTO MORONOU";4b6e3f6f-4e62-4184-98c4-058a6bad321c;2;ville_sans_zone
+"ABAKRO";df1d134f-3ed3-4a33-bb69-fc7d751317e2;2;ville_sans_zone
+"KEBI/BOUNDIALI";f3707d34-ac38-4d63-995d-cc430046450d;2;ville_sans_zone
+"SAMO";85e689d1-2022-4c87-8ac6-c5793908a17c;2;ville_sans_zone
+"TIENKOULA";50c4bdd9-67b0-4d35-9841-18369dc4f0c3;2;ville_sans_zone
+"GOKPO";c304a5ce-8e0f-44a5-9ce9-805555ece7e0;2;ville_sans_zone
+"SIDECI YOPOUGON";d4976e42-7828-4e9b-8ec7-d7f9e4b54b16;2;ville_sans_zone
+"DJEDJEDIGBEUPA";a2534c8a-15b6-47c0-b020-e5649989e41e;2;ville_sans_zone
+"QUARTIER DIVO";0b857f77-9cf4-4f38-8658-7655adae316f;2;ville_sans_zone
+"AKAKRO";7e9e0e34-af08-491a-aa84-937990a00598;2;ville_sans_zone
+"LOUHA";85324ac1-16e6-4f84-adf5-6f245f136c34;2;ville_sans_zone
+"GAOULOU/SASSANDRA";d29e5827-e370-402e-8606-c92e8915a26e;2;ville_sans_zone
+"Bocanda";31499c22-60e7-4561-8ae3-59e9fbf94c9f;2;ville_sans_zone
+"DINGUIRA";e24dc314-5a92-4c5f-9e9a-e8c713b323fa;2;ville_sans_zone
+"ZOHOA";f0194b2a-4e0d-4515-989c-f7b8ef35e0f5;2;ville_sans_zone
+"Agbayaté";733e2998-52cd-4946-a9b2-5473ab154363;2;ville_sans_zone
+"GBIGBIKOU S/P BAYOTA";d69182cc-9c98-415f-a228-eb775674fc3f;2;ville_sans_zone
+"ABADJIN-KOUTE";28e5b5a8-7078-4e32-85d7-8ba4a34002e3;2;ville_sans_zone
+"Bokeda";f4a95e9a-4bf8-439d-bc0c-aab3b911a13a;2;ville_sans_zone
+"SIETINFLA (BOUAFLE)";df7e838f-f1ae-4823-93d0-26a7eea86982;2;ville_sans_zone
+"ASSONVON";0ef7db86-7489-4b1d-997d-a21492b9501f;2;ville_sans_zone
+"BOHIKOUAIFLA";8e9f5db2-61c4-476e-a1a0-f718f1947fc0;2;ville_sans_zone
+"SONGON DIAPOTO 2";ca52c926-55a8-4b83-8a0f-ea4196c6697f;2;ville_sans_zone
+"M'BAHIAKRO";b775b12f-172b-48db-a631-fdbc11a5dc60;2;ville_sans_zone
+"BALEA";ec3ed3fb-62cb-47c0-bf9a-e995010fce3d;2;ville_sans_zone
+"DJINKPAREDOUO";bb222945-d0f9-48f1-afe1-52c4fe868e42;2;ville_sans_zone
+"ADIAPOTO MORONOU";484a02bb-bb6c-469e-aef0-47e817ff0bb5;2;ville_sans_zone
+"BAYEKOU GBASSI";4614e89d-12fc-43f0-839b-8ae762468016;2;ville_sans_zone
+"OGOUDOU";5afbea71-e6fb-4f65-9d29-ff07801b7124;2;ville_sans_zone
+"PEUZIGUI/MAHAPLEU";03e9f072-25d6-47e9-ae84-5d5227d8639a;2;ville_sans_zone
+"KOUTE";6dac6c24-f3c4-49b5-b4d3-6296a532d7cb;2;ville_sans_zone
+"ZAMBLEKRO S/P BAYOTA";6338eb5c-69fe-4ecd-828f-c1d73c1535ef;2;ville_sans_zone
+"SONGON KASSEMBLE";b67bee8b-8331-4be5-909a-b63474a29712;2;ville_sans_zone
+"Cocody Angré";532ba27d-43d4-408a-9eee-4545903e4ecb;2;ville_sans_zone
+"Yopohué";913fd246-b04c-42d1-9f05-862757cc372e;2;ville_sans_zone
+"AKPESSEKRO";25e30f67-9e20-455e-b794-a9b41680e462;2;ville_sans_zone
+"ALEPE";e24bf605-f0a0-4c73-97ac-9af48a653038;2;ville_sans_zone
+"ADOPODON";89ae9704-88d3-4d32-b8bb-6a5932e7108f;2;ville_sans_zone
+"Ouellé";8e04e1ab-1ae4-41ee-a09c-75659993ab8f;2;ville_sans_zone
+"GNALIEPA";a7721758-ff75-4857-b331-4332d582551f;2;ville_sans_zone
+"SATAMA-SOKORO";1a15d353-8dda-4906-aa1d-d3fa87216ccb;2;ville_sans_zone
+"20è ARRONDISSEMENT";ce874177-cc3d-46c0-97b9-49e89801d065;2;ville_sans_zone
+"Taboth";b0c9cb20-1186-491a-b8f6-de157bbb61c8;1;ville_sans_zone
+"SOUKOUKRO";d89dfffd-7f33-4b84-8c50-f01d7af251d7;1;ville_sans_zone
+"MOUYASSOUE";dab9f43b-a95b-4584-9cb8-ee2f7d8df5de;1;ville_sans_zone
+"DEUX PLATEAU";203ff9a9-41b7-4503-8bde-485d92041cd3;1;ville_sans_zone
+"Iboguhé";1c42a6af-106a-4cd6-9e83-a188fa3fb215;1;ville_sans_zone
+"MAEGUI";f25ff30b-e4d7-496e-b3ed-7859f6cccf7d;1;ville_sans_zone
+"Koubi/ PSTACI";a79a22e8-0513-49d3-a399-5cda18932ca5;1;ville_sans_zone
+"DIEKOLILIE";e95a3320-323c-4367-89c7-cf67cbfe398b;1;ville_sans_zone
+"PENAFIGUEKAHA";2c263348-6fd7-4235-b73e-d32b1e46b4e1;1;ville_sans_zone
+"YOPOGON MILLIONNAIRE";e6acbdb5-8e09-4636-8538-1ec2991a99c5;1;ville_sans_zone
+"Anyama collège Saint Michel";c1c055f9-aa49-4651-9520-235f5fb49e40;1;ville_sans_zone
+"Anyama mairie";cae51b5f-1824-4c1e-a9e7-80973fca4df5;1;ville_sans_zone
+"EHANIA V6";92cd95e1-c634-4697-9196-1b50f22af21d;1;ville_sans_zone
+"DJIDJIKRO";5cd3a718-9961-4cb2-8764-c49faa2c43f7;1;ville_sans_zone
+"AHOUNOU2";dea051df-ba75-4079-b142-34d9a3137276;1;ville_sans_zone
+"WANDJI";1bd80b94-f869-4258-8072-56d5b0c87592;1;ville_sans_zone
+"Sans Profession";a284019c-0555-4f65-835e-ad9d45ea3980;1;ville_sans_zone
+"NANGOKRO";2f714f7d-0a05-47d9-ab9c-a49bf887511c;1;ville_sans_zone
+"ASSABOU";a86eddc9-1270-437a-8cc0-8883541abff4;1;ville_sans_zone
+"SIEGOUEKOU";21f75724-f7ee-4b7a-8adb-57542cb099bf;1;ville_sans_zone
+"Zouan-Hounien";0463cd52-5099-4972-af7d-26a4589d6e7a;1;ville_sans_zone
+"BIDIO-LOLOHUI";d356e0cd-09df-46ef-8b27-a31b2963dd6f;1;ville_sans_zone
+"Guessabo";3790aabc-f6ab-4113-896f-2d7c30460edc;1;ville_sans_zone
+"BENENE";6b44cb29-2d7d-4d11-8e6c-d4a2638a80b7;1;ville_sans_zone
+"Sarhala";bddf2bca-3c02-4aae-b5f4-152bfc7968c9;1;ville_sans_zone
+"BEYO S/P DAPKADOU";b935d6b5-3e9c-4928-9483-c099da46db2e;1;ville_sans_zone
+"Kébi";2a8ccfc3-400d-4325-b068-626b04495d20;1;ville_sans_zone
+"Prikro";bf6ec826-1531-4b7c-9f54-0805a555b468;1;ville_sans_zone
+"Mayo";e0d27ff4-f2fc-4e2c-882a-e2a617b026fc;1;ville_sans_zone
+"Duokro";819bf60a-b63c-463b-af51-7ae721f542be;1;ville_sans_zone
+"ADJAME CHICANNE";d4d8d6a1-2c57-4e8f-a837-de94b4ff6111;1;ville_sans_zone
+"CANTON DOUGOU";70b367ca-4797-4c32-8a48-91a3555a7cfe;1;ville_sans_zone
+"COCODY DANGA";4c0a7774-39b9-444f-9954-a39336d6ebfa;1;ville_sans_zone
+"ZAGUINE";e29158bb-fe06-46a9-acd0-c109804fb0d2;1;ville_sans_zone
+"ATTECOUBE SAINT JOSEPH";61e704ec-6034-40c9-9371-1d9cce550e76;1;ville_sans_zone
+"Dahiépa-Kéhi";15b6550c-8fdc-4d95-8a9e-4b82a42e6453;1;ville_sans_zone
+"BOUGROU BALAYO";a9d7dfdf-01ed-492e-8147-653cdd4de292;1;ville_sans_zone
+"BADIEPA";e11146d2-fbca-4ff8-b431-ff1198e4bbc2;1;ville_sans_zone
+"ASSIE AKPESSED";5cf10343-386f-47e8-bf98-5dd40e318830;1;ville_sans_zone
+"GNATROA";d6df9de1-37fb-4d77-887f-07a2e0cf91c3;1;ville_sans_zone
+"Baanguié 2";b94ffb28-5e3b-44d2-ba3c-7e5008df209c;1;ville_sans_zone
+"YOPOUGON SABLE";478eb461-bde0-4407-881b-86bd26f008ec;1;ville_sans_zone
+"Ahokokro";9dddf878-6c69-44e5-8a95-0e0faeb95843;1;ville_sans_zone
+"Kolikro-Ahougnanou";f602fb45-75a8-41b3-803c-05d4a2bfc9f0;1;ville_sans_zone
+"ESSAN KOUAKOUKRO";9e694edc-29fc-4a8b-b9aa-04d05bd7b93f;1;ville_sans_zone
+"SIETINFLA";8dddf22a-ee78-4724-93ad-df961f93cf1d;1;ville_sans_zone
+"Akété";614f988a-a97c-46b5-b1d4-42bef869c762;1;ville_sans_zone
+"SIDECI MANDJO";2eb30c86-0ce3-4edf-a64c-079f0fbcec57;1;ville_sans_zone
+"AKOUEDOATTIE";a28d12e4-155e-4ba1-ba66-95219ed3c178;1;ville_sans_zone
+"Abié";ab825e85-d108-44c1-b041-5ab79667f58b;1;ville_sans_zone
+"TIEVOPLEU 1";db7a6af8-79eb-4b98-bde1-62eaf3d22b70;1;ville_sans_zone
+"BODO";98170704-0d5f-4cdb-89d5-c5a784c2f9fa;1;ville_sans_zone
+"ADJAME BRACODI";dbaedbe6-2523-49d9-ab33-2f325ca1e068;1;ville_sans_zone
+"LOFINEKAHA";e78851c9-bbf0-4fb9-bf57-1fddc5197852;1;ville_sans_zone
+"ANDE";1a89d9db-d9ce-4c90-a155-d41708b41194;1;ville_sans_zone
+"ADIAPOTOC 1";b0cc6397-a0da-4f6c-acd1-623f7a0a8df9;1;ville_sans_zone
+"Assuikro/ Molonou";595ff735-69d9-4a3d-a72e-eeff28d1b063;1;ville_sans_zone
+"Ouaninou";3e5a2a06-1ab5-49d0-97a3-0bda6369f663;1;ville_sans_zone
+"TECHEGBEKAHA";3c05123a-c5cc-48f0-b299-6396b620e4a3;1;ville_sans_zone
+"Niangon Sud a Gauche";45931f98-54c7-4e5f-9743-167571a15c2d;1;ville_sans_zone
+"20ème ARRONDISSEMENT";2de92a16-0331-4031-8e6b-38a8c15d2ec4;1;ville_sans_zone
+"SIETINFLA S/P (BOUAFLE)";ceae3eac-7d84-42a3-963b-ab65f56b12e3;1;ville_sans_zone
+"VATOUO";22579f59-9312-4c98-99ba-e9eb1c18d25e;1;ville_sans_zone
+"Kpanigokro";c625bd2f-0331-4d30-a205-c32c6021323c;1;ville_sans_zone
+"LOBIA 2";1dcad278-5a0b-4ca7-bb0f-76af3485270a;1;ville_sans_zone
+"ADJAHUI COUBÉ";b8d3e0d0-8721-49c4-a727-f11a8599d4e5;1;ville_sans_zone
+"JERICOH";b7aa8793-f2f5-4c81-986d-708ba4a593c0;1;ville_sans_zone
+"Madinani";ed24b7d7-02fd-4da3-a172-f77d9e98f6e8;1;ville_sans_zone
+"Dianra";eaaa1eed-017a-4559-ac2e-25a42a16d159;1;ville_sans_zone
+"Lomokankro";21215759-7d26-4172-b717-53b191cb8bf2;1;ville_sans_zone
+"Niangon / Texaco";8e1946fe-d09b-49a5-a72e-5b5d76166ebf;1;ville_sans_zone
+"Sangouiné";6ab3a9aa-63bc-4058-9878-93bf1e65d535;1;ville_sans_zone
+"DOKUI OLYMPE";3e210253-f00b-490e-84b7-8bcb03a68223;1;ville_sans_zone
+"CITE HOUPHOUET BOIGNY";5a821d35-2f46-40ea-81ec-93147e02152e;1;ville_sans_zone
+"BONGOUANO";b62d4826-756f-485a-af40-293a67185d90;1;ville_sans_zone
+"BALEA S/P GBOGUHE";29b94bde-71c4-4509-b68e-f52322d780d3;1;ville_sans_zone
+"VRIDI CITE DOUANES";76e60c72-8fb5-48b3-82a2-0ef2bc0b77a4;1;ville_sans_zone
+"DIAPOTE";3279965d-9180-4c12-ba0b-46f38ac43136;1;ville_sans_zone
+"ADJOUFFOU BELLVILLE";20f3a081-4951-4d48-8a9a-37e937618eb7;1;ville_sans_zone
+"Assuéfry";1bbe6284-7c88-48ce-8f56-5bfa5a205220;1;ville_sans_zone
+"CITE PRESIDENTIELLE";cc8bec20-c567-46ee-b2f8-de544fb9fb80;1;ville_sans_zone
+"KANGA-NIANZE";dbc0865e-84c4-4778-8d66-e4db9173ce21;1;ville_sans_zone
+"Podiagouiné";fa0744e5-9913-44ab-a993-ad382970e7a0;1;ville_sans_zone
+"MORODOUO";646e0262-6774-4798-9ef8-225901221a8e;1;ville_sans_zone
+"YAOU- BONOUA";a2dcc99e-5cbd-4c07-bdb3-c66743be4880;1;ville_sans_zone
+"Adjouan";63d188eb-a370-4d10-8c91-454e589e5e7d;1;ville_sans_zone
+"DALOA (GBIGLOA)";3e663481-eb8b-4a8d-9eb7-556649852026;1;ville_sans_zone
+"Aka koffikro";417f7794-f655-451c-b6a9-a21f15acd7ee;1;ville_sans_zone
+"AZITO";dcbeeae6-b888-42d4-92fd-682192e8c3a9;1;ville_sans_zone
+"Guintéguéla";b5d3e3a7-2792-4878-aa51-b52004bb6358;1;ville_sans_zone
+"SINGROBO/TAABO";62b8874d-ebf5-413f-b7e6-1948b35fb555;1;ville_sans_zone
+"CNRA";f5a983bb-763e-40c8-b5c1-3978c0a4d6b2;1;ville_sans_zone
+"KOUMASSI MARCHÉ";ae7e8a20-dc6b-4ceb-87aa-98e79fd6837a;1;ville_sans_zone
+"ADJOUFOU BELLEVILLE";7d71143c-7b87-42b7-bde5-ad604cf73cef;1;ville_sans_zone
+"SOWETO";36219683-0306-414d-88e2-c60a5e26a54d;1;ville_sans_zone
+"TAABO/ AHONDO";a02937d6-bf9a-4bde-a616-859ba4cf7350;1;ville_sans_zone
+"BROUDOUKOUPENDA";14d354cc-1c67-4303-8e6a-46974dbd5528;1;ville_sans_zone
+"0LODIO";352cea88-e7c8-4b67-838a-d7f86a6709fd;1;ville_sans_zone
+"KROHOGO";934a6275-a469-47ee-b8c2-6b2db1f5d90a;1;ville_sans_zone
+"GUEZON";e02d7067-4a8d-495d-99a6-805b00e8054f;1;ville_sans_zone
+"SAO-PALCI (GUIBEROUA)";c427880f-cd1d-45de-87cc-001a581b1c3b;1;ville_sans_zone
+"TEFROH";79e4b339-bedf-4e1c-9d02-601ee7873289;1;ville_sans_zone
+"GADOUAN";8c9b5098-a4bb-4977-acc7-37572592f217;1;ville_sans_zone
+"N'DRIKRO  OUME";3ebebcc9-cc0b-4bc5-9370-64882880816f;1;ville_sans_zone
+"Brou Akpaoussou";6bc73af3-7bdc-4464-ac27-b7b314f9cb71;1;ville_sans_zone
+"Blockhaus";2a742c70-958c-4353-9144-6251e392e954;1;ville_sans_zone
+"KIRIAO-FACOBLY";fc029cfe-d2e0-432e-9d66-b387376765a0;1;ville_sans_zone
+"mossikro/ santé 3";98dac13a-fabb-4e72-9a0c-ebda458e700b;1;ville_sans_zone
+"FINNEU";bea971a4-bcdc-4dee-8f4e-33cff704d83a;1;ville_sans_zone
+"N'Gattakro (Yamoussoukro)";86e69997-2fdb-4bac-afab-813ddd360e97;1;ville_sans_zone
+"KATADJI";117bd1a8-d0f0-4005-bafe-2f7472ede54d;1;ville_sans_zone
+"CANTON DOUDOU";4b276467-b586-4c27-ab02-22392171b6f2;1;ville_sans_zone
+"Sideci Vatican";b26c9234-d427-4a4e-a2f1-f427ad831f29;1;ville_sans_zone
+"NZIANOUAN";b897814c-8a5e-4e66-9b52-96d85e6078a6;1;ville_sans_zone
+"Aniassué";9683bb73-4119-444d-b855-3d92e6100256;1;ville_sans_zone
+"Akakouamekro/ Boli";91bf092a-f029-4d08-a1ab-2eb3592a206d;1;ville_sans_zone
+"VAOUA";e8c8d6a1-1373-4f1a-8777-5472b92e0c77;1;ville_sans_zone
+"AVAGOU";0f1aea36-e3b4-42e1-80ac-da9a53aa1b38;1;ville_sans_zone
+"GBAGBAOU";4aed2753-17ad-4d14-a0e0-e90394fbf8c2;1;ville_sans_zone
+"DJAGOBOUA";7ff156c6-6909-4ac8-a1d6-27fe9849df6f;1;ville_sans_zone
+"S/P OURAGAHIO";e07af7bb-c0be-4b9e-88c4-858c764981c0;1;ville_sans_zone
+"BINGERVILE";99b49c69-15e3-40af-8495-49a5c475c04d;1;ville_sans_zone
+"VRIDI PETIT BASSAM";d8ecb89e-2a64-46ca-9de2-a981ba060a45;1;ville_sans_zone
+"Yopougon niangon";e476b174-cc33-4bfe-a699-e39659c4dcd7;1;ville_sans_zone
+"CITE DES ARTS";978e1f06-7b57-48ed-883b-21b23a246039;1;ville_sans_zone
+"SOLEIL";5cb0755a-21f6-4f9a-8f01-601aedceb3d5;1;ville_sans_zone
+"KRIKOUMAN";ae01e73b-ea7e-4ba1-bba0-6cee7e378cf4;1;ville_sans_zone
+"BEYO/DAPKADOU";50c81bd1-5d0f-441c-ab15-75b861c1c886;1;ville_sans_zone
+"TOROGUHE";6e46fccd-50c9-4e63-bda4-535e33e92ce5;1;ville_sans_zone
+"ANANI";8faf1849-3388-44f9-bc29-a6e96afe6a3d;1;ville_sans_zone
+"KORONANI";a1e607df-c1c6-4ae3-ba22-ca86dbd4b6ab;1;ville_sans_zone
+"Selmer";af16bbce-f0ef-4fcd-a013-face69d903f4;1;ville_sans_zone
+"JEAN FOLLY BELLEVILLE";93b6e530-868a-4e67-b053-fa75020634c8;1;ville_sans_zone
+"ANONO ET GITE SIR";322fb967-4c88-452b-a0f5-1ebeded2c2dc;1;ville_sans_zone
+"SIDECI-LEM";7264b0e7-ac41-491b-a1bb-511475ef71a2;1;ville_sans_zone
+"SONGON - BIMBRESSO";121d2f3c-beca-4d0d-a203-b77387302d08;1;ville_sans_zone
+"COCODY AMBASSADE";2654793e-ed4b-4698-b836-475b4ec87168;1;ville_sans_zone
+"KAOUARA";b559659c-4717-4b22-bebd-3a5582fd31e3;1;ville_sans_zone
+"GAGNAO";28909a3c-127a-4094-8318-0dd788dcb3ee;1;ville_sans_zone
+"Bonikro";0c378e9d-90c6-40bd-bad2-f542b2f67277;1;ville_sans_zone
+"SAHAGUIKRO";91b702be-8696-4d89-8c52-d7d97bb517f4;1;ville_sans_zone
+"ZAIBOPLI";2dc54f97-c30a-4aa0-b66d-0797be410c5f;1;ville_sans_zone
+"YOPOUGON GABRIEL GARE";7cc4d38c-1803-435d-b6b3-3046a7437d89;1;ville_sans_zone
+"COCODY 2 PLATEAUX";820199b8-d36b-4cd9-a9a5-6cc6928ab530;1;ville_sans_zone
+"RIVIERA BONOUMIN";1d41db29-6ae2-4f9c-aa9c-f92da5aa7de2;1;ville_sans_zone
+"Noé (Tiapoum)";90134939-e593-45ee-a562-fa936ff930d1;1;ville_sans_zone
+"AYAME (YAOU)";45c84750-6a9e-4c5c-931c-99823a9cebd3;1;ville_sans_zone
+"GOTONGOUINE";469b49d8-eb89-4f49-9991-472202ecf08a;1;ville_sans_zone
+"SIDECI HÔTEL ASSA";ce6f0d86-ecd8-4e73-a0d3-01d20d0a2ccc;1;ville_sans_zone
+"BENOIKRO";b9d0d79a-6a8c-4e4a-b0c5-a62b47894fe8;1;ville_sans_zone
+"GLEPLEU";4ed449f3-c44d-4263-8487-b844121691bb;1;ville_sans_zone
+"Mamelakouassiklokro";718e9a98-18ec-42a8-9388-8e2293a7bcb1;1;ville_sans_zone
+"ABATTA CARREFOUR DROGBA";f5c420aa-601a-45f1-bbcc-d629ffb1f293;1;ville_sans_zone
+"PAULY BROUSE";8a6910ef-6d50-4b14-ac31-6c71c5ce5964;1;ville_sans_zone
+"KOUMASSI - FANNY";aea32fd0-2946-41b9-b66f-1a8b72b61d55;1;ville_sans_zone
+"TEFROHDOUO";fd994be8-0be6-4d34-8b34-bdd830789c9d;1;ville_sans_zone
+"GOOFLA";16ca597f-09b4-43d8-9d2b-fd8a8506e216;1;ville_sans_zone
+"Tengréla";5a130e2b-b50a-42d0-8cd2-be2f5ece83f0;1;ville_sans_zone
+"SCAF";984847c8-ddca-4c37-be0e-c90ed66d433a;1;ville_sans_zone
+"BRIHI S/P BAYOTA";252b69a5-a70a-4a52-a788-efc45edb3a8e;1;ville_sans_zone
+"ZAHIBOHIO";42d0f727-8a04-470e-8b94-6dbfb7f9b9a1;1;ville_sans_zone
+"GADOUKOU";df7156b0-f50c-4733-a1fe-6bc52af98b46;1;ville_sans_zone
+"Dogbo";93861334-d178-4465-8a7b-7942c350d1c9;1;ville_sans_zone
+"ZEGREPA";45cdc19e-a351-4a10-a4e2-dc439a703c3f;1;ville_sans_zone
+"Karakoro";097e148a-bec7-4357-a30d-b519d0a9a9b1;1;ville_sans_zone
+"COCODY CENTRE CITE PRESIDENTIELLE";2ee451c8-4f91-476c-a0c2-638a9206e0a0;1;ville_sans_zone
+"Koumassi Divo";1978cf91-4656-4443-a009-54286ddea81d;1;ville_sans_zone
+"32 Gendarmerie";e71b2beb-532a-4f26-93ec-34421a705641;1;ville_sans_zone
+"Ligbisso";d653f8e8-5056-4dc9-96e8-0327b16cfbfb;1;ville_sans_zone
+"NZIANOUA";fd863257-9094-4592-93c5-cfbcebf849b0;1;ville_sans_zone
+"SAPH";b57268e0-241d-4282-916d-7cb14eeeccfa;1;ville_sans_zone
+"RIVERA 2";48e70ce3-abed-487b-952b-5ae6701bc4f7;1;ville_sans_zone
+"Banguie";9e3d7e29-3fde-453c-bd87-b72cddbf2f4e;1;ville_sans_zone
+"BONN";c1267d1a-eba7-498b-9c28-6f35ce84e0f7;1;ville_sans_zone
+"KOUMASSI CAMPEMENT";ea8107e7-e946-40d4-aafa-a2f70dcd1164;1;ville_sans_zone
+"Sankadiokro";37edcda6-114e-4941-a02e-e593db1bdd9b;1;ville_sans_zone
+"Goulia";5addd6d9-8a96-487f-8133-c92026877789;1;ville_sans_zone
+"TROYA";0f0c59c8-8fcf-4a8b-88cd-e14e3b7f2b62;1;ville_sans_zone
+"COCODY LAURIER9";284ddf07-f44d-4fd5-8d35-e34494ae3e60;1;ville_sans_zone
+"AHIGBE KOFFIKRO";c3926cd8-f105-47b3-9e00-83fe01a2b114;1;ville_sans_zone
+"NIAMOUE";f0964b58-60d5-45a2-b6f6-5d5e3880e807;1;ville_sans_zone
+"DJIMPKAREDOUO";ed64f73a-b4b3-4907-9077-6867bbbd1c78;1;ville_sans_zone
+"debrimou";01dc9d5e-6865-43ff-a139-12e4ca164f11;1;ville_sans_zone
+"CHANTIER LADER";128d1009-3e4a-4209-9919-b0da5d47b26f;1;ville_sans_zone
+"YOPOUDON ANDOKOI";bdbecadc-81c5-45ba-939a-43f9c64ef48f;1;ville_sans_zone
+"COCODY 2 PLATEAU VALLON";8d3b68bb-690d-4394-838c-bc0ee1196e36;1;ville_sans_zone
+"Konsou S/P Béoumi";f5159769-6f38-4885-86ad-5eb8e555869d;1;ville_sans_zone
+"SONGON GODOUME";89ed36d2-77e6-46f5-a1c1-f0a82789af23;1;ville_sans_zone
+"Zaranou";6a2b1872-3462-4237-9336-4764038d904c;1;ville_sans_zone
+"Nafana (Ferkessédougou)";9b6fb2a3-5ac6-45c0-8c7b-aff8ee6927bd;1;ville_sans_zone
+"NIAPIDOU";89253e63-7e4f-49d2-8599-f1f85d99ca10;1;ville_sans_zone
+"Niangon Sud";20ae8e98-51a7-489f-bbeb-f1dd6c5cbe4d;1;ville_sans_zone
+"SONGON AGBAN";5a80970d-5325-4dc3-96dc-9537f87431b1;1;ville_sans_zone
+"NIANGON TERMINUS 27";23ddb856-d29c-4567-851e-087300beddbf;1;ville_sans_zone
+"ANGONDA/TOUMODI";bb0f3812-70a4-4f73-abd8-c6135a8a0f11;1;ville_sans_zone
+"SIMONKRO";ab1c7c5b-b679-4f47-ad77-498bad35ff01;1;ville_sans_zone
+"GOUABO";3095197e-28de-492a-8759-71af42b7e861;1;ville_sans_zone
+"NAMBANAKAHA";09916ac0-4b40-47b3-8d13-24cfd800f286;1;ville_sans_zone
+"YOPOUGON MICAO";106bae7c-5e4f-4e33-9812-20489b5bba18;1;ville_sans_zone
+"MIILIONNAIRE";25dfe8a0-3d5b-4127-95cc-31b5581c5e88;1;ville_sans_zone
+"YOPOUGON KOWEIT";a8dd4896-2141-4ec2-a4ac-da6a67111ebc;1;ville_sans_zone
+"Kongodjan";85e17b4b-7660-415d-b096-569cb44f6923;1;ville_sans_zone
+"GLOUBLY(KAHEN ZARABAON)";456f393c-cd10-4297-abf8-e1235016a49a;1;ville_sans_zone
+"DJINKPEREDOUO";4bbaa464-6444-4989-82e1-ad81367eee0d;1;ville_sans_zone
+"ABIDJAN YOPOUGON";2920364d-c441-4bd3-b20a-028647cbd433;1;ville_sans_zone
+"abidjean";4435064d-c969-49ce-aa7e-bfc318764ff8;1;ville_sans_zone
+"Attobrou";6f4d36a8-bc98-4a79-8685-ec97c37d6aee;1;ville_sans_zone
+"N'GATTA KOUAKOUKRO";b202ff0f-1461-48c6-93e2-18022414e357;1;ville_sans_zone
+"Diabo";becb32b9-0094-41d1-9fde-137a105dc637;1;ville_sans_zone
+"ABADJAN DOUME";8c2ba072-a0b1-4689-99fd-7e3e8ac8fea1;1;ville_sans_zone
+"Zaddi";27a5ad06-01e1-4c21-ba7a-a6faac30eb9b;1;ville_sans_zone
+"OUME YAOFLA";43d77321-1e4e-474c-bbd5-7e85376c5b60;1;ville_sans_zone
+"MASSALA";d1396fbe-8f8d-40da-a274-a49c97dbc4cc;1;ville_sans_zone
+"TONGON";c026da0c-080c-44cb-9136-bcc80052c056;1;ville_sans_zone
+"KOROHOG";8790feff-d054-4908-9b3b-a7a237c3aa34;1;ville_sans_zone
+"ODIIENNE";34979db6-f001-4c5b-b613-192b668d29aa;1;ville_sans_zone
+"CITE MONDON";819b4729-6c9f-4e34-8bc5-78f8c29ead27;1;ville_sans_zone
+"ADJAME BRACODY";208995c1-c3bc-4726-8db7-f2eef0b78987;1;ville_sans_zone
+"220 LOGEMENTS";06aa9857-8ac5-4780-b8a6-d6691978fae4;1;ville_sans_zone
+"N'TEKELEFE";a468bbae-9ecf-4c73-97e1-f9789b7fbc0a;1;ville_sans_zone
+"BELAM";224b562c-0e6b-4a3f-ace3-6ab76fefcac0;1;ville_sans_zone
+"Daleu";8d103ee0-30aa-4e92-b92b-b2a3ee70e5fc;1;ville_sans_zone
+"KEITA-OUME";cedce30a-139e-4693-9859-cda85f98fe48;1;ville_sans_zone
+"KOUAMEZIANKRO";ca94f8c7-3122-4051-9d98-e744ea7d5420;1;ville_sans_zone
+"Koko (Bouaké)";1eba1a82-b62e-4525-b567-7e50e8a29f5f;1;ville_sans_zone
+"Bacon";1e744a0f-7be0-4244-a535-def707d27a57;1;ville_sans_zone
+"Grobonou-Dan";54d36ec9-d641-4272-8847-17b9f25e7d02;1;ville_sans_zone
+"BEOUE";e6d50822-d2ef-4e09-b1aa-597d0f35ea91;1;ville_sans_zone
+"GBesse";f78c3d77-3243-42e6-9d01-1934b7d15e0b;1;ville_sans_zone
+"Boguédia";8152e032-ea17-4cd9-abeb-36deb8f9e774;1;ville_sans_zone
+"AKPARO 2";7b82f4b8-e96b-4964-a917-c37bb148d3fb;1;ville_sans_zone
+"BINNGERVILLE";4431d768-298c-4ccb-a6b8-2ab6fee26d69;1;ville_sans_zone
+"DIABOUO";8e20b4c6-ad01-41f7-9833-b0114e3bc61f;1;ville_sans_zone
+"LABAYA";e738974b-e0ec-4295-a129-38121010aa65;1;ville_sans_zone
+"MOUSSADOUGOU";7da1fc28-c614-4bf6-b9f0-2a743e7cafb9;1;ville_sans_zone
+"ADIAPOTODOUME";aff11c24-2472-4b1d-a0a3-89d3477b25ba;1;ville_sans_zone
+"Maguéhio";0a371b66-4a6e-4e98-b482-e3f5557b3516;1;ville_sans_zone
+"Gbegbessou";36519fc2-083d-4e93-bfe7-5070abe96f6a;1;ville_sans_zone
+"Amian Kouassikro";2d69f75a-9b32-4bd9-906d-4113c49e2541;1;ville_sans_zone
+"YAOFLA OUME";ffc6457e-5e77-43a5-9946-b0aca4ce96b8;1;ville_sans_zone
+"SATAMA-SOKRO";e9cab501-6b6f-4d9f-9b36-144573ea5bb1;1;ville_sans_zone
+"ABIDJAN-BINGERVILLE";9a0799f9-eed2-4cae-9725-0e62a19e8d69;1;ville_sans_zone
+"Damé";f4ea3ecd-4a0a-46ef-8222-17912e00b30f;1;ville_sans_zone
+"ASSIE ASSASSO";830879a9-5034-4233-9f14-d587fb14717b;1;ville_sans_zone
+"AVENUE 2 TREICHVILLE";361cc01b-ffcd-4ddf-abb8-2521f116a7da;1;ville_sans_zone
+"Gbéléban";fb494d08-c75f-42ed-923b-caa0b0af2e37;1;ville_sans_zone
+"BEBOU";50b49de0-2546-4ce5-8765-6f7df3592b49;1;ville_sans_zone
+"GBIGBIKOU (BAYOTA)";c2b0b744-9450-4300-a480-f392973670d2;1;ville_sans_zone
+"Yakouassikro";250b6aa3-8f14-49cd-b033-7fd59aa7b7e2;1;ville_sans_zone
+"IZAMBRE";636a762b-514c-4b58-980f-e04ed147dc25;1;ville_sans_zone
+"CITE GATL";203fdb05-7fd3-4a99-a581-538328e87ffb;1;ville_sans_zone
+"DABOU PALMERAIE";3ea58bb5-3130-44a6-8964-79b99818391e;1;ville_sans_zone
+"CAMP FONCTIONNAIRE";177c8d27-81cb-48bf-ba52-de0d68554eed;1;ville_sans_zone
+"San Pedro/BABA";27ba7a65-9b17-4b72-9c5f-e17a9ba495f4;1;ville_sans_zone
+"SN PEDRO";27ba2455-7434-42b7-9871-1834f9ab66b5;1;ville_sans_zone
+"DAKOA";4b71a6d0-3e89-4131-95b0-01820b4b79d7;1;ville_sans_zone
+"CANADA";3087a008-e6bd-492c-bb86-cc9065a1b593;1;ville_sans_zone
+"YOPOUGON GESCO";f8f8e287-26cb-45ed-9e20-37f410738e55;1;ville_sans_zone
+"Logoualé";06bb9a1d-0f08-4160-9220-e9dd67b43f2f;1;ville_sans_zone
+"BAYEKOU BASSI";cec89828-b7a6-4527-b80e-d3379cce5b30;1;ville_sans_zone
+"NEKEIDE";dc7eba41-c946-441f-9714-60461501277e;1;ville_sans_zone
+"Bégouafla";63a8ff4a-08c1-4ddb-8548-6084ec28f524;1;ville_sans_zone
+"COCODY ST-JEAN";2a9fc5e7-afe4-46f8-bb62-1b8be00a6d7c;1;ville_sans_zone
+"PACOBO/TAABO";b1dce054-dd33-43cd-9763-0115bce04ec0;1;ville_sans_zone
+"ZAGUEDIA";7ae23b6d-cb26-4c61-9708-4f74a68b08ee;1;ville_sans_zone
+"GUEHIEBLY";f70cd6ef-8180-4ad7-ac82-8fbfd181091d;1;ville_sans_zone
+"GAIZRA";a34b8a27-c2f0-4cf0-874c-80bfe608a3df;1;ville_sans_zone
+"Yapokoi";d07a46c0-d9e6-4e9e-ad15-10dcb906ec14;1;ville_sans_zone
+"KEITA";9c0e6c16-30cb-4768-bcfc-07d5a014c21e;1;ville_sans_zone
+"ZAKARIA";749e5fe0-0ffb-45b5-b2de-42d111613bc3;1;ville_sans_zone
+"MBRIMBO";c6a19a60-1f82-4651-897c-a145ddf12df7;1;ville_sans_zone
+"GLOUBLY";f03f115f-2546-4bd5-a9a0-7ce595c260c4;1;ville_sans_zone
+"ELEVE";6e54ffe5-a323-42ec-a53f-50bbfe69abfa;1;ville_sans_zone
+"Morokro";decbba52-affd-4f65-a776-b42557304c70;1;ville_sans_zone
+"KALOUFLA";083aa155-28d9-4dd1-b21f-0ee1dfbf2168;1;ville_sans_zone
+"DABOUYO 3";a0f289d8-c802-4f06-b2d5-1acc7069d86b;1;ville_sans_zone
+"Dribouo";8ed3c5c9-bab9-4ecf-9267-141a925ec292;1;ville_sans_zone
+"Yokoréa";2b8b9855-bd3a-4d63-8865-c7295c02e76c;1;ville_sans_zone
+"DOKA";fe0a5d09-26ab-4fd5-b98a-1453726db576;1;ville_sans_zone
+"DOMARO";c1513673-f158-4d58-a890-845ee7e66457;1;ville_sans_zone
+"BODOCIPA";7013323f-87eb-402a-af44-a5f8e0397de4;1;ville_sans_zone
+"PARA/DJOUROUTOU";b297540f-7f2f-4342-b2fd-0cc065c05ced;1;ville_sans_zone
+"Kékrénou";d9fca5a5-840d-4d71-b795-b7de49989467;1;ville_sans_zone
+"SENEGAL";4eb4ac1e-8874-46cc-8453-7ef416e87e67;1;ville_sans_zone
+"ADJAME MAIRIE 1";d4261656-386b-4a8f-8fe0-122650af8b03;1;ville_sans_zone
+"MADOGUHE";5a232c25-d03b-46dc-ba41-f67459ba5fa4;1;ville_sans_zone
+"Zikisso";00fdd78d-dda7-4201-976b-f8f13b1f1ab3;1;ville_sans_zone
+"Grand-Morié";25c73ce9-d42a-401b-877f-d7f200f24b4f;1;ville_sans_zone
+"CITE LADE";297e2d4a-3af5-44f7-8957-84147578de6f;1;ville_sans_zone
+"TIENKO";ece40a61-fac5-40ff-88d7-a48878b9c60b;1;ville_sans_zone
+"TANOKRO S/P BAYOTA";95b48ba3-2660-4171-a34b-a825073b1399;1;ville_sans_zone
