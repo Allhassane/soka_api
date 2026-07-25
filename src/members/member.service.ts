@@ -37,6 +37,11 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ok } from 'assert';
 import { MemberResponsibilityService } from 'src/member-responsibility/member-responsibility.service';
 import { StructureTreeService } from 'src/structure/structure-tree.service';
+import {
+  ancestorAtLevel,
+  MemberImpact,
+  ResponsibilityAnchorService,
+} from 'src/member-transfer/responsibility-anchor.service';
 
 @Injectable()
 export class MemberService {
@@ -98,6 +103,9 @@ export class MemberService {
 
     private structureTreeService: StructureTreeService,
 
+    /** Règle d'ancre R8 — partagée avec le workflow de transfert (`docs/TRANSFERT-MEMBRES.md` §5). */
+    private readonly anchorService: ResponsibilityAnchorService,
+
   ) {}
 
 
@@ -108,7 +116,27 @@ export class MemberService {
         throw new NotFoundException("Identifiant de l'auteur introuvable");
       }
 
+      /**
+       * ── Périmètre du créateur ──
+       *
+       * `update()` vérifiait déjà le périmètre, pas `store()` : un responsable pouvait créer un
+       * membre dans **n'importe quelle** structure via un appel API direct (vérifié le
+       * 2026-07-24 — un responsable du district VOMANZI a créé un membre dans TCHIVA).
+       * L'UI verrouille la hiérarchie jusqu'au district, mais le contrôle d'accès ne peut pas
+       * reposer sur le formulaire. `assertStructureInScope` refuse aussi une création **sans**
+       * structure pour un non-admin, sans quoi le membre échapperait à tout périmètre.
+       */
+      await this.assertStructureInScope(dto.structure_uuid, admin_uuid);
+
       // ---- Vérification civilité obligatoire ----
+      // ⚠️ Garde explicite indispensable : `findOne({ where: { uuid: undefined } })` ne filtre
+      // rien et renvoie la PREMIÈRE civilité de la table. Sans ce test, un membre créé sans
+      // civilité héritait silencieusement de « Monsieur » — et donc de `gender = 'homme'`,
+      // puisque le genre est dérivé de la civilité juste en dessous.
+      if (!dto.civility_uuid) {
+        throw new BadRequestException('La civilité est obligatoire.');
+      }
+
       const civility = await this.civilityRepo.findOne({
         where: { uuid: dto.civility_uuid },
       });
@@ -335,6 +363,58 @@ export class MemberService {
 
     await this.assertStructureInScope(existingMember.structure_uuid, admin_uuid);
 
+    /**
+     * ── Changement de structure : frontière de district + règle d'ancre R8 ──
+     *
+     * Un déplacement de membre passe soit par ici (édition simple), soit par le workflow de
+     * transfert. Les deux chemins doivent produire le **même** effet sur les responsabilités,
+     * d'où l'appel au service de domaine partagé plutôt qu'à une logique locale.
+     * Cf. `docs/TRANSFERT-MEMBRES.md` §5 et §9 (étape 5).
+     */
+    const previousStructureUuid = existingMember.structure_uuid;
+    const isStructureChange =
+      !!dto.structure_uuid &&
+      !!previousStructureUuid &&
+      dto.structure_uuid !== previousStructureUuid;
+
+    let anchorImpact: MemberImpact | null = null;
+
+    if (isStructureChange) {
+      const targetStructure = await this.structureRepo.findOne({
+        where: { uuid: dto.structure_uuid },
+      });
+      if (!targetStructure) throw new NotFoundException("Structure d'accueil introuvable.");
+
+      // Une seule lecture de l'arbre, réutilisée par les deux calculs qui suivent.
+      const index = await this.anchorService.loadStructureIndex();
+
+      const [fromDistrict, toDistrict] = await Promise.all([
+        this.anchorService.resolveDistrict(previousStructureUuid, index),
+        this.anchorService.resolveDistrict(dto.structure_uuid as string, index),
+      ]);
+
+      /**
+       * R1 — changer de district relève du workflow d'approbation, pas de l'édition libre.
+       *
+       * ⚠️ On ne bloque que si les **deux** districts sont déterminables. Un membre rattaché
+       * au-dessus du district (anomalie connue : 104 membres sur un CHAPITRE) n'a pas de
+       * district source, et le workflow de transfert le refuse déjà pour cette raison :
+       * bloquer ici aussi le rendrait définitivement immobile. On laisse donc passer la
+       * réparation — la règle R8 ci-dessous s'applique quand même.
+       */
+      if (fromDistrict && toDistrict && fromDistrict !== toDistrict) {
+        throw new BadRequestException(
+          "Ce changement de structure fait sortir le membre de son district : il doit passer par une demande de transfert (Membres › Transferts), qui sera soumise à l'approbation du district d'accueil.",
+        );
+      }
+
+      anchorImpact = await this.anchorService.computeResponsibilityImpact(
+        uuid,
+        previousStructureUuid,
+        dto.structure_uuid as string,
+        index,
+      );
+    }
 
     if (dto.civility_uuid) {
       const civility = await this.civilityRepo.findOne({
@@ -354,6 +434,30 @@ export class MemberService {
     });
 
     const updated = await this.memberRepo.save(existingMember);
+
+    /**
+     * R8 — les responsabilités dont l'ancre a changé sont retirées (soft-delete), exactement
+     * comme à l'application d'un transfert.
+     *
+     * Fait **après** le déplacement et non avant : en cas d'échec, une responsabilité qui
+     * survit à un déplacement reste réparable, alors qu'une responsabilité supprimée sur un
+     * déplacement qui n'a pas eu lieu serait une perte de donnée silencieuse.
+     * ⚠️ `update()` n'est pas transactionnel (état existant du service) — contrairement à
+     * l'application d'un transfert, qui l'est.
+     */
+    if (anchorImpact && anchorImpact.lost.length > 0) {
+      await this.memberResponsibilityRepo.softDelete({
+        uuid: In(anchorImpact.lost.map((l) => l.member_responsibility_uuid)),
+      });
+
+      await this.logService.logAction(
+        'members-responsibility-anchor-lost',
+        admin.id,
+        `Changement de structure de ${updated.firstname} ${updated.lastname} (${previousStructureUuid} → ${updated.structure_uuid}) : ` +
+          `${anchorImpact.lost.length} responsabilité(s) retirée(s) — ` +
+          anchorImpact.lost.map((l) => l.responsibility_name).join(', '),
+      );
+    }
 
       /**
       * MISE À JOUR AUTO DU COMPTE UTILISATEUR LIÉ
@@ -671,8 +775,21 @@ async findAll(
 
   /**
    * Périmètre hiérarchique du demandeur (anti-IDOR).
+   *
+   * ⚠️ **Un responsable n'habite PAS la structure qu'il dirige** (cf. `CLAUDE.md`) : sa
+   * responsabilité porte un **niveau**, et la structure qu'elle couvre est l'**ancêtre** de sa
+   * structure de résidence à ce niveau — exactement le calcul de `findStructureByLevelUuid`
+   * (`auth.service.ts`), factorisé dans `ancestorAtLevel()`.
+   *
+   * Cette méthode dérivait auparavant le périmètre de la structure de **résidence**, ce qui le
+   * réduisait à une feuille : mesuré le 2026-07-24, le responsable du district VOMANZI ne
+   * « voyait » que **12 membres sur 34** — il était borné à son propre sous-groupe. C'est la
+   * même sémantique de périmètre que `StructureTreeService.assertTargetWithinPerimeter` et que
+   * le module transfert (`allowedRootUuids` = structures des responsabilités) : les trois
+   * doivent rester d'accord.
+   *
    * @returns null si superadmin technique (aucune restriction) ;
-   *          sinon les UUIDs des structures accessibles (sa structure + descendants) ;
+   *          sinon les UUIDs des structures accessibles (racines de responsabilité + descendants) ;
    *          [] si l'utilisateur n'a ni responsabilité ni structure (ne voit rien).
    */
   async getAccessibleStructureUuids(admin_uuid: string): Promise<string[] | null> {
@@ -681,19 +798,45 @@ async findAll(
     if (user.is_admin === true) return null;
     if (!user.member_uuid) return [];
 
-    let mr = await this.memberResponsibilityRepo.findOne({
-      where: { member_uuid: user.member_uuid, priority: 'high' },
-      relations: ['member'],
+    const responsibilities = await this.memberResponsibilityRepo.find({
+      where: { member_uuid: user.member_uuid },
+      relations: ['member', 'responsibility'],
     });
-    if (!mr) {
-      mr = await this.memberResponsibilityRepo.findOne({
-        where: { member_uuid: user.member_uuid },
-        relations: ['member'],
+
+    // Sans responsabilité, on ne couvre que sa propre structure et ses descendants.
+    if (responsibilities.length === 0) {
+      const self = await this.memberRepo.findOne({
+        where: { uuid: user.member_uuid },
+        select: ['uuid', 'structure_uuid'],
       });
+      return self?.structure_uuid
+        ? this.structureTreeService.getAllSubStructureUuids(self.structure_uuid)
+        : [];
     }
-    const structureUuid = mr?.member?.structure_uuid;
-    if (!structureUuid) return [];
-    return this.structureTreeService.getAllSubStructureUuids(structureUuid);
+
+    // Une seule lecture de l'arbre, réutilisée pour toutes les responsabilités.
+    const index = await this.anchorService.loadStructureIndex();
+
+    const roots = new Set<string>();
+    for (const mr of responsibilities) {
+      const residence = mr.member?.structure_uuid;
+      if (!residence) continue;
+
+      // `level_uuid` NULL (anomalie connue sur certaines responsabilités) ⇒ ancre indéterminée :
+      // on retombe sur la structure de résidence plutôt que d'ouvrir tout l'arbre.
+      const anchor = ancestorAtLevel(index, residence, mr.responsibility?.level_uuid);
+      roots.add(anchor ?? residence);
+    }
+
+    if (roots.size === 0) return [];
+
+    const accessible = new Set<string>();
+    for (const root of roots) {
+      const subtree = await this.structureTreeService.getAllSubStructureUuids(root);
+      subtree.forEach((uuid) => accessible.add(uuid));
+    }
+
+    return [...accessible];
   }
 
   /** Vérifie qu'une structure est dans le périmètre du demandeur (sinon 403). */

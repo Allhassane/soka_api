@@ -31,6 +31,16 @@ export class SubscriptionController {
     return this.subscriptionService.store(payload, req.user.uuid as string);
   }
 
+  @Get('open-to-subscribe')
+  @ApiOperation({
+    summary:
+      "Campagnes ouvertes que l'utilisateur n'a pas encore souscrites (action prioritaire)",
+  })
+  @ApiResponse({ status: 200, description: 'Campagnes ouvertes à souscrire.' })
+  openToSubscribe(@Request() req) {
+    return this.subscriptionService.getOpenToSubscribe(req.user.uuid as string);
+  }
+
   @Get('findOneByUuid:uuid')
   @ApiOperation({ summary: 'Récupérer une abonnement par UUID' })
   @ApiResponse({ status: 200, description: 'Abonnement trouvé.' })

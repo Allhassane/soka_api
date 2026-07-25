@@ -30,6 +30,57 @@ export class DonateService {
     private readonly structureService: StructureService,
   ) { }
 
+  /**
+   * ACTION PRIORITAIRE « Zaimu » : campagnes de dons OUVERTES auxquelles
+   * l'utilisateur connecté n'a pas encore contribué.
+   *  - ouverte = statut STARTED et date du jour dans [starts_at, stops_at] ;
+   *  - « non contribuée » = aucun paiement RÉUSSI où le membre est le donateur
+   *    (actor_uuid).
+   */
+  async getOpenToDonate(user_uuid: string) {
+    const user = await this.userRepo.findOne({ where: { uuid: user_uuid } });
+    if (!user) {
+      throw new NotFoundException("Identifiant de l'auteur introuvable");
+    }
+    const memberUuid = user.member_uuid ?? null;
+    const now = new Date();
+
+    const open = await this.donateRepo
+      .createQueryBuilder('d')
+      .where('d.status = :status', { status: GlobalStatus.STARTED })
+      .andWhere('d.starts_at <= :now', { now })
+      .andWhere('d.stops_at >= :now', { now })
+      .orderBy('d.stops_at', 'ASC')
+      .getMany();
+
+    // Campagnes déjà contribuées par le membre (paiement réussi, donateur).
+    let contributed = new Set<string>();
+    if (memberUuid && open.length) {
+      const paid = await this.donatePaymentRepo.find({
+        where: {
+          actor_uuid: memberUuid,
+          status: GlobalStatus.SUCCESS,
+        },
+        select: ['donate_uuid'],
+      });
+      contributed = new Set(paid.map((p) => p.donate_uuid));
+    }
+
+    const campaigns = open
+      .filter((d) => !contributed.has(d.uuid))
+      .map((d) => ({
+        uuid: d.uuid,
+        name: d.name,
+        category: d.category,
+        amount: d.amount,
+        starts_at: d.starts_at,
+        stops_at: d.stops_at,
+        max_payments_per_beneficiary: d.max_payments_per_beneficiary,
+      }));
+
+    return { campaigns, total: campaigns.length };
+  }
+
   async findAll(admin_uuid: string) {
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
     if (!admin) {

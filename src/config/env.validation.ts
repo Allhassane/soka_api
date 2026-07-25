@@ -25,4 +25,19 @@ export const envValidationSchema = Joi.object({
   SOKA_PAY_API_KEY: Joi.string().allow('').default(''),
   SOKA_PAY_WEBHOOK_SECRET: Joi.string().allow('').default(''),
   SOKA_PAY_CALLBACK_URL: Joi.string().allow('').default(''),
+
+  // --- SMS transactionnel : LeTexto (auth : 1re connexion + mot de passe oublié) ---
+  // ENABLED gardé en STRING ('true'/'false') : les providers le lisent en string.
+  LETEXTO_API_KEY: Joi.string().allow('').default(''),
+  LETEXTO_BASE_URL: Joi.string().uri().default('https://apis.letexto.com/v1'),
+  LETEXTO_SENDER: Joi.string().default('SG-CI'),
+  LETEXTO_ENABLED: Joi.string().valid('true', 'false').default('false'),
+  LETEXTO_TIMEOUT_MS: Joi.number().default(8000),
+
+  // --- SMS transactionnel : SMSPro Africa (2e fournisseur, failover) ---
+  SMSPRO_API_TOKEN: Joi.string().allow('').default(''),
+  SMSPRO_BASE_URL: Joi.string().uri().default('https://app.smspro.africa/api/http'),
+  SMSPRO_SENDER_ID: Joi.string().default('SG-CI'),
+  SMSPRO_ENABLED: Joi.string().valid('true', 'false').default('false'),
+  SMSPRO_TIMEOUT_MS: Joi.number().default(8000),
 });

@@ -40,6 +40,7 @@ import { PaymentModule } from './payments/payment.module';
 import { MigrationModule } from './migration/migration.module';
 import { DonatePaymentModule } from './donate-payment/donate-payment.module';
 import { MemberTravelModule } from './member-travel/member-travel.module';
+import { MemberTransferModule } from './member-transfer/member-transfer.module';
 import { SubscriptionPaymentModule } from './subscription-payment/subscription-payment.module';
 import { CinetpayCallbackController } from './payments/cinetpay.controller';
 import { StatistiqueModule } from './statistique/statistique.module';
@@ -126,6 +127,7 @@ import { SokaPayModule } from './sokapay/sokapay.module';
     MigrationModule,
     DonatePaymentModule,
     MemberTravelModule,
+    MemberTransferModule,
     SubscriptionPaymentModule,
     StatistiqueModule,
     LocationModule

@@ -26,6 +26,8 @@ import { PaymentService } from './payment.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
+import { ExportJobStatus } from 'src/export-async/entities/export-job.entity';
+import { ExportJobFilters } from 'src/export-async/export-job.service';
 import { PaymentSource } from './dto/create-payment.dto';
 import { Response } from 'express';
 import path from 'path';
@@ -192,16 +194,57 @@ async getExportStatus(@Param('jobId') jobId: string) {
 
 
 @Get('async-exports/my-exports')
-@ApiOperation({ summary: 'Liste paginée de mes exports' })
+@ApiOperation({ summary: 'Liste paginée et filtrée de mes exports' })
 async getMyExports(
   @Request() req,
   @Query('page') page: number = 1,
-  @Query('limit') limit: number = 20
+  @Query('limit') limit: number = 20,
+  @Query('search') search?: string,
+  @Query('status') status?: string,
+  @Query('type') type?: string,
+  @Query('category') category?: string,
+  @Query('source') source?: string,
+  @Query('dateFrom') dateFrom?: string,
+  @Query('dateTo') dateTo?: string,
+  @Query('sortBy') sortBy?: string,
+  @Query('sortOrder') sortOrder?: string,
 ) {
+  // `status` peut être une liste séparée par des virgules (multi-sélection)
+  const statuses = status
+    ? status
+        .split(',')
+        .map((s) => s.trim().toUpperCase())
+        .filter((s): s is ExportJobStatus =>
+          Object.values(ExportJobStatus).includes(s as ExportJobStatus),
+        )
+    : undefined;
+
+  const normalizedSource = (source ?? '').trim().toLowerCase();
+  const sourceFilter: ExportJobFilters['source'] =
+    normalizedSource === 'zaimu'
+      ? 'zaimu'
+      : normalizedSource === 'abonnement'
+        ? 'abonnement'
+        : undefined;
+
+  const filters: ExportJobFilters = {
+    search: search?.trim() || undefined,
+    statuses,
+    type: type?.trim() || undefined,
+    category: category?.trim() || undefined,
+    source: sourceFilter,
+    dateFrom: dateFrom?.trim() || undefined,
+    dateTo: dateTo?.trim() || undefined,
+    sortBy: sortBy as ExportJobFilters['sortBy'],
+    sortOrder:
+      (sortOrder ?? '').toUpperCase() === 'ASC' ? 'ASC' : undefined,
+  };
+
   return this.paymentService.getUserExports(
     req.user.uuid,
     Number(page),
-    Number(limit)
+    Number(limit),
+    filters,
   );
 }
 
