@@ -103,7 +103,7 @@ export class SubscriptionService {
 
     const qb = this.subscriptionRepo
       .createQueryBuilder('subscription')
-      .orderBy('subscription.name', 'ASC');
+      .orderBy('subscription.name', 'DESC');
 
     if (search?.trim()) {
       qb.andWhere('subscription.name LIKE :search', {
@@ -308,6 +308,16 @@ export class SubscriptionService {
     const subscription = await this.subscriptionRepo.findOne({ where: { uuid } });
     if (!subscription) {
       throw new NotFoundException("Abonnement introuvable");
+    }
+
+    const paymentCount = await this.subscriptionPaymentRepo.count({
+      where: { subscription_uuid: subscription.uuid },
+    });
+
+    if (paymentCount > 0) {
+      throw new BadRequestException(
+        'Impossible de modifier cet abonnement : au moins un paiement existe déjà pour cette campagne.',
+      );
     }
 
     Object.assign(subscription, {

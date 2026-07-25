@@ -26,6 +26,7 @@ import { PaymentService } from './payment.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
+import { PaymentStatus } from './entities/payment.entity';
 import { ExportJobStatus } from 'src/export-async/entities/export-job.entity';
 import { ExportJobFilters } from 'src/export-async/export-job.service';
 import { PaymentSource } from './dto/create-payment.dto';
@@ -308,12 +309,19 @@ async getMyExports(
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 50 })
   @ApiQuery({ name: 'search', required: false, description: 'Recherche par nom ou prénom' })
+  @ApiQuery({
+    name: 'payment_status',
+    required: false,
+    enum: PaymentStatus,
+    description: 'Filtrer par statut de paiement (pending, paid, failed, cancelled)',
+  })
   async findTransactionsForSubGroups(
     @Query('source_uuid') source_uuid: string,
     @Query('page') page = 1,
     @Query('limit') limit = 50,
     @Request() req,
     @Query('search') search?: string | undefined,
+    @Query('payment_status') payment_status?: PaymentStatus,
   ) {
     return this.paymentService.findTransactionsForSubGroups(
       source_uuid,
@@ -322,6 +330,7 @@ async getMyExports(
       +page,
       +limit,
       search,
+      payment_status,
     );
   }
 

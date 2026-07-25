@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { SubscriptionPaymentEntity } from './entities/subscription-payment.entity';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ILike, Repository } from 'typeorm';
+import { ILike, In, Repository } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
 import { LogActivitiesService } from 'src/log-activities/log-activities.service';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
@@ -68,23 +68,45 @@ export class SubscriptionPaymentService {
       );
     }
 
-    let totalPaid: number = 0;
+    let totalPaidQuantity = 0;
+
+    // Bloquer si un paiement est déjà en cours pour ce bénéficiaire
+    const inProgressPayment = await this.subscriptionPaymentRepo.count({
+      where: {
+        subscription_uuid: subscription.uuid,
+        beneficiary_uuid: beneficiary.uuid,
+        status: In([GlobalStatus.INIT, GlobalStatus.PENDING]),
+      },
+    });
+
+    if (inProgressPayment > 0) {
+      throw new BadRequestException(
+        'Un paiement est déjà en cours pour ce bénéficiaire sur cette campagne.',
+      );
+    }
 
     // -----------------------------------------
-    // Vérifier quota de paiements
+    // Vérifier quota de paiements (somme des quantités réussies)
     // -----------------------------------------
     if (
       subscription.max_payments_per_beneficiary &&
       subscription.max_payments_per_beneficiary > 0
     ) {
-      totalPaid = await this.subscriptionPaymentRepo.count({
-        where: {
+      const paidQuantityResult = await this.subscriptionPaymentRepo
+        .createQueryBuilder('sp')
+        .select('COALESCE(SUM(sp.quantity), 0)', 'total')
+        .where('sp.subscription_uuid = :subscription_uuid', {
           subscription_uuid: subscription.uuid,
-          status: GlobalStatus.SUCCESS,
-        },
-      });
+        })
+        .andWhere('sp.beneficiary_uuid = :beneficiary_uuid', {
+          beneficiary_uuid: beneficiary.uuid,
+        })
+        .andWhere('sp.status = :status', { status: GlobalStatus.SUCCESS })
+        .getRawOne();
 
-      if (totalPaid >= subscription.max_payments_per_beneficiary) {
+      totalPaidQuantity = Number(paidQuantityResult?.total ?? 0);
+
+      if (totalPaidQuantity >= subscription.max_payments_per_beneficiary) {
         throw new BadRequestException(
           `Limite de paiements atteinte pour cette campagne d'abonnement.`,
         );
@@ -102,12 +124,13 @@ export class SubscriptionPaymentService {
       );
     }
 
-    let restToPay: number = (subscription.max_payments_per_beneficiary ?? 0) - totalPaid;
+    let restToPay: number =
+      (subscription.max_payments_per_beneficiary ?? 0) - totalPaidQuantity;
 
     if (
-      subscription.max_payments_per_beneficiary 
-      && subscription.max_payments_per_beneficiary > 0 && 
-      quantity > restToPay
+      subscription.max_payments_per_beneficiary
+      && subscription.max_payments_per_beneficiary > 0
+      && quantity > restToPay
     ) {
       throw new BadRequestException(
         `Le nombre de paiements restant pour cette campagne d'abonnement est de ${restToPay}.`,

@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { DonatePaymentEntity } from './entities/donate-payment.entity';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ILike, Repository } from 'typeorm';
+import { ILike, In, Repository } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
 import { LogActivitiesService } from 'src/log-activities/log-activities.service';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
@@ -13,7 +13,6 @@ import { MemberEntity } from 'src/members/entities/member.entity';
 import { MakeDonationPaymentDto } from './dto/make-donation-payment';
 import { PaymentSource } from 'src/payments/dto/create-payment.dto';
 import { PaymentService } from 'src/payments/payment.service';
-import { HubService } from 'src/payments/hub.service';
 import axios from 'axios';
 import { PaymentStatus } from 'src/payments/entities/payment.entity';
 import { DonateEntity } from 'src/donate/entities/donate.entity';
@@ -42,7 +41,6 @@ export class DonatePaymentService {
     private readonly memberRepo: Repository<MemberEntity>,
 
     private readonly paymentService: PaymentService,
-    private readonly hubService: HubService,
   ) { }
 
   // ============================================================
@@ -76,23 +74,43 @@ export class DonatePaymentService {
       );
     }
 
+    let totalPaidQuantity = 0;
+
+    // Bloquer si un paiement est déjà en cours pour ce bénéficiaire
+    const inProgressPayment = await this.donateRepo.count({
+      where: {
+        donate_uuid: donate.uuid,
+        beneficiary_uuid: beneficiary.uuid,
+        status: In([GlobalStatus.INIT, GlobalStatus.PENDING]),
+      },
+    });
+
+    if (inProgressPayment > 0) {
+      throw new BadRequestException(
+        'Un paiement est déjà en cours pour ce bénéficiaire sur cette campagne.',
+      );
+    }
+
     // -------------------------------
-    //  Vérifier le quota de paiements
+    //  Vérifier le quota de paiements (somme des quantités réussies)
     // -------------------------------
-    // On suppose un champ : donate.max_payments_per_beneficiary (number | null)
     if (
       donate.max_payments_per_beneficiary &&
       donate.max_payments_per_beneficiary > 0
     ) {
-      const existingCount = await this.donateRepo.count({
-        where: {
-          donate_uuid: donate.uuid,
+      const paidQuantityResult = await this.donateRepo
+        .createQueryBuilder('d')
+        .select('COALESCE(SUM(d.quantity), 0)', 'total')
+        .where('d.donate_uuid = :donate_uuid', { donate_uuid: donate.uuid })
+        .andWhere('d.beneficiary_uuid = :beneficiary_uuid', {
           beneficiary_uuid: beneficiary.uuid,
-          status: GlobalStatus.SUCCESS,
-        },
-      });
+        })
+        .andWhere('d.status = :status', { status: GlobalStatus.SUCCESS })
+        .getRawOne();
 
-      if (existingCount >= donate.max_payments_per_beneficiary) {
+      totalPaidQuantity = Number(paidQuantityResult?.total ?? 0);
+
+      if (totalPaidQuantity >= donate.max_payments_per_beneficiary) {
         throw new BadRequestException(
           `Ce bénéficiaire a déjà atteint le nombre maximum de paiements autorisés pour cette campagne.`,
         );
@@ -110,6 +128,19 @@ export class DonatePaymentService {
       );
     }
     quantity = rawQuantity;
+
+    let restToPay: number =
+      (donate.max_payments_per_beneficiary ?? 0) - totalPaidQuantity;
+
+    if (
+      donate.max_payments_per_beneficiary
+      && donate.max_payments_per_beneficiary > 0
+      && quantity > restToPay
+    ) {
+      throw new BadRequestException(
+        `Le nombre de paiements restant pour cette campagne de zaimu est de ${restToPay}.`,
+      );
+    }
 
     if (donate.category === DonateCategory.FIXIED_AMOUNT) {
       // Montant imposé par la campagne
@@ -265,68 +296,32 @@ export class DonatePaymentService {
         throw new BadRequestException('transaction_id manquant');
       }
 
-      const hubStatus = await this.hubService.checkPaymentStatus(transaction_id);
-
-      const payment = await this.paymentService.findByTransactionIdOrFail(
+      await this.paymentService.findByTransactionIdOrFail(
         transaction_id,
         admin_uuid,
       );
 
-      if (hubStatus.paid === true) {
-        await this.paymentService.updatePayment(payment.uuid, {
-          status: GlobalStatus.SUCCESS,
-          payment_status: PaymentStatus.PAID,
-        });
+      const result =
+        await this.paymentService.syncHubPaymentByTransactionId(transaction_id);
 
-        const donation = await this.donateRepo.findOne({
-          where: { payment_uuid: payment.uuid },
-        });
-
-        if (donation) {
-          donation.status = GlobalStatus.SUCCESS;
-          await this.donateRepo.save(donation);
-        }
-
-        const subscriptionPayment = await this.subscriptionPaymentRepo.findOne({
-          where: { payment_uuid: payment.uuid },
-        });
-
-        if (subscriptionPayment) {
-          subscriptionPayment.status = GlobalStatus.SUCCESS;
-          await this.subscriptionPaymentRepo.save(subscriptionPayment);
-        }
-
+      if (result.status === 'paid') {
         return {
           success: true,
           message: 'Paiement confirmé avec succès',
           transaction_id,
-          donation_uuid: donation?.uuid ?? null,
-          hub_payment: hubStatus.payment ?? null,
+          donation_uuid: result.donation_uuid ?? null,
+          hub_payment: result.hub_payment ?? null,
         };
       }
 
-      const hubPaymentStatus = hubStatus.payment?.status?.toLowerCase();
-      const isFailed =
-        hubPaymentStatus === 'failed' ||
-        hubPaymentStatus === 'cancelled' ||
-        hubPaymentStatus === 'canceled';
-
-      if (isFailed) {
-        await this.paymentService.updatePayment(payment.uuid, {
-          status: GlobalStatus.FAILED,
-          payment_status: PaymentStatus.FAILED,
-        });
-
-        const donation = await this.donateRepo.findOne({
-          where: { payment_uuid: payment.uuid },
-        });
-
-        if (donation) {
-          donation.status = GlobalStatus.FAILED;
-          await this.donateRepo.save(donation);
-        }
-
+      if (result.status === 'failed') {
         throw new BadRequestException('Paiement échoué');
+      }
+
+      if (result.status === 'not_found') {
+        throw new NotFoundException(
+          `Aucun paiement trouvé pour transaction_id = ${transaction_id}`,
+        );
       }
 
       throw new BadRequestException('Le paiement est en attente de validation.');
