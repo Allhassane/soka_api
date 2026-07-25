@@ -1,10 +1,12 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
+import { v4 as uuidv4 } from 'uuid';
 import { UserRole } from './entities/user-roles.entity';
 import { CreateUserRoleDto } from './dtos/create-user-roles.dto';
 import { UpdateUserRoleDto } from './dtos/update-user-roles.dto';
@@ -12,9 +14,15 @@ import { User } from 'src/users/entities/user.entity';
 import { Role } from 'src/roles/entities/role.entity';
 import { buildPaginationMeta } from 'src/shared/helpers/pagination-meta.helper';
 import { PaginateMeta } from 'src/shared/interfaces/paginate-meta.interface';
+import {
+  ROLE_ADMIN_SLUG,
+  ROLE_MEMBRE_SLUG,
+} from 'src/shared/constants/constants';
 
 @Injectable()
 export class UserRoleService {
+  private readonly logger = new Logger(UserRoleService.name);
+
   constructor(
     @InjectRepository(UserRole)
     private readonly userRoleRepo: Repository<UserRole>,
@@ -24,16 +32,28 @@ export class UserRoleService {
     private readonly roleRepo: Repository<Role>
   ) {}
 
+  /**
+   * ⚠️ On assigne les colonnes `user_uuid` / `role_uuid` et **JAMAIS** les relations ORM
+   * `user` / `role`. Renseigner la relation ferait écrire à TypeORM les FK numériques
+   * `user_id` / `role_id`, or :
+   *  - `roles.id` est un CHAR(36) : `role_id` (int) recevrait un uuid ⇒ échec en
+   *    `STRICT_TRANS_TABLES` (c'est ce qui faisait planter cette route en 500) ;
+   *  - un `role_id` renseigné rendrait vraie la jointure `ur.role_id = rp.role_id` de
+   *    `permission.service.ts` alors que `roles_permissions.role_id` vaut 0 partout ⇒ fuite
+   *    de toutes les permissions de tous les rôles.
+   * Les 7 676 lignes existantes ont `user_id`/`role_id` à NULL : on reste sur cette convention.
+   */
   async create(dto: CreateUserRoleDto): Promise<UserRole> {
-    const user = await this.findUserOrFail(dto.user_uuid);
-    const role = await this.findRoleOrFail(dto.role_uuid);
+    await this.findUserOrFail(dto.user_uuid);
+    await this.findRoleOrFail(dto.role_uuid);
 
     await this.ensureUserRoleIsUnique(dto.user_uuid, dto.role_uuid);
 
     const userRole = this.userRoleRepo.create({
       ...dto,
-      user,
-      role,
+      user_uuid: dto.user_uuid,
+      role_uuid: dto.role_uuid,
+      is_active: dto.is_active ?? true,
     });
 
     return this.userRoleRepo.save(userRole);
@@ -43,19 +63,72 @@ export class UserRoleService {
     const userRole = await this.findOneByUuid(uuid);
 
     if (dto.user_uuid) {
-      const user = await this.findUserOrFail(dto.user_uuid);
-      userRole.user = user;
+      await this.findUserOrFail(dto.user_uuid);
       userRole.user_uuid = dto.user_uuid;
     }
 
     if (dto.role_uuid) {
-      const role = await this.findRoleOrFail(dto.role_uuid);
-      userRole.role = role;
+      await this.findRoleOrFail(dto.role_uuid);
+      // Le couple (utilisateur, rôle) doit rester unique après le changement.
+      const userUuid = dto.user_uuid ?? userRole.user_uuid;
+      if (dto.role_uuid !== userRole.role_uuid) {
+        await this.ensureUserRoleIsUnique(userUuid, dto.role_uuid);
+      }
       userRole.role_uuid = dto.role_uuid;
-    } 
+    }
 
-    Object.assign(userRole, dto);
+    // `user` / `role` volontairement exclus : cf. commentaire de `create()`.
+    const { user_uuid, role_uuid, ...rest } = dto as Record<string, unknown>;
+    Object.assign(userRole, rest);
+
     return this.userRoleRepo.save(userRole);
+  }
+
+  /**
+   * Invariant du projet : **tout utilisateur porte au moins une ligne dans `user_roles`.**
+   * Appelée automatiquement à chaque insertion d'utilisateur (cf. `UserDefaultRoleSubscriber`),
+   * quelle que soit la voie de création (administration, import, création de membre…).
+   *
+   * Idempotente : ne fait rien si l'utilisateur a déjà un rôle. Rôle attribué :
+   * ADMINISTRATEUR si `is_admin`, MEMBRE sinon — même précédence que `scripts/seed-user-roles.js`.
+   * Silencieuse en cas d'échec : ne jamais faire échouer la création d'un utilisateur (ni
+   * l'import de membres) parce que le rôle par défaut n'a pas pu être posé.
+   */
+  async ensureDefaultRole(
+    manager: EntityManager,
+    user: { uuid?: string | null; is_admin?: boolean | null },
+  ): Promise<void> {
+    if (!user?.uuid) return;
+
+    try {
+      const existing = await manager.query(
+        'SELECT 1 FROM `user_roles` WHERE `user_uuid` = ? LIMIT 1',
+        [user.uuid],
+      );
+      if (existing?.length) return;
+
+      const slug = user.is_admin === true ? ROLE_ADMIN_SLUG : ROLE_MEMBRE_SLUG;
+      const roles = await manager.query(
+        'SELECT `uuid` FROM `roles` WHERE `slug` = ? AND `deleted_at` IS NULL LIMIT 1',
+        [slug],
+      );
+      const roleUuid = roles?.[0]?.uuid;
+      if (!roleUuid) return; // base non seedée : on ne bloque pas la création
+
+      // uuid généré côté Node (jamais de DEFAULT (UUID()) sur ce projet) ;
+      // `user_id` / `role_id` laissés à NULL (cf. commentaire de `create()`).
+      await manager.query(
+        'INSERT INTO `user_roles` (`uuid`, `user_uuid`, `role_uuid`, `is_active`, `created_at`, `updated_at`) ' +
+          'VALUES (?, ?, ?, 1, NOW(6), NOW(6))',
+        [uuidv4(), user.uuid, roleUuid],
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Rôle par défaut non attribué à l'utilisateur ${user.uuid} : ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 
   async findAll(

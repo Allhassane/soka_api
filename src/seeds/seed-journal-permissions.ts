@@ -6,7 +6,7 @@ import { PermissionEntity } from '../permission/entities/permission.entity';
 import { User } from '../users/entities/user.entity';
 
 /**
- * SEED — Permissions du module JOURNAL.
+ * SEED - Permissions du module JOURNAL.
  *
  * Crée le module « Journal » (s'il n'existe pas) puis insère les permissions
  * d'action (boutons du détail d'édition + CRUD éditions/zones/destinations).
@@ -28,19 +28,19 @@ const MODULE_DESCRIPTION =
 
 // Liste des permissions { slug, name }. Le slug est l'identifiant stable.
 const PERMISSIONS: { slug: string; name: string }[] = [
-  // — Module / vues —
+  // - Module / vues -
   { slug: 'journals_voir_le_module_journal', name: 'Voir le module journal' },
   { slug: 'journals_voir_le_detail_dune_edition', name: "Voir le détail d'une édition" },
   { slug: 'journals_voir_les_besoins_par_zone', name: 'Voir les besoins par zone' },
   { slug: 'journals_voir_le_suivi_de_reception', name: 'Voir le suivi de réception' },
   { slug: 'journals_voir_lanalytique_de_reception', name: "Voir l'analytique de réception" },
 
-  // — Éditions (CRUD) —
+  // - Éditions (CRUD) -
   { slug: 'journals_creer_une_edition', name: 'Créer une édition' },
   { slug: 'journals_modifier_une_edition', name: 'Modifier une édition' },
   { slug: 'journals_supprimer_une_edition', name: 'Supprimer une édition' },
 
-  // — Détail édition : distribution —
+  // - Détail édition : distribution -
   { slug: 'journals_lancer_la_distribution', name: 'Lancer la distribution' },
   {
     slug: 'journals_confirmer_ou_completer_une_zone',
@@ -51,11 +51,11 @@ const PERMISSIONS: { slug: string; name: string }[] = [
     name: "Voir le détail d'une distribution",
   },
 
-  // — Détail édition : réception —
+  // - Détail édition : réception -
   { slug: 'journals_valider_le_lot_dun_district', name: "Valider le lot d'un district" },
   { slug: 'journals_cocher_la_reception_dun_membre', name: "Cocher la réception d'un membre" },
 
-  // — Détail édition : impression —
+  // - Détail édition : impression -
   {
     slug: 'journals_imprimer_le_rapport_dimpression',
     name: "Imprimer le rapport d'impression",
@@ -65,12 +65,12 @@ const PERMISSIONS: { slug: string; name: string }[] = [
     name: "Exporter le rapport d'impression",
   },
 
-  // — Zones —
+  // - Zones -
   { slug: 'journals_creer_une_zone', name: 'Créer une zone' },
   { slug: 'journals_modifier_une_zone', name: 'Modifier une zone' },
   { slug: 'journals_supprimer_une_zone', name: 'Supprimer une zone' },
 
-  // — Destinations —
+  // - Destinations -
   { slug: 'journals_creer_une_destination', name: 'Créer une destination' },
   { slug: 'journals_modifier_une_destination', name: 'Modifier une destination' },
   { slug: 'journals_supprimer_une_destination', name: 'Supprimer une destination' },
@@ -139,7 +139,7 @@ async function run() {
     }
 
     console.log(
-      `[seed] Permissions — créées : ${created} | déjà présentes : ${skipped}` +
+      `[seed] Permissions - créées : ${created} | déjà présentes : ${skipped}` +
         (relinked ? ` (dont ${relinked} rattachées au module)` : '') +
         ` | total visé : ${PERMISSIONS.length}`,
     );

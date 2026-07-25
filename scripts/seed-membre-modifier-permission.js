@@ -1,5 +1,5 @@
 /**
- * Seed RBAC — ajoute la permission d'action `membres_modifier_un_membre`.
+ * Seed RBAC - ajoute la permission d'action `membres_modifier_un_membre`.
  *
  * Contexte (audit P1) : la route `PUT /members/:uuid` n'était protégée par AUCUNE
  * permission, alors que `POST` (ajouter) et `DELETE` (supprimer) le sont. On introduit

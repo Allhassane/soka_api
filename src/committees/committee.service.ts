@@ -3,14 +3,17 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { CommitteesEntity } from './entities/committees.entity';
 import { CommitteeMemberEntity } from './entities/committee-member.entity';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
 import { MemberEntity } from '../members/entities/member.entity';
+import { Role } from '../roles/entities/role.entity';
+import { LevelEntity } from '../level/entities/level.entity';
 
 /** Forme légère d'un membre exposée par l'API comité. */
 export interface CommitteeMemberView {
@@ -22,6 +25,18 @@ export interface CommitteeMemberView {
   phone: string | null;
   phone_whatsapp: string | null;
   email: string | null;
+}
+
+/** Forme légère d'une donnée de référence (rôle / niveau) exposée sur un comité. */
+export interface CommitteeRefView {
+  uuid: string;
+  name: string;
+}
+
+/** Rôles + niveaux résolus pour un lot de comités, indexés par uuid. */
+interface CommitteeRefs {
+  roles: Map<string, CommitteeRefView>;
+  levels: Map<string, CommitteeRefView>;
 }
 
 @Injectable()
@@ -37,6 +52,11 @@ export class CommitteeService {
 
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+
+    @InjectRepository(Role)
+    private readonly roleRepo: Repository<Role>,
+    @InjectRepository(LevelEntity)
+    private readonly levelRepo: Repository<LevelEntity>,
   ) {}
 
   private async getAdmin(admin_uuid: string) {
@@ -73,6 +93,125 @@ export class CommitteeService {
     );
   }
 
+  // ---- RÔLE & NIVEAU DE RÉFÉRENCE ----
+  // Résolution par requêtes séparées et **batchées** (2 requêtes pour toute la liste) plutôt que
+  // par relation ORM : c'est le « pattern B » du projet, et ça évite un N+1 sur `findAll`.
+  // (Les collations diffèrent — `committees`/`levels` en latin1, `roles` en utf8mb4 — mais ce
+  // n'est PAS un obstacle : MySQL convertit latin1 vers utf8mb4. Cf. gotcha « Collations » de
+  // CLAUDE.md ; le seul cas irréconciliable oppose deux collations d'un MÊME charset.)
+
+  /**
+   * Mémorise la présence de `roles.status` (ajoutée par la refonte des rôles, migration séparée).
+   * On ne veut dépendre ni de l'ordre des migrations, ni de l'état de l'entité `Role` : colonne
+   * absente ⇒ tous les rôles sont considérés actifs.
+   */
+  private rolesHasStatusColumn: boolean | null = null;
+
+  private async hasRoleStatusColumn(): Promise<boolean> {
+    if (this.rolesHasStatusColumn === null) {
+      const rows = await this.roleRepo.query(
+        `SELECT 1 FROM information_schema.COLUMNS
+         WHERE table_schema = DATABASE() AND table_name = 'roles' AND column_name = 'status' LIMIT 1`,
+      );
+      this.rolesHasStatusColumn = rows.length > 0;
+    }
+    return this.rolesHasStatusColumn;
+  }
+
+  /**
+   * Vérifie que le rôle existe et n'est pas désactivé. Requête brute sur la SEULE table `roles`
+   * (aucune collation croisée), et `status` n'est lu que si la colonne existe réellement - une
+   * valeur NULL vaut 'enable', comme partout ailleurs dans le projet.
+   */
+  private async assertRoleUsable(role_uuid: string): Promise<void> {
+    const withStatus = await this.hasRoleStatusColumn();
+
+    const rows = await this.roleRepo.query(
+      'SELECT `uuid`, `name`' +
+        (withStatus ? ', `status`' : '') +
+        ' FROM `roles` WHERE `uuid` = ? AND `deleted_at` IS NULL LIMIT 1',
+      [role_uuid],
+    );
+
+    if (rows.length === 0) {
+      throw new NotFoundException('Rôle introuvable');
+    }
+    if ((rows[0].status ?? 'enable') === 'disable') {
+      throw new BadRequestException(
+        `Le rôle « ${rows[0].name} » est désactivé : il ne peut pas être affecté à un comité`,
+      );
+    }
+  }
+
+  /** Vérifie que le niveau existe (facultatif, donc appelé seulement s'il est fourni). */
+  private async assertLevelExists(level_uuid: string): Promise<void> {
+    const level = await this.levelRepo.findOne({
+      where: { uuid: level_uuid },
+      select: { uuid: true, name: true },
+    });
+    if (!level) {
+      throw new NotFoundException('Niveau introuvable');
+    }
+  }
+
+  /**
+   * Résout en 2 requêtes AU PLUS les rôles et niveaux référencés par un lot de comités
+   * (pas de N+1 sur la liste). `select` explicite : on ne lit jamais `roles.status`, qui peut ne
+   * pas encore exister en base même si l'entité `Role` le déclare.
+   */
+  private async loadRefs(
+    committees: Array<Pick<CommitteesEntity, 'role_uuid' | 'level_uuid'>>,
+  ): Promise<CommitteeRefs> {
+    const roleUuids = [
+      ...new Set(
+        committees.map((c) => c.role_uuid).filter((u): u is string => !!u),
+      ),
+    ];
+    const levelUuids = [
+      ...new Set(
+        committees.map((c) => c.level_uuid).filter((u): u is string => !!u),
+      ),
+    ];
+
+    const [roles, levels] = await Promise.all([
+      roleUuids.length
+        ? this.roleRepo.find({
+            where: { uuid: In(roleUuids) },
+            select: { uuid: true, name: true },
+          })
+        : Promise.resolve([] as Role[]),
+      levelUuids.length
+        ? this.levelRepo.find({
+            where: { uuid: In(levelUuids) },
+            select: { uuid: true, name: true },
+          })
+        : Promise.resolve([] as LevelEntity[]),
+    ]);
+
+    return {
+      roles: new Map(roles.map((r) => [r.uuid, { uuid: r.uuid, name: r.name }])),
+      levels: new Map(
+        levels.map((l) => [l.uuid, { uuid: l.uuid, name: l.name }]),
+      ),
+    };
+  }
+
+  /** Ajoute `role` / `level` (objets légers, ou null) à un comité déjà chargé. */
+  private withRefs<T extends Pick<CommitteesEntity, 'role_uuid' | 'level_uuid'>>(
+    committee: T,
+    refs: CommitteeRefs,
+  ): T & { role: CommitteeRefView | null; level: CommitteeRefView | null } {
+    return {
+      ...committee,
+      role: committee.role_uuid
+        ? (refs.roles.get(committee.role_uuid) ?? null)
+        : null,
+      level: committee.level_uuid
+        ? (refs.levels.get(committee.level_uuid) ?? null)
+        : null,
+    };
+  }
+
   async findAll(admin_uuid: string) {
     const committees = await this.committeesRepo.find({
       order: { name: 'ASC' },
@@ -94,9 +233,12 @@ export class CommitteeService {
       responsibleMembers.map((m) => [m.uuid, m]),
     );
 
+    // Rôles + niveaux résolus en lot (2 requêtes pour toute la liste, pas une par comité).
+    const refs = await this.loadRefs(committees);
+
     const enriched = await Promise.all(
       committees.map(async (c) => ({
-        ...c,
+        ...this.withRefs(c, refs),
         responsible: this.mapMember(
           c.responsible_member_uuid
             ? responsibleByUuid.get(c.responsible_member_uuid)
@@ -118,16 +260,27 @@ export class CommitteeService {
   }
 
   async store(payload: any, admin_uuid) {
+    // Champs manquants = requête mal formée : 400, pas 404 (c'est aussi ce qu'annonce Swagger).
     if (!payload?.name) {
-      throw new NotFoundException('Veuillez renseigner tous les champs');
+      throw new BadRequestException('Veuillez renseigner tous les champs');
+    }
+    if (!payload?.role_uuid) {
+      throw new BadRequestException('Le rôle du comité est requis');
     }
 
     const admin = await this.getAdmin(admin_uuid);
+
+    await this.assertRoleUsable(payload.role_uuid);
+    if (payload.level_uuid) {
+      await this.assertLevelExists(payload.level_uuid);
+    }
 
     const newCommittees = this.committeesRepo.create({
       name: payload.name,
       description: payload.description ?? null,
       admin_uuid: admin_uuid ?? null,
+      role_uuid: payload.role_uuid,
+      level_uuid: payload.level_uuid ?? null,
     });
 
     await this.logService.logAction(
@@ -138,7 +291,7 @@ export class CommitteeService {
 
     const saved = await this.committeesRepo.save(newCommittees);
 
-    return saved;
+    return this.withRefs(saved, await this.loadRefs([saved]));
   }
 
   async findOne(uuid: string, admin_uuid) {
@@ -161,14 +314,20 @@ export class CommitteeService {
       'Recupérer un comité',
     );
 
-    return { ...committee, responsible: this.mapMember(responsible) };
+    const refs = await this.loadRefs([committee]);
+
+    return {
+      ...this.withRefs(committee, refs),
+      responsible: this.mapMember(responsible),
+    };
   }
 
   async update(uuid: string, payload: any, admin_uuid: string) {
     const { name } = payload;
 
+    // Idem `store()` : champs manquants ⇒ 400 (contrat annoncé par Swagger), pas 404.
     if (!uuid || !name || !admin_uuid) {
-      throw new NotFoundException('Veuillez renseigner tous les champs');
+      throw new BadRequestException('Veuillez renseigner tous les champs');
     }
 
     const admin = await this.getAdmin(admin_uuid);
@@ -176,6 +335,26 @@ export class CommitteeService {
     const existing = await this.committeesRepo.findOne({ where: { uuid } });
     if (!existing) {
       throw new NotFoundException('Aucune correspondance retrouvée !');
+    }
+
+    // Le rôle ne peut être que remplacé, jamais retiré : `role_uuid` absent = on n'y touche pas.
+    if (payload.role_uuid !== undefined) {
+      if (!payload.role_uuid) {
+        throw new BadRequestException('Le rôle du comité est requis');
+      }
+      await this.assertRoleUsable(payload.role_uuid);
+      existing.role_uuid = payload.role_uuid;
+    }
+
+    // Le niveau, lui, est détachable : `level_uuid: null` remet la colonne à NULL,
+    // `level_uuid` absent (undefined) laisse la valeur en place.
+    if (payload.level_uuid !== undefined) {
+      if (payload.level_uuid) {
+        await this.assertLevelExists(payload.level_uuid);
+        existing.level_uuid = payload.level_uuid;
+      } else {
+        existing.level_uuid = null;
+      }
     }
 
     existing.name = name;
@@ -187,7 +366,7 @@ export class CommitteeService {
 
     await this.logService.logAction('committees-update', admin.id, updated);
 
-    return updated;
+    return this.withRefs(updated, await this.loadRefs([updated]));
   }
 
   async delete(uuid: string, admin_uuid: string) {
@@ -361,8 +540,12 @@ export class CommitteeService {
   }
 
   /**
-   * Comités auxquels un membre est rattaché — comme responsable et/ou membre.
+   * Comités auxquels un membre est rattaché - comme responsable et/ou membre.
    * Alimente l'onglet « Comité » de la page détail membre.
+   *
+   * Volontairement SANS `role`/`level` : la fiche membre n'affiche que le libellé du comité et le
+   * lien de rattachement. Les y ajouter coûterait deux requêtes de plus sur une page déjà chargée,
+   * sans rien afficher. `GET /comite` et `GET /comite/:uuid` restent la source de ces références.
    */
   async findByMember(member_uuid: string, admin_uuid: string) {
     await this.getAdmin(admin_uuid);

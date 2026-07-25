@@ -325,14 +325,14 @@ The modal should:
 - Use react-hook-form + zodResolver with activityTypeFormSchema from @/lib/validation
 - Fields:
   1. name (text, required)
-  2. family (select: "traditionnelle" | "sporadique", required) — use Select component
-  3. subcategory (select, optional) — options depend on family:
+  2. family (select: "traditionnelle" | "sporadique", required) - use Select component
+  3. subcategory (select, optional) - options depend on family:
      - if traditionnelle: mensuelle_departement, grande_commemoration, zandakai
      - if sporadique: sporadique_nationale, sporadique_locale
-  4. execution_level (text input, optional) — placeholder "national / region / district / groupe"
-  5. requires_quota (checkbox) — "Implique des quotas par structure"
-  6. requires_committee (checkbox) — "Nécessite un comité d'organisation"
-  7. default_recurrence_rule (text, optional) — placeholder "ex: weekly:sunday"
+  4. execution_level (text input, optional) - placeholder "national / region / district / groupe"
+  5. requires_quota (checkbox) - "Implique des quotas par structure"
+  6. requires_committee (checkbox) - "Nécessite un comité d'organisation"
+  7. default_recurrence_rule (text, optional) - placeholder "ex: weekly:sunday"
   8. description (textarea, optional)
 
 Props:
@@ -357,16 +357,16 @@ Model it after ${BASE}/components/data-table/LevelTable.tsx (read it first).
 
 This table shows activity types. Columns:
 1. Nom (name)
-2. Famille — badge: "Traditionnelle" (blue) or "Sporadique" (orange/amber)
-3. Sous-catégorie — map to French label:
+2. Famille - badge: "Traditionnelle" (blue) or "Sporadique" (orange/amber)
+3. Sous-catégorie - map to French label:
    mensuelle_departement → "Mensuelle Département"
    grande_commemoration → "Grande Commémoration"
    zandakai → "Zandakai"
    sporadique_nationale → "Sporadique Nationale"
    sporadique_locale → "Sporadique Locale"
-4. Quotas — show "Oui"/"Non" badge for requires_quota
-5. Comité — show "Oui"/"Non" badge for requires_committee
-6. Actions — Modifier (warning), Supprimer (destructive)
+4. Quotas - show "Oui"/"Non" badge for requires_quota
+5. Comité - show "Oui"/"Non" badge for requires_committee
+6. Actions - Modifier (warning), Supprimer (destructive)
 
 Props same pattern as other tables: buttonComponent, onEditData, onIsEditing, onOpen, onSetConfirmDeleteOpen, onSetSelectedId.
 
@@ -423,17 +423,17 @@ export const deleteActivityType = async (uuid) => {
 
 For the page, the onSubmitTransform should handle both create and edit. In edit mode, it receives initialData with uuid.
 
-For editActivity function signature: editActivity(uuid, data) — see existing pattern in services/activity.ts.
+For editActivity function signature: editActivity(uuid, data) - see existing pattern in services/activity.ts.
 
 Write the complete page file AND update services/activity.ts to add createActivityType, updateActivityType, deleteActivityType if not present.`, { label: 'create-types-page', phase: 'Pages' }),
 
   () => agent(`Update the detail page at ${BASE}/app/(dashboard)/activites/[activityId]/page.tsx.
 
-READ THE FILE FIRST — it's a large file.
+READ THE FILE FIRST - it's a large file.
 
 ADD 2 new tabs after the existing "Présence" tab (before the closing TabsList tag).
 
-NEW TAB 1 — Comités d'organisation:
+NEW TAB 1 - Comités d'organisation:
 - TabsTrigger value="comites" with icon <Building2> and label "Comités"
 - TabsContent that shows:
   - A "Comités d'organisation" card with:
@@ -444,7 +444,7 @@ NEW TAB 1 — Comités d'organisation:
     - "Ajouter un membre" button per committee that opens an inline form or simple dialog
     - Delete committee button
 
-NEW TAB 2 — Quotas:
+NEW TAB 2 - Quotas:
 - TabsTrigger value="quotas" with icon <PieChart> and label "Quotas"
 - TabsContent that shows:
   - Summary section: total alloué, total utilisé, reste (3 StatBox)

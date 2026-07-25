@@ -35,7 +35,7 @@ export interface ResponsibilityImpact {
   /**
    * `true` quand l'ancre n'a pas pu être déterminée (responsabilité sans niveau, ou niveau
    * absent du chemin hiérarchique). Dans ce cas la responsabilité est **conservée par
-   * défaut** — on ne supprime jamais ce qu'on ne sait pas interpréter.
+   * défaut** - on ne supprime jamais ce qu'on ne sait pas interpréter.
    */
   undetermined: boolean;
 }
@@ -87,7 +87,7 @@ export function ancestorAtLevel(
 }
 
 /**
- * **Règle R8 — ancre de responsabilité.**
+ * **Règle R8 - ancre de responsabilité.**
  *
  * Une responsabilité de niveau `levelUuid` est conservée **si et seulement si** son ancre est
  * inchangée après le déplacement :
@@ -98,7 +98,7 @@ export function ancestorAtLevel(
  *
  * Exemples : un responsable national qui déménage garde sa responsabilité (l'ancre reste la
  * racine) ; un responsable de centre qui change de chapitre à l'intérieur du même centre la
- * garde ; s'il change de centre régional — donc de centre — il la perd.
+ * garde ; s'il change de centre régional - donc de centre - il la perd.
  *
  * Fonction **pure**.
  */
@@ -128,7 +128,7 @@ export function evaluateAnchor(
  * Calcule l'effet d'un changement de structure sur les responsabilités d'un membre.
  *
  * ⚠️ Ce service doit être appelé par **tous** les chemins qui modifient
- * `members.structure_uuid` — le workflow de transfert comme le `PUT /members/:uuid` — sinon
+ * `members.structure_uuid` - le workflow de transfert comme le `PUT /members/:uuid` - sinon
  * deux comportements divergents cohabiteraient selon le chemin emprunté.
  *
  * Spécification : `docs/TRANSFERT-MEMBRES.md` §5.
@@ -172,7 +172,7 @@ export class ResponsibilityAnchorService {
    * structures**.
    *
    * La table `levels` mélange deux catégories (`level` / `responsibility`) et peut donc
-   * contenir deux lignes homonymes. On ne garde que celle qui apparaît dans l'arbre — la seule
+   * contenir deux lignes homonymes. On ne garde que celle qui apparaît dans l'arbre - la seule
    * avec laquelle une comparaison d'ancre a du sens.
    */
   async resolveLevelUuidByName(

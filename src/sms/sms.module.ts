@@ -15,7 +15,7 @@ import { SmsSettingsController } from './sms-settings.controller';
  *
  * Unifie LeTexto et SMSPro sous `ManagedSmsProvider`, avec un aiguilleur
  * (`SmsDispatcher`) qui lit le fournisseur actif en base (`SettingsService`) et
- * applique le failover — bascule à chaud sans redéploiement. Distinct du
+ * applique le failover - bascule à chaud sans redéploiement. Distinct du
  * sous-système de notifications du module Journal (TextO), qui reste inchangé.
  *
  * `SmsService` (LeTexto historique) est conservé le temps de valider le dispatcher

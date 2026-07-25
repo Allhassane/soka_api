@@ -28,7 +28,7 @@ export class CreateMemberDto {
   matricule?: string;
 
   // ⚠️ Les deux descriptions étaient inversées : vérifié en base le 2026-07-24 sur une création
-  // réelle depuis le formulaire — le champ « Prénom » de l'UI alimente `firstname`, le champ
+  // réelle depuis le formulaire - le champ « Prénom » de l'UI alimente `firstname`, le champ
   // « Nom » alimente `lastname`. Ne pas se fier à l'ancienne doc Swagger.
   @ApiProperty({ description: "Prénom du membre (champ « Prénom » de l'UI)" })
   @IsString()

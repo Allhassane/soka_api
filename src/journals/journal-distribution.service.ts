@@ -506,7 +506,7 @@ export class JournalDistributionService {
       (d) => d.status === JournalDistributionStatus.LATE,
     ).length;
     // Cumulatif : toute zone déjà notifiée (y compris celles livrées ensuite).
-    // « Notifié » est une étape franchie, pas un statut courant exclusif — sinon
+    // « Notifié » est une étape franchie, pas un statut courant exclusif - sinon
     // le compteur retombe à 0 dès qu'une zone passe en « livré ».
     const notified = items.filter((d) => !!d.notified_at).length;
     const pending = items.filter(
@@ -727,7 +727,7 @@ export class JournalDistributionService {
       return found;
     };
 
-    // 5) Agrégation par zone — 1 abonné = 1 zone (structure d'abord, ville en secours)
+    // 5) Agrégation par zone - 1 abonné = 1 zone (structure d'abord, ville en secours)
     const perZone = new Map<string, number>();
     const perZoneSource = new Map<
       string,
@@ -738,11 +738,11 @@ export class JournalDistributionService {
     let assignedByCity = 0;
     for (const p of payments) {
       const qty = p.quantity ?? 0;
-      // 1) Structure (+ sous-arbre) — prioritaire.
+      // 1) Structure (+ sous-arbre) - prioritaire.
       let zoneUuid: string | undefined =
         zoneForStruct(memberStruct.get(p.beneficiary_uuid) ?? null) ?? undefined;
       let bySource: 'structure' | 'city' = 'structure';
-      // 2) Ville — en secours seulement.
+      // 2) Ville - en secours seulement.
       if (!zoneUuid) {
         const city = memberCity.get(p.beneficiary_uuid);
         zoneUuid = city ? cityToZone.get(city) : undefined;
@@ -765,7 +765,7 @@ export class JournalDistributionService {
       }
     }
 
-    // 6) Enrichissement : région (structure OU ville) + responsable — sans JOIN.
+    // 6) Enrichissement : région (structure OU ville) + responsable - sans JOIN.
     const activeZoneUuids = Array.from(perZone.keys());
     const regionUuids = Array.from(
       new Set(
@@ -1108,7 +1108,7 @@ export class JournalDistributionService {
       }
     >();
     for (const z of liste) {
-      const key = z.responsible_name || '—';
+      const key = z.responsible_name || '-';
       if (!groups.has(key)) {
         groups.set(key, {
           responsible_name: z.responsible_name,
@@ -1430,7 +1430,7 @@ export class JournalDistributionService {
     pgt.getCell(1).alignment = { horizontal: 'right' };
     styleRange(p, 3, 1, prow, 7);
 
-    /* ====== Feuille 3 : PACKAGES — étiquettes A4 paysage (1 par page) ====== */
+    /* ====== Feuille 3 : PACKAGES - étiquettes A4 paysage (1 par page) ====== */
     const pk = wb.addWorksheet('PACKAGES', {
       views: [{ showGridLines: false }],
       pageSetup: {
@@ -1474,7 +1474,7 @@ export class JournalDistributionService {
 
     let lr = 1;
     d.packages.forEach((lbl, idx) => {
-      // Saut de page avant chaque étiquette sauf la première — placé sur la
+      // Saut de page avant chaque étiquette sauf la première - placé sur la
       // dernière ligne de l'étiquette précédente (brk « après » cette ligne).
       if (idx > 0) pk.getRow(lr - 1).addPageBreak();
       const top = lr;
@@ -1505,14 +1505,14 @@ export class JournalDistributionService {
       pk.getCell(lr, 5).alignment = center;
       pk.getRow(lr).height = H[1];
       lr++;
-      // 3) Destination (centre) — noir
+      // 3) Destination (centre) - noir
       pk.mergeCells(lr, 1, lr, 6);
       pk.getCell(lr, 1).value = lbl.zone_name ?? '';
       pk.getCell(lr, 1).font = { bold: true, size: 36 };
       pk.getCell(lr, 1).alignment = center;
       pk.getRow(lr).height = H[2];
       lr++;
-      // 4) Ville / quartier — rouge
+      // 4) Ville / quartier - rouge
       pk.mergeCells(lr, 1, lr, 6);
       pk.getCell(lr, 1).value = lbl.villes.join(', ');
       pk.getCell(lr, 1).font = { bold: true, size: 40, color: { argb: RED } };
@@ -1526,7 +1526,7 @@ export class JournalDistributionService {
       pk.getCell(lr, 1).alignment = center;
       pk.getRow(lr).height = H[4];
       lr++;
-      // 6) Quantité — bleu géant
+      // 6) Quantité - bleu géant
       pk.mergeCells(lr, 1, lr, 6);
       pk.getCell(lr, 1).value = `${lbl.quantity}  REVUES`;
       pk.getCell(lr, 1).font = { bold: true, size: 60, color: { argb: BLUE } };

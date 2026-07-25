@@ -41,7 +41,7 @@ export class MemberTransferController {
   constructor(private readonly transferService: MemberTransferService) {}
 
   /**
-   * Périmètre du connecté, dérivé du JWT — même logique que `buildPerimeter`
+   * Périmètre du connecté, dérivé du JWT - même logique que `buildPerimeter`
    * (`structure.controller.ts`) : les structures de ses responsabilités font office de racines.
    */
   private perimeter(req): PerimeterContext {

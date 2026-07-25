@@ -63,7 +63,7 @@ export class MemberTransferService {
 
   /**
    * Vérifie que `targetUuid` appartient au périmètre : l'une des racines autorisées, ou l'un
-   * de leurs descendants. On remonte la chaîne parente du target — profondeur ≤ 8 paliers.
+   * de leurs descendants. On remonte la chaîne parente du target - profondeur ≤ 8 paliers.
    *
    * ⚠️ **Même sémantique que `StructureTreeService.assertTargetWithinPerimeter`**, qui est
    * `private` et vit dans le module `structure` (référentiel lu, qu'on ne modifie pas depuis
@@ -185,7 +185,7 @@ export class MemberTransferService {
     if (orphans.length > 0) {
       throw new BadRequestException(
         `Rattachement incompatible avec un transfert de district pour : ${orphans.join(', ')}. ` +
-          `Ces membres ne sont pas rattachés à une structure située dans un district — corrigez leur structure avant de les transférer.`,
+          `Ces membres ne sont pas rattachés à une structure située dans un district - corrigez leur structure avant de les transférer.`,
       );
     }
 
@@ -302,14 +302,14 @@ export class MemberTransferService {
 
     await this.assertTargetIsDistrict(dto.target_district_uuid, index);
 
-    // R1 — même district ⇒ pas de workflow, c'est une édition simple.
+    // R1 - même district ⇒ pas de workflow, c'est une édition simple.
     if (sourceDistrictUuid === dto.target_district_uuid) {
       throw new BadRequestException(
         "Le district de destination est identique au district d'origine : utilisez la modification de la fiche membre.",
       );
     }
 
-    // R2 — l'initiateur doit avoir la source dans son périmètre.
+    // R2 - l'initiateur doit avoir la source dans son périmètre.
     if (!ctx.isAdmin) {
       this.assertWithinPerimeter(
         index,
@@ -319,7 +319,7 @@ export class MemberTransferService {
       );
     }
 
-    // R4 — pas de demande en attente sur ces membres.
+    // R4 - pas de demande en attente sur ces membres.
     await this.assertNoPendingRequest(members.map((m) => m.uuid));
 
     const saved = await this.dataSource.transaction(async (manager) => {
@@ -392,7 +392,7 @@ export class MemberTransferService {
     return { data, meta: buildPaginationMeta({ total, page, perPage: limit }) };
   }
 
-  /** Ajoute les noms de districts et le nombre de membres — ce qu'il faut pour une liste. */
+  /** Ajoute les noms de districts et le nombre de membres - ce qu'il faut pour une liste. */
   private async decorate(transfers: MemberTransferEntity[], index: StructureIndex) {
     if (transfers.length === 0) return [];
 
@@ -513,7 +513,7 @@ export class MemberTransferService {
     }));
   }
 
-  /** Historique de mobilité d'un membre — toutes ses lignes de transfert, récentes d'abord. */
+  /** Historique de mobilité d'un membre - toutes ses lignes de transfert, récentes d'abord. */
   async memberHistory(memberUuid: string) {
     return this.itemRepository
       .createQueryBuilder('i')
@@ -568,7 +568,7 @@ export class MemberTransferService {
     const transfer = await this.loadPending(uuid);
     const index = await this.anchorService.loadStructureIndex();
 
-    // R3 — l'approbateur doit avoir le district cible dans son périmètre.
+    // R3 - l'approbateur doit avoir le district cible dans son périmètre.
     if (!ctx.isAdmin) {
       this.assertWithinPerimeter(
         index,
@@ -603,7 +603,7 @@ export class MemberTransferService {
       index,
     );
 
-    // R5 — le membre a-t-il bougé depuis la demande ? Vérifié AVANT la transaction pour
+    // R5 - le membre a-t-il bougé depuis la demande ? Vérifié AVANT la transaction pour
     // pouvoir marquer la demande OBSOLETE (un throw dans la transaction annulerait ce marquage).
     const members = await this.memberRepository.find({
       where: { uuid: In(items.map((i) => i.member_uuid)) },
@@ -650,7 +650,7 @@ export class MemberTransferService {
         const impact = impactByMember.get(item.member_uuid);
         const lost = impact?.lost ?? [];
 
-        // R8 — les responsabilités dont l'ancre a changé sont retirées.
+        // R8 - les responsabilités dont l'ancre a changé sont retirées.
         if (lost.length > 0) {
           await manager.softDelete(MemberResponsibilityEntity, {
             uuid: In(lost.map((l) => l.member_responsibility_uuid)),

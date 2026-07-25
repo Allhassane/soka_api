@@ -2,11 +2,11 @@ import 'reflect-metadata';
 import AppDataSource from '../data-source';
 
 /**
- * CORRECTIF — Numéros de téléphone saisis avec la LETTRE « O » au lieu du CHIFFRE « 0 ».
+ * CORRECTIF - Numéros de téléphone saisis avec la LETTRE « O » au lieu du CHIFFRE « 0 ».
  *
  * Contexte : le front impose désormais 10 chiffres sur les champs téléphone (connexion et
  * « mot de passe oublié »). Les comptes dont le numéro contient un « O » sont donc devenus
- * impossibles à saisir — en pratique ils ne pouvaient déjà pas se connecter, puisque le login
+ * impossibles à saisir - en pratique ils ne pouvaient déjà pas se connecter, puisque le login
  * se fait sur `users.phone_number`.
  *
  * Corrige deux colonnes, pour ne pas laisser diverger l'identifiant de connexion et la fiche
@@ -19,14 +19,14 @@ import AppDataSource from '../data-source';
  * préfixe…) ; un remplacement automatique n'y aurait aucun sens. À traiter à part, si besoin.
  *
  * ── Garde-fous ──────────────────────────────────────────────────────────────────────────
- * 1. Ne touche QUE les valeurs de la forme `^[0-9Oo]{10}$` — exactement 10 caractères composés
+ * 1. Ne touche QUE les valeurs de la forme `^[0-9Oo]{10}$` - exactement 10 caractères composés
  *    de chiffres et de la lettre O. Le résultat est donc forcément un numéro à 10 chiffres.
  *    Toute autre saisie douteuse est signalée mais laissée telle quelle.
  * 2. Ignore les lignes soft-deleted (`deleted_at IS NOT NULL`).
  * 3. Refuse une correction qui entrerait en COLLISION avec un numéro déjà utilisé par une
  *    autre ligne de la même table.
  * 4. **Dry-run par défaut** : sans `--apply`, rien n'est écrit, on affiche seulement le plan.
- * 5. Écritures dans une transaction, en SQL paramétré direct — pas via le repository, pour
+ * 5. Écritures dans une transaction, en SQL paramétré direct - pas via le repository, pour
  *    éviter le hook `@BeforeUpdate` de `UserEntity` (re-hash du mot de passe) et n'écrire
  *    strictement que la colonne visée.
  *
@@ -76,7 +76,7 @@ async function run() {
   console.log(
     APPLY
       ? '[fix-phone] Mode : APPLICATION (les données seront modifiées)'
-      : '[fix-phone] Mode : SIMULATION (aucune écriture — relancer avec --apply pour appliquer)',
+      : '[fix-phone] Mode : SIMULATION (aucune écriture - relancer avec --apply pour appliquer)',
   );
 
   let totalFixable = 0;
@@ -98,7 +98,7 @@ async function run() {
             AND deleted_at IS NULL`,
       );
 
-      console.log(`\n── ${label} — ${rows.length} valeur(s) non numérique(s)`);
+      console.log(`\n── ${label} - ${rows.length} valeur(s) non numérique(s)`);
 
       for (const row of rows) {
         const current = row.value;
@@ -106,7 +106,7 @@ async function run() {
         if (!FIXABLE.test(current)) {
           totalSkipped += 1;
           console.log(
-            `   ⏭  [${row.id}] ${row.who.trim()} : « ${current} » — non corrigeable automatiquement, laissé tel quel`,
+            `   ⏭  [${row.id}] ${row.who.trim()} : « ${current} » - non corrigeable automatiquement, laissé tel quel`,
           );
           continue;
         }
@@ -122,7 +122,7 @@ async function run() {
         if (Number(clash[0]?.n ?? 0) > 0) {
           totalSkipped += 1;
           console.log(
-            `   ⚠️  [${row.id}] ${row.who.trim()} : « ${current} » → « ${corrected} » IGNORÉ — ce numéro est déjà utilisé`,
+            `   ⚠️  [${row.id}] ${row.who.trim()} : « ${current} » → « ${corrected} » IGNORÉ - ce numéro est déjà utilisé`,
           );
           continue;
         }
@@ -150,7 +150,7 @@ async function run() {
     console.log(
       APPLY
         ? `Appliqués : ${totalApplied}`
-        : 'Appliqués : 0 (simulation) — relancer avec « -- --apply »',
+        : 'Appliqués : 0 (simulation) - relancer avec « -- --apply »',
     );
   } finally {
     await ds.destroy();

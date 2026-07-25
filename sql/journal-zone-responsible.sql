@@ -1,5 +1,5 @@
 -- =====================================================================
--- SOKA — Ajout du « responsable de zone » sur journal_zones
+-- SOKA - Ajout du « responsable de zone » sur journal_zones
 -- Le fichier de recensement porte, au niveau zone (ligne SOUS-TOTAL),
 -- un responsable (nom + téléphone) qui coordonne la distribution de
 -- toutes les destinations de la zone. On le modélise comme un membre.

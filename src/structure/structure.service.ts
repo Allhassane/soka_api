@@ -247,7 +247,7 @@ export class StructureService {
     }
 
     // Mise à jour explicite (même convention que create : parent_id = parent_uuid,
-    // level_id laissé NULL — la PK char(36) héritée n'a pas de stratégie ORM fiable).
+    // level_id laissé NULL - la PK char(36) héritée n'a pas de stratégie ORM fiable).
     const parentUuid = updateStructureDto.parent_uuid ?? null;
     await this.structureRepo.query(
       `UPDATE structures

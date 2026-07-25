@@ -36,7 +36,7 @@ import { StructurePaginationQueryDto } from './dto/structure-pagination-query.dt
 @Controller('structure')
 @ApiBearerAuth()
 // PermissionsGuard ajouté au niveau classe (comme MemberController) : les routes sans
-// @RequirePermissions restent « laissées passer » (cf. PermissionsGuard) — non-régressif.
+// @RequirePermissions restent « laissées passer » (cf. PermissionsGuard) - non-régressif.
 // L'autorisation effective des endpoints stats/export est posée par @RequirePermissions.
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class StructureController {
@@ -47,7 +47,7 @@ export class StructureController {
   /**
    * Dérive le PÉRIMÈTRE d'autorisation à partir du JWT (`req.user`). À ne pas confondre
    * avec l'ACCÈS (qui est géré par `PermissionsGuard` + `@RequirePermissions`) :
-   * - isAdmin : flag runtime `is_admin` — c'est le SEUL bypass « voit tout », aligné sur
+   * - isAdmin : flag runtime `is_admin` - c'est le SEUL bypass « voit tout », aligné sur
    *   `PermissionsGuard` (et le seed RBAC : ADMINISTRATEUR = piloté par `is_admin`).
    * - allowedRootUuids : structures de TOUTES les responsabilités (union des périmètres),
    *   pour ne pas restreindre à tort un responsable multi-structures.

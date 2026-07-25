@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
- * Migration ADDITIVE et NON-DESTRUCTIVE — schéma du module Journal.
+ * Migration ADDITIVE et NON-DESTRUCTIVE - schéma du module Journal.
  *
  * Crée les tables du module (zones, destinations, éditions, distributions),
  * la table de liaison zone↔villes, et les colonnes « responsable de zone ».

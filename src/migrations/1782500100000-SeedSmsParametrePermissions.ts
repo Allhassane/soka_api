@@ -20,7 +20,7 @@ import {
  * porte une permission QUE si elle est rattachée à un MODULE existant et liée au
  * rôle via `roles_permissions.status=1` (cf. RoleService.findGlobalPermissions).
  *
- * Faits vérifiés sur la base réelle (dump) — d'où la robustesse du SQL :
+ * Faits vérifiés sur la base réelle (dump) - d'où la robustesse du SQL :
  *  - `roles.id` est CHAR(36) mais `roles_permissions.role_id`/`permission_id` sont
  *    INT NOT NULL : les lignes ADMINISTRATEUR existantes valent role_id=0/
  *    permission_id=0, le lien réel passant par role_uuid/permission_uuid. On copie

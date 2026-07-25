@@ -62,7 +62,7 @@ const N = 5;
   ]);
   const cityUuid = cities.length ? cities[0].uuid : null;
   if (!cityUuid) {
-    console.warn(`⚠ Ville "${CITY_NAME}" introuvable — rattachement zone ignoré.`);
+    console.warn(`⚠ Ville "${CITY_NAME}" introuvable - rattachement zone ignoré.`);
   }
 
   // 3) 5 membres

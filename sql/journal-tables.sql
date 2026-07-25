@@ -1,5 +1,5 @@
 -- =====================================================================
--- SOKA — Création des tables du module Journal
+-- SOKA - Création des tables du module Journal
 -- Conforme aux entités NestJS (src/journals/entities/*).
 -- Idempotent (CREATE TABLE IF NOT EXISTS). Collation utf8mb4_unicode_ci
 -- pour des jointures propres avec members.uuid / structures.uuid /

@@ -1,5 +1,5 @@
 -- =====================================================================
--- SOKA — Table de liaison Zone ↔ Villes (cities) du module Journal
+-- SOKA - Table de liaison Zone ↔ Villes (cities) du module Journal
 -- Une zone de distribution regroupe plusieurs villes du référentiel `cities`.
 -- Sert de base au rattachement abonné → zone via members.city_uuid.
 -- Idempotent. utf8mb4_unicode_ci (cohérent avec journal_zones.uuid).

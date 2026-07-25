@@ -204,7 +204,7 @@ export class JournalReceptionService {
 
     // 1) Membres portant une responsabilité de NIVEAU district. Le membre peut
     //    être positionné sous le district (sous-groupe…) tout en étant le
-    //    responsable du district — comme dans auth.service, on remonte ensuite
+    //    responsable du district - comme dans auth.service, on remonte ensuite
     //    jusqu'au maillon district de sa structure. JOIN interne utf8mb4 (pas de
     //    JOIN vers members) → collation-safe.
     const rows: { member_uuid: string }[] =
@@ -801,8 +801,8 @@ export class JournalReceptionService {
       }
     }
 
-    // Le panneau reste TOUJOURS au niveau du district de l'utilisateur — même
-    // pour un admin/national — pour ne pas alourdir la page. Un admin garde ses
+    // Le panneau reste TOUJOURS au niveau du district de l'utilisateur - même
+    // pour un admin/national - pour ne pas alourdir la page. Un admin garde ses
     // droits plus larges ailleurs (page détail d'édition).
     const canValidateOwn =
       !!myDistrict &&
@@ -837,7 +837,7 @@ export class JournalReceptionService {
     const rank = (s: string) => (s === 'late' ? 0 : s === 'pending' ? 1 : 2);
 
     for (const ed of editions) {
-      // 1) LOTS à valider — UNIQUEMENT le district de l'utilisateur, non reçus.
+      // 1) LOTS à valider - UNIQUEMENT le district de l'utilisateur, non reçus.
       let lots: any[] = [];
       let editionObj: unknown = editionSummary(ed);
       if (panelScope) {
@@ -866,7 +866,7 @@ export class JournalReceptionService {
         }
       }
 
-      // 2) MA RÉCEPTION (self-service) — bénéficiaire pas encore coché.
+      // 2) MA RÉCEPTION (self-service) - bénéficiaire pas encore coché.
       let my_reception: unknown = null;
       if (scope.memberUuid && ed.subscription_uuid && myDistrict) {
         const pays = await this.subPaymentRepo.find({
@@ -1025,7 +1025,7 @@ export class JournalReceptionService {
       );
     }
 
-    // District RÉEL du membre (dérivé de sa structure) — sert de base à
+    // District RÉEL du membre (dérivé de sa structure) - sert de base à
     // l'autorisation. On NE fait PAS confiance au district fourni par le front
     // pour le contrôle de sécurité.
     let realDistrict: string | null = null;

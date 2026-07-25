@@ -64,7 +64,7 @@ export class ExportProcessorService {
       //    structure ».)
       //  - RESPONSABLE / MEMBRE → sa structure de responsabilité, à défaut sa structure propre
       //    (le JWT met souvent `structure: null` quand le niveau de la resp. ≠ niveau de la
-      //    structure du membre — même cause que l'export des membres).
+      //    structure du membre - même cause que l'export des membres).
       const isAdmin = !!admin?.is_admin;
       const scopeStructureUuid = isAdmin
         ? null

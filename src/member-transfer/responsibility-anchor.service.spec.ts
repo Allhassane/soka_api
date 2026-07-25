@@ -10,7 +10,7 @@ import {
 } from './responsibility-anchor.service';
 
 /**
- * Règle R8 — ancre de responsabilité (`docs/TRANSFERT-MEMBRES.md` §5).
+ * Règle R8 - ancre de responsabilité (`docs/TRANSFERT-MEMBRES.md` §5).
  *
  * Une responsabilité de niveau L est conservée ssi
  * `ancêtre(structure_nouvelle, L) === ancêtre(structure_ancienne, L)`.
@@ -100,7 +100,7 @@ describe('ancestorAtLevel', () => {
   });
 });
 
-describe('evaluateAnchor — règle R8', () => {
+describe('evaluateAnchor - règle R8', () => {
   const index = buildIndex();
 
   describe('cas de référence du cadrage', () => {

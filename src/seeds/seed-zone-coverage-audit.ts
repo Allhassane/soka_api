@@ -10,7 +10,7 @@ import { JournalZoneEntity } from '../journals/entities/journal-zone.entity';
 import { StructureEntity } from '../structure/entities/structure.entity';
 
 /**
- * AUDIT — Couverture des membres par une zone desservie (LECTURE SEULE).
+ * AUDIT - Couverture des membres par une zone desservie (LECTURE SEULE).
  *
  * Objectif : s'assurer que chaque membre est rattaché à une zone de
  * distribution. Le lien est : members.city_uuid -> journal_zone_cities.city_uuid
@@ -33,7 +33,7 @@ import { StructureEntity } from '../structure/entities/structure.entity';
  */
 
 function pct(n: number, d: number): string {
-  return d > 0 ? ((n / d) * 100).toFixed(1) + '%' : '—';
+  return d > 0 ? ((n / d) * 100).toFixed(1) + '%' : '-';
 }
 
 function trunc(s: string, n: number): string {
@@ -282,8 +282,8 @@ async function run() {
         return {
           number: (z as unknown as { number: number | null }).number ?? 0,
           zone: (z as unknown as { name: string | null }).name ?? '',
-          region: su ? (rootNameMap.get(su) ?? '—') : '—',
-          responsable: ru ? (respNameMap.get(ru) ?? '—') : '—',
+          region: su ? (rootNameMap.get(su) ?? '-') : '-',
+          responsable: ru ? (respNameMap.get(ru) ?? '-') : '-',
           villes: cityCountByZone.get(z.uuid) ?? 0,
           abonnes: perZoneStruct.get(z.uuid) ?? 0,
           hasStruct: !!su && validStructSet.has(su),
@@ -382,7 +382,7 @@ async function run() {
     console.log('--------------------------------------------');
 
     // ---- Table « Répartition par zone » (modèle structure + sous-arbre) ----
-    console.log('\n===== RÉPARTITION PAR ZONE — MODÈLE STRUCTURE + SOUS-ARBRE =====');
+    console.log('\n===== RÉPARTITION PAR ZONE - MODÈLE STRUCTURE + SOUS-ARBRE =====');
     const H =
       'ZONE'.padEnd(8) +
       'RÉGION'.padEnd(26) +
@@ -423,7 +423,7 @@ async function run() {
       `(zones avec structure configurée mais 0 abonné par ce modèle : ${zonesStructZero})`,
     );
     console.log(
-      `\n>>> « Non rattachés » — ville : ${unservedTotal} (${pct(unservedTotal, total)})  |  structure : ${nonRattachesStruct} (${pct(nonRattachesStruct, total)})  |  ville+structure : ${total - servedEither} (${pct(total - servedEither, total)})`,
+      `\n>>> « Non rattachés » - ville : ${unservedTotal} (${pct(unservedTotal, total)})  |  structure : ${nonRattachesStruct} (${pct(nonRattachesStruct, total)})  |  ville+structure : ${total - servedEither} (${pct(total - servedEither, total)})`,
     );
 
     // ---- Cohérence & anti-doublon ----
@@ -455,19 +455,19 @@ async function run() {
     }
     console.log('--------------------------------------------');
     console.log(
-      `Doublons de personnes — téléphone     : ${dupPhone.groupCount} groupes, +${dupPhone.extra} lignes en trop`,
+      `Doublons de personnes - téléphone     : ${dupPhone.groupCount} groupes, +${dupPhone.extra} lignes en trop`,
     );
     console.log(
-      `Doublons de personnes — matricule     : ${dupMatricule.groupCount} groupes, +${dupMatricule.extra} lignes en trop`,
+      `Doublons de personnes - matricule     : ${dupMatricule.groupCount} groupes, +${dupMatricule.extra} lignes en trop`,
     );
     console.log(
-      `Doublons de personnes — nom+naissance : ${dupNameBirth.groupCount} groupes, +${dupNameBirth.extra} lignes en trop`,
+      `Doublons de personnes - nom+naissance : ${dupNameBirth.groupCount} groupes, +${dupNameBirth.extra} lignes en trop`,
     );
-    console.log('  (ces lignes en trop gonflent TOUS les décomptes — à fusionner à la source)');
+    console.log('  (ces lignes en trop gonflent TOUS les décomptes - à fusionner à la source)');
 
     console.log('\nTOP villes à rattacher à une zone (worklist) :');
     if (worklist.length === 0) {
-      console.log('  (aucune — toutes les villes avec membres sont desservies)');
+      console.log('  (aucune - toutes les villes avec membres sont desservies)');
     } else {
       worklist.slice(0, 30).forEach((w, i) => {
         const name = w.name.length > 30 ? w.name.slice(0, 29) + '…' : w.name;
@@ -488,7 +488,7 @@ async function run() {
     fs.writeFileSync(csvPath, BOM + [header, ...rows].join('\n'), 'utf8');
     console.log(`\n[audit] Worklist exportée -> ${csvPath}`);
 
-    // CSV — répartition par zone (modèle structure + sous-arbre).
+    // CSV - répartition par zone (modèle structure + sous-arbre).
     const zPath = path.resolve(__dirname, '../../zone-distribution-structure.csv');
     const zHeader = 'zone_numero;zone;region;responsable;villes;abonnes;pourcent';
     const zRows = zoneStructRows.map(
@@ -500,7 +500,7 @@ async function run() {
     fs.writeFileSync(zPath, BOM + [zHeader, ...zRows].join('\n'), 'utf8');
     console.log(`[audit] Répartition par zone (structure) -> ${zPath}`);
 
-    // CSV — doublons de personnes (worklist de fusion).
+    // CSV - doublons de personnes (worklist de fusion).
     const memberById = new Map(members.map((m) => [m.uuid, m]));
     const dupHeader = 'signal;cle;uuid;matricule;nom;telephone';
     const dupRows: string[] = [];
@@ -526,7 +526,7 @@ async function run() {
     const dupPath = path.resolve(__dirname, '../../person-duplicates.csv');
     fs.writeFileSync(dupPath, BOM + [dupHeader, ...dupRows].join('\n'), 'utf8');
     console.log(`[audit] Doublons de personnes -> ${dupPath}`);
-    console.log('[audit] (lecture seule — aucune écriture en base)');
+    console.log('[audit] (lecture seule - aucune écriture en base)');
   } finally {
     await AppDataSource.destroy();
   }

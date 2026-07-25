@@ -7,7 +7,7 @@ import { CityEntity } from '../cities/entities/city.entity';
 import { JournalZoneCityEntity } from '../journals/entities/journal-zone-city.entity';
 
 /**
- * AUDIT — Doublons du référentiel des villes (LECTURE SEULE).
+ * AUDIT - Doublons du référentiel des villes (LECTURE SEULE).
  *
  * But : vérifier concrètement pourquoi une même ville (ex. « OSAKA ») apparaît
  * plusieurs fois dans les menus. On regroupe les `cities` par NOM NORMALISÉ
@@ -106,7 +106,7 @@ async function run() {
       dupGroups.slice(0, 20).forEach((g, i) => {
         const label = g.rows[0].name;
         console.log(
-          `${String(i + 1).padStart(2)}. « ${label} »  —  ${g.rows.length} lignes | ${g.members} membres | ${g.served} desservie(s)`,
+          `${String(i + 1).padStart(2)}. « ${label} »  -  ${g.rows.length} lignes | ${g.members} membres | ${g.served} desservie(s)`,
         );
         g.rows
           .slice()
@@ -137,7 +137,7 @@ async function run() {
     const csvPath = path.resolve(__dirname, '../../city-duplicates.csv');
     fs.writeFileSync(csvPath, BOM + [header, ...rows].join('\n'), 'utf8');
     console.log(`\n[audit] Détail exporté -> ${csvPath}`);
-    console.log('[audit] (lecture seule — aucune écriture en base)');
+    console.log('[audit] (lecture seule - aucune écriture en base)');
   } finally {
     await AppDataSource.destroy();
   }
