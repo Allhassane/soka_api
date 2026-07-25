@@ -23,6 +23,7 @@
     "seed:zone-coverage-audit": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-zone-coverage-audit.ts",
     "seed:city-duplicates-audit": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-city-duplicates-audit.ts",
     "seed:structure-duplicates-audit": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-structure-duplicates-audit.ts",
+    "seed:fix-phone-letter-o": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-fix-phone-letter-o.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",

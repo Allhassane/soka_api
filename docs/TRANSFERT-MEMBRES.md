@@ -331,7 +331,17 @@ qu'après reconnexion.
 Page `membres/transferts/` : onglets **Reçues** / **Envoyées**, badge sur les `EN_ATTENTE`
 reçues. Modale de création : sélecteur de membres scopé au périmètre, cascade de structures
 jusqu'au district via **`useStructureFilterCascade`** (déjà écrit, gère les 7 paliers dont
-`CENTRE_REGIONAL`), panneau d'aperçu d'impact via `/impact-preview`.
+`CENTRE_REGIONAL`).
+
+> **La vérification d'impact est sur le chemin obligatoire de l'envoi** (depuis le 2026-07-25).
+> « Envoyer la demande » appelle `/impact-preview`, puis ouvre **`ConfirmTransferModal`** :
+> récapitulatif (membres, district de destination, motif, précision) + responsabilités
+> perdues/conservées via `ImpactPreviewPanel`. C'est le bouton « Confirmer et envoyer » de cette
+> seconde modale qui crée réellement la demande. Si `/impact-preview` échoue, **rien n'est
+> envoyé**. Avant, l'aperçu était un bouton facultatif à côté du formulaire, donc contournable :
+> on pouvait soumettre sans jamais voir qu'une responsabilité allait devenir vacante.
+> ⚠️ `ConfirmTransferModal` s'empile au-dessus de `CreateTransferModal` : ses `z-index` sont
+> forcés au-dessus de ceux de `DialogContent` (contenu `z-[9999]`, overlay `z-[999]`).
 
 > **Pas de bouton dans `MembreTable.tsx` en v1** : consommateur fortement lié du module, autant
 > ne pas créer de surface de conflit au merge global. La création part de la page transferts.

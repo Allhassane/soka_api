@@ -86,6 +86,9 @@ modifier.
 ### Responsabilités & comités — `src/responsibilities`, `src/committees`
 - **ResponsibilityEntity** — un poste/rôle fonctionnel occupable dans une structure.
 - **CommitteesEntity** / **CommitteeMemberEntity** — comités et leurs membres.
+  Affecter un membre à un comité (`POST`/`DELETE /comite/:uuid/members`) exige **deux conditions
+  cumulées** : la permission `membres_gerer_membres_comite` **et** `CommitteeService.canManage()`
+  (être responsable *de ce* comité, ou `is_admin`). Les autres routes `/comite` restent libres.
 
 ### Activités & formations — `src/activities`, `src/activity-types`, `src/formations`, `src/jobs`, `src/module`
 - **ActivityEntity** — une activité/événement (avec `ActivityTargetGender`, `ActivityTargetScope`).
@@ -222,8 +225,26 @@ services) : abonnements et dons.
   ⇒ Pour ouvrir une fonctionnalité aux responsables, attribuer la permission au rôle **porté par
   les responsabilités**. L'attribuer à un rôle utilisateur n'aurait aucun effet.
   ⇒ Un slug absent de la table `permissions` = refusé pour tout le monde **sauf `is_admin`**
-  (`PermissionsGuard` court-circuite sur `is_admin`). C'est le cas aujourd'hui de
-  `membres_modifier_un_membre`, exigé par `PUT /members/:uuid` mais **inexistant en base**.
+  (`PermissionsGuard` court-circuite sur `is_admin`).
+
+- **🔑 Ajouter une permission : la migration doit écrire dans DEUX tables.** Insérer la ligne dans
+  `permissions` ne suffit pas — sans ligne `roles_permissions` pour un rôle donné,
+  `findGlobalPermissions` renvoie `role_permission_uuid: null` et la case de Paramètres → Rôles
+  échoue à la coche (« Aucun élément trouvé », `togglePermission` ne trouve pas la ligne). Créer
+  donc **un lien par rôle** avec le `status` voulu (`seed:sync-role-permissions` fait le
+  rattrapage en masse, à `status = 0`). Modèles à copier :
+  `1782600000000-AddMemberUpdatePermission` et `1782700000000-AddCommitteeMemberManagementPermission`.
+  Conventions : `module_uuid` **résolu** depuis une permission existante (jamais codé en dur),
+  uuid générés côté Node, migration **idempotente** qui n'éteint jamais un lien déjà actif.
+  ⚠️ Dette connue : les 3 permissions du transfert (2026-07-22) n'ont de ligne que pour
+  `RESPONSABLE` — elles sont **incochables** pour `ADMINISTRATEUR` et `MEMBRE`.
+
+- **⚠️ Les permissions sont gelées dans le JWT au login** (`auth.service.ts` →
+  `payload.permissions`, calculé une seule fois pour éviter une requête par appel). Conséquence :
+  accorder ou retirer une permission **ne change rien pour une session déjà ouverte**, côté API
+  comme côté front (qui lit `global_permissions` posé au login). Toute recette de permission passe
+  par une **reconnexion**. Corollaire : jouer une migration de permission sur un environnement
+  actif ne « répare » personne tant que les utilisateurs ne se reconnectent pas.
 
 - **Périmètre d'un non-admin = `assertTargetWithinPerimeter()`** (`structure-tree.service.ts`) :
   ses structures de responsabilité + leur sous-arbre. **C'est la vraie barrière d'autorisation
