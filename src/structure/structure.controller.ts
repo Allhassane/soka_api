@@ -73,6 +73,7 @@ export class StructureController {
     @ApiQuery({ name: 'has_gohonzon', required: false, type: Boolean })
     @ApiQuery({ name: 'department_uuid', required: false, type: String })
     @ApiQuery({ name: 'division_uuid', required: false, type: String })
+    @ApiQuery({ name: 'structure_uuid', required: false, type: String })
     async getMyMembers(
       @Req() req,
       @Query('page') page?: number,
@@ -82,6 +83,7 @@ export class StructureController {
       @Query('has_gohonzon') has_gohonzon?: boolean,
       @Query('department_uuid') department_uuid?: string,
       @Query('division_uuid') division_uuid?: string,
+      @Query('structure_uuid') structure_uuid?: string,
     ) {
       const user = req.user;
       //console.log(user.responsibilities[0].structure)
@@ -96,6 +98,7 @@ export class StructureController {
           has_gohonzon,
           department_uuid,
           division_uuid,
+          structure_uuid,
         }
       );
     }
