@@ -25,6 +25,8 @@ export interface PaginationMemberParams {
   has_gohonzon?: boolean;
   department_uuid?: string;
   division_uuid?: string;
+  /** Restreint la liste à cette structure + son sous-arbre (cascade). */
+  structure_uuid?: string;
 }
 
 export interface MemberStatsFilters {
@@ -1090,7 +1092,15 @@ export class StructureTreeService {
     const offset = (page - 1) * limit;
 
     // Récupérer toutes les sous-structures accessibles
-    const allStructureUuids = await this.getAllSubStructureUuids(effectiveStructureUuid);
+    let allStructureUuids = await this.getAllSubStructureUuids(effectiveStructureUuid);
+
+    // Filtre cascade : si une structure est choisie, on restreint à SON sous-arbre
+    // — mais UNIQUEMENT si elle est dans le périmètre de l'utilisateur (sécurité :
+    // le filtre ne peut que rétrécir, jamais élargir hors périmètre).
+    const filterStructureUuid = paginationParams?.structure_uuid;
+    if (filterStructureUuid && allStructureUuids.includes(filterStructureUuid)) {
+      allStructureUuids = await this.getAllSubStructureUuids(filterStructureUuid);
+    }
 
     // Construire la requête de base pour les membres
     let membersQuery = this.memberRepository
