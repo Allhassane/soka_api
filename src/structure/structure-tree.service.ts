@@ -1809,6 +1809,43 @@ export class StructureTreeService {
   }
 
   /**
+   * Garde de périmètre : vérifie que `targetStructureUuid` est dans le périmètre
+   * autorisé du responsable, c.-à-d. l'une des structures de `allowedRootUuids` OU
+   * l'une de leurs sous-structures. Implémentation : on remonte la chaîne parente du
+   * target ; s'il croise une racine autorisée → OK, sinon `403`. Peu coûteux
+   * (profondeur ≤ ~8 paliers, pas de chargement de tout l'arbre).
+   *
+   * ⚠ À n'appeler QUE pour les non-admins : l'admin/super-admin filtre librement.
+   */
+  private async assertTargetWithinPerimeter(
+    targetStructureUuid: string,
+    allowedRootUuids: (string | null | undefined)[],
+  ): Promise<void> {
+    const allowed = new Set(allowedRootUuids.filter((u): u is string => !!u));
+    // Aucun périmètre connu → on refuse plutôt que d'ouvrir tout l'arbre.
+    if (allowed.size === 0) {
+      throw new ForbiddenException('Structure hors de votre périmètre');
+    }
+
+    let current: string | null = targetStructureUuid;
+    const seen = new Set<string>(); // garde anti-cycle (données héritées)
+    while (current && !seen.has(current)) {
+      if (allowed.has(current)) return;
+      seen.add(current);
+      const parent = await this.structureRepository.findOne({
+        where: { uuid: current },
+        select: ['uuid', 'parent_uuid'],
+      });
+      current =
+        parent?.parent_uuid && parent.parent_uuid.trim() !== ''
+          ? parent.parent_uuid
+          : null;
+    }
+
+    throw new ForbiddenException('Structure hors de votre périmètre');
+  }
+
+  /**
    * Totaux par département
    */
   private async getDepartmentsSummary(
@@ -1886,7 +1923,8 @@ export class StructureTreeService {
   async getMemberStatsByConnectedUser(
     memberUuid: string | null,
     responsibility_structure_uuid: string | null,
-    filters?: MemberStatsFilters
+    filters?: MemberStatsFilters,
+    perimeter?: { isAdmin?: boolean; allowedRootUuids?: string[] }
   ): Promise<MemberStatsResponse> {
 
     // Vérifier que l'utilisateur a un member_uuid
@@ -1937,6 +1975,16 @@ export class StructureTreeService {
 
     if (!targetStructure) {
       throw new NotFoundException('Structure non trouvée');
+    }
+
+    // 2bis. Contrôle d'autorisation : un non-admin ne peut cibler que son propre
+    // périmètre (sa/ses structure(s) de responsabilité + leurs sous-structures).
+    // Le grisage côté front n'est qu'un confort ; ici se trouve la vraie barrière.
+    if (!perimeter?.isAdmin) {
+      const allowedRoots = perimeter?.allowedRootUuids?.length
+        ? perimeter.allowedRootUuids
+        : [memberStructureUuid];
+      await this.assertTargetWithinPerimeter(targetStructureUuid, allowedRoots);
     }
 
     // 3. Récupérer les sous-structures de la cible
@@ -2271,7 +2319,31 @@ export class StructureTreeService {
     structure_uuid: string,
     filterParams: any,
     user_uuid: string,
+    perimeter?: { isAdmin?: boolean; allowedRootUuids?: string[] },
   ) {
+    // Contrôle d'autorisation AVANT la création du job (le traitement réel tourne en
+    // arrière-plan via setImmediate : impossible d'y renvoyer un 403). On résout donc
+    // ici la structure cible — même logique que le traitement asynchrone ci-dessous.
+    if (!perimeter?.isAdmin) {
+      let baseStructureUuid = structure_uuid;
+      if (filterParams?.region_uuid) baseStructureUuid = filterParams.region_uuid;
+      if (filterParams?.centre_regional_uuid) baseStructureUuid = filterParams.centre_regional_uuid;
+      if (filterParams?.centre_uuid) baseStructureUuid = filterParams.centre_uuid;
+      if (filterParams?.chapitre_uuid) baseStructureUuid = filterParams.chapitre_uuid;
+      if (filterParams?.district_uuid) baseStructureUuid = filterParams.district_uuid;
+      if (filterParams?.groupe_uuid) baseStructureUuid = filterParams.groupe_uuid;
+      if (filterParams?.sous_groupe_uuid) baseStructureUuid = filterParams.sous_groupe_uuid;
+
+      // Si aucune cible résolue, l'export se rabat sur la structure propre du membre
+      // (cf. generateMembersWorkbook) → déjà dans le périmètre, rien à contrôler.
+      if (baseStructureUuid) {
+        const allowedRoots = perimeter?.allowedRootUuids?.length
+          ? perimeter.allowedRootUuids
+          : [structure_uuid];
+        await this.assertTargetWithinPerimeter(baseStructureUuid, allowedRoots);
+      }
+    }
+
     // Créer le job
     const job = await this.exportJobService.createJob(
       'members',
@@ -3566,7 +3638,8 @@ export class StructureTreeService {
     memberUuid: string,
     responsibility_structure_uuid: string,
     category: 'total' | 'hommes' | 'femmes' | 'dept_hommes' | 'dept_femmes' | 'dept_jeunesse' | 'div_jeune_homme' | 'div_jeune_femme' | 'div_avenir',
-    filters?: MemberStatsFilters
+    filters?: MemberStatsFilters,
+    perimeter?: { isAdmin?: boolean; allowedRootUuids?: string[] }
   ) {
 
     // Vérifications initiales
@@ -3614,6 +3687,14 @@ export class StructureTreeService {
     // plutôt que de risquer un export non scopé (« tous les membres »).
     if (!targetStructureUuid) {
       throw new NotFoundException('Structure cible introuvable pour cet export');
+    }
+
+    // Contrôle d'autorisation : un non-admin ne peut exporter que dans son périmètre.
+    if (!perimeter?.isAdmin) {
+      const allowedRoots = perimeter?.allowedRootUuids?.length
+        ? perimeter.allowedRootUuids
+        : [responsibility_structure_uuid ?? member.structure_uuid];
+      await this.assertTargetWithinPerimeter(targetStructureUuid, allowedRoots);
     }
 
     // Récupérer les sous-structures

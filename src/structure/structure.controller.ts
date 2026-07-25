@@ -26,6 +26,8 @@ import {
 } from '@nestjs/swagger';
 import { UpdateStructureDto } from './dto/update-structure.dto';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
 import { MemberStatsFilters, PaginationMemberParams, StructureTreeService } from './structure-tree.service';
 import { StructureTreeNodeDto } from './dto/tree.dto';
 import { StructurePaginationQueryDto } from './dto/structure-pagination-query.dto';
@@ -33,11 +35,31 @@ import { StructurePaginationQueryDto } from './dto/structure-pagination-query.dt
 @ApiTags('Structures')
 @Controller('structure')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+// PermissionsGuard ajouté au niveau classe (comme MemberController) : les routes sans
+// @RequirePermissions restent « laissées passer » (cf. PermissionsGuard) — non-régressif.
+// L'autorisation effective des endpoints stats/export est posée par @RequirePermissions.
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class StructureController {
   constructor(private readonly structureService: StructureService,
     private readonly structureTreeService:StructureTreeService,
   ) {}
+
+  /**
+   * Dérive le PÉRIMÈTRE d'autorisation à partir du JWT (`req.user`). À ne pas confondre
+   * avec l'ACCÈS (qui est géré par `PermissionsGuard` + `@RequirePermissions`) :
+   * - isAdmin : flag runtime `is_admin` — c'est le SEUL bypass « voit tout », aligné sur
+   *   `PermissionsGuard` (et le seed RBAC : ADMINISTRATEUR = piloté par `is_admin`).
+   * - allowedRootUuids : structures de TOUTES les responsabilités (union des périmètres),
+   *   pour ne pas restreindre à tort un responsable multi-structures.
+   */
+  private buildPerimeter(req): { isAdmin: boolean; allowedRootUuids: string[] } {
+    const user = req?.user ?? {};
+    const isAdmin = user.is_admin === true;
+    const allowedRootUuids: string[] = (user.responsibilities ?? [])
+      .map((r: any) => r?.structure?.uuid)
+      .filter((u: any): u is string => !!u);
+    return { isAdmin, allowedRootUuids };
+  }
 
     @Get('my-members')
     @UseGuards(JwtAuthGuard)
@@ -132,6 +154,7 @@ async exportMembersToExcel(
 
 
 @Get('export/my-members/excel')
+@RequirePermissions('exports_voir_menu_exports')
 @ApiOperation({ summary: 'Lancer l\'export des membres en arrière-plan' })
 @ApiQuery({ name: 'search', required: false })
 @ApiQuery({ name: 'gender', required: false, enum: ['homme', 'femme'] })
@@ -180,6 +203,7 @@ async queueMembersExport(
     user.responsibilities?.[0]?.structure?.uuid,
     filterParams,
     user.uuid,
+    this.buildPerimeter(req),
   );
 }
 
@@ -250,6 +274,7 @@ async downloadMembersExport(
 
   @Get('my-stats')
   @UseGuards(JwtAuthGuard)
+  @RequirePermissions('dashboard_voir_menu_dashboard')
   @ApiOperation({
     summary: 'Récupérer les statistiques basées sur la structure du membre connecté',
   })
@@ -290,7 +315,8 @@ async downloadMembersExport(
         sous_groupe_uuid,
         department_uuid,
         division_uuid,
-      }
+      },
+      this.buildPerimeter(req),
     );
   }
 
@@ -315,6 +341,7 @@ async downloadMembersExport(
 
 @Post('stats/export/:category')
 @UseGuards(JwtAuthGuard)
+@RequirePermissions('exports_voir_menu_exports')
 @ApiOperation({
   summary: 'Exporter les membres par catégorie de statistiques',
   description: 'Génère un fichier Excel contenant la liste des membres selon la catégorie choisie (total, hommes, femmes, départements, divisions)'
@@ -421,7 +448,8 @@ async exportStatCategory(
     memberUuid,
     responsibilityStructureUuid,
     category as any,
-    filters
+    filters,
+    this.buildPerimeter(req),
   );
 }
 
