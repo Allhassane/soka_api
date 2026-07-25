@@ -86,4 +86,12 @@ export class CreatePaymentDto {
   @Min(1)
   @IsOptional()
   quantity?: number;
+
+  @ApiPropertyOptional({
+    description: 'Numéro de téléphone utilisé pour le paiement (guichet Hub)',
+    example: '+2250700000000',
+  })
+  @IsString()
+  @IsOptional()
+  paymentNumber?: string;
 }

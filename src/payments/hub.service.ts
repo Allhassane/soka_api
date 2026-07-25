@@ -54,6 +54,7 @@ export class HubService {
     metadata?: Record<string, unknown>,
     currency = 'XOF',
   ): Promise<{ payment_url: string; transactionId: string }> {
+ 
     if (!this.apiKey) {
       throw new InternalServerErrorException('HUB_API_KEY non configurée');
     }
