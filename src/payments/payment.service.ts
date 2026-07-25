@@ -1222,7 +1222,7 @@ async findTransactionsForSubGroupsExport(
       case PaymentSource.SUBSCRIPTION:
         return 'abonnement';
       case PaymentSource.DONATION:
-        return 'zaïmu';
+        return 'zaimu';
       case PaymentSource.SHOP_ITEM:
         return 'boutique';
       default:
