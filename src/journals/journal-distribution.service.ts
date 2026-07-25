@@ -646,14 +646,21 @@ export class JournalDistributionService {
       new Set(payments.map((p) => p.beneficiary_uuid).filter(Boolean)),
     );
     const memberCity = new Map<string, string | null>();
+    const memberStruct = new Map<string, string | null>();
     const chunkSize = 500;
     for (let i = 0; i < benUuids.length; i += chunkSize) {
       const chunk = benUuids.slice(i, i + chunkSize);
       const members = await this.memberRepo.find({
         where: { uuid: In(chunk) },
-        select: ['uuid', 'city_uuid'],
+        select: ['uuid', 'city_uuid', 'structure_uuid'],
       });
-      for (const m of members) memberCity.set(m.uuid, m.city_uuid ?? null);
+      for (const m of members) {
+        memberCity.set(m.uuid, m.city_uuid ?? null);
+        memberStruct.set(
+          m.uuid,
+          (m as unknown as { structure_uuid: string | null }).structure_uuid ?? null,
+        );
+      }
     }
 
     // 3) Ville -> zone (table de liaison, volume modeste)
@@ -671,15 +678,88 @@ export class JournalDistributionService {
       cityCount.set(zc.zone_uuid, (cityCount.get(zc.zone_uuid) ?? 0) + 1);
     }
 
-    // 5) Agrégation par zone
+    // 4bis) Rattachement par STRUCTURE (+ sous-arbre). Chaque zone configurée
+    // sur une vraie structure devient une « racine » ; un abonné est rattaché à
+    // la zone dont la racine est l'ancêtre le PLUS PROCHE de sa structure
+    // (remontée via parent_uuid). Ce signal est PRIORITAIRE sur la ville :
+    // il est précis (règle le cas d'une ville comme Abidjan couvrant plusieurs
+    // zones) et garantit un rattachement unique par abonné.
+    const allStructures = await this.structureRepo.find({
+      select: ['uuid', 'parent_uuid'],
+    });
+    const validStructSet = new Set(allStructures.map((s) => s.uuid));
+    const parentOf = new Map<string, string | null>();
+    for (const s of allStructures) {
+      parentOf.set(
+        s.uuid,
+        (s as unknown as { parent_uuid: string | null }).parent_uuid ?? null,
+      );
+    }
+    const rootToZone = new Map<string, string>();
+    for (const z of zones) {
+      const su = (z as unknown as { structure_uuid: string | null }).structure_uuid;
+      if (su && validStructSet.has(su) && !rootToZone.has(su)) {
+        rootToZone.set(su, z.uuid);
+      }
+    }
+    const zoneForStructMemo = new Map<string, string | null>();
+    const zoneForStruct = (su: string | null): string | null => {
+      if (!su) return null;
+      const cached = zoneForStructMemo.get(su);
+      if (cached !== undefined) return cached;
+      const path: string[] = [];
+      let cur: string | null = su;
+      let found: string | null = null;
+      const guard = new Set<string>();
+      while (cur && !guard.has(cur)) {
+        guard.add(cur);
+        path.push(cur);
+        const zu = rootToZone.get(cur);
+        if (zu) {
+          found = zu;
+          break;
+        }
+        cur = parentOf.get(cur) ?? null;
+      }
+      for (const p of path) {
+        if (!zoneForStructMemo.has(p)) zoneForStructMemo.set(p, found);
+      }
+      return found;
+    };
+
+    // 5) Agrégation par zone — 1 abonné = 1 zone (structure d'abord, ville en secours)
     const perZone = new Map<string, number>();
-    let unassigned = 0; // abonnés sans ville ou dont la ville n'est rattachée à aucune zone
+    const perZoneSource = new Map<
+      string,
+      { from_structure: number; from_city: number }
+    >();
+    let unassigned = 0; // rattaché ni par structure ni par ville
+    let assignedByStructure = 0;
+    let assignedByCity = 0;
     for (const p of payments) {
-      const city = memberCity.get(p.beneficiary_uuid);
-      const zoneUuid = city ? cityToZone.get(city) : undefined;
       const qty = p.quantity ?? 0;
+      // 1) Structure (+ sous-arbre) — prioritaire.
+      let zoneUuid: string | undefined =
+        zoneForStruct(memberStruct.get(p.beneficiary_uuid) ?? null) ?? undefined;
+      let bySource: 'structure' | 'city' = 'structure';
+      // 2) Ville — en secours seulement.
+      if (!zoneUuid) {
+        const city = memberCity.get(p.beneficiary_uuid);
+        zoneUuid = city ? cityToZone.get(city) : undefined;
+        bySource = 'city';
+      }
       if (zoneUuid) {
         perZone.set(zoneUuid, (perZone.get(zoneUuid) ?? 0) + qty);
+        const src =
+          perZoneSource.get(zoneUuid) ?? { from_structure: 0, from_city: 0 };
+        if (bySource === 'structure') {
+          src.from_structure += qty;
+          assignedByStructure += qty;
+        } else {
+          src.from_city += qty;
+          assignedByCity += qty;
+        }
+        perZoneSource.set(zoneUuid, src);
       } else {
         unassigned += qty;
       }
@@ -745,6 +825,8 @@ export class JournalDistributionService {
           responsible_phone: z?.responsible_phone ?? null,
           city_count: cityCount.get(zone_uuid) ?? 0,
           total_abonnes,
+          from_structure: perZoneSource.get(zone_uuid)?.from_structure ?? 0,
+          from_city: perZoneSource.get(zone_uuid)?.from_city ?? 0,
         };
       })
       .sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
@@ -762,6 +844,8 @@ export class JournalDistributionService {
       total_need: totalNeed,
       assigned_total: totalNeed - unassigned,
       unassigned,
+      assigned_by_structure: assignedByStructure,
+      assigned_by_city: assignedByCity,
       by_zone,
     };
   }

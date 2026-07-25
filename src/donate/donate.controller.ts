@@ -30,6 +30,16 @@ export class DonateController {
     return this.donateService.findAll(admin_uuid);
   }
 
+  @Get('open-to-donate')
+  @ApiOperation({
+    summary:
+      "Campagnes de dons ouvertes auxquelles l'utilisateur n'a pas encore contribué (action prioritaire)",
+  })
+  @ApiResponse({ status: 200, description: 'Campagnes de dons à contribuer.' })
+  openToDonate(@Request() req) {
+    return this.donateService.getOpenToDonate(req.user.uuid as string);
+  }
+
   @Get('findOneByUuid:uuid')
   @ApiOperation({ summary: 'Récupérer une don par UUID' })
   @ApiResponse({ status: 200, description: 'Don trouvé.' })
