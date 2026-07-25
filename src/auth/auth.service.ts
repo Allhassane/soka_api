@@ -17,7 +17,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { StructureEntity } from 'src/structure/entities/structure.entity';
 import { LevelEntity } from 'src/level/entities/level.entity';
 import { ROLE_MEMBRE_SLUG } from 'src/shared/constants/constants';
-import { SmsService } from 'src/sms/sms.service';
+import { SmsDispatcher } from 'src/sms/sms-dispatcher.service';
 import { first } from 'rxjs';
 
 @Injectable()
@@ -40,7 +40,10 @@ export class AuthService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
 
-    private readonly smsService: SmsService,
+    // Aiguilleur multi-fournisseurs (LeTexto + SMSPro, failover à chaud). Remplace
+    // l'ancien SmsService direct. Rollback : réinjecter SmsService et rétablir les
+    // 2 appels sendSms() ci-dessous (SmsService reste exporté par SmsModule).
+    private readonly smsDispatcher: SmsDispatcher,
 
   ) {}
 
@@ -520,11 +523,11 @@ export class AuthService {
   private async handleFirstLogin(user: User) {
     const newPassword = this.generatePassword();
 
-    const sms = await this.smsService.sendSms(
-      user.phone_number,
-      `SOKA : votre mot de passe est ${newPassword}. Connectez-vous avec ce mot de passe.`,
-      `firstlogin-${user.uuid}`,
-    );
+    const sms = await this.smsDispatcher.send({
+      to: user.phone_number,
+      message: `SOKA : votre mot de passe est ${newPassword}. Connectez-vous avec ce mot de passe.`,
+      reference: `firstlogin-${user.uuid}`,
+    });
 
     if (!sms.success) {
       this.logger.error(
@@ -583,11 +586,11 @@ export class AuthService {
     // On envoie le SMS D'ABORD et on ne change le mot de passe en base QUE si l'envoi
     // a réussi. Sinon un échec LeTexto (numéro mal formé, crédits, sender…) laisserait
     // le compte avec un mot de passe perdu, jamais reçu par le membre.
-    const sms = await this.smsService.sendSms(
-      normalized,
-      `SOKA : votre nouveau mot de passe est ${newPassword}. Connectez-vous avec ce mot de passe.`,
-      `reset-${user.uuid}`,
-    );
+    const sms = await this.smsDispatcher.send({
+      to: normalized,
+      message: `SOKA : votre nouveau mot de passe est ${newPassword}. Connectez-vous avec ce mot de passe.`,
+      reference: `reset-${user.uuid}`,
+    });
 
     if (!sms.success) {
       this.logger.error(
