@@ -13,15 +13,22 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { CommitteeService } from './committee.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
 import { CreateCommitteeDto } from './dto/create-committe.dto';
 import { UpdateCommitteeDto } from './dto/update-committe.dto';
 import { AddCommitteeMemberDto } from './dto/committee-member.dto';
 import { AssignResponsibleDto } from './dto/assign-responsible.dto';
 
+/** Slug qui gouverne l'affectation de membres à un comité (cf. migration 1782700000000). */
+const MANAGE_COMMITTEE_MEMBERS = 'membres_gerer_membres_comite';
+
+// `PermissionsGuard` laisse passer toute route sans `@RequirePermissions` : le poser au niveau de
+// la classe ne restreint que les deux routes décorées ci-dessous.
 @ApiBearerAuth()
 @ApiTags('Comite')
 @Controller('comite')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class CommitteeController {
   constructor(private readonly committeeService: CommitteeService) {}
 
@@ -110,7 +117,9 @@ export class CommitteeController {
   }
 
   @Post(':uuid/members')
+  @RequirePermissions(MANAGE_COMMITTEE_MEMBERS)
   @ApiOperation({ summary: 'Ajouter un membre au comité (responsable ou admin)' })
+  @ApiResponse({ status: 403, description: 'Permission manquante ou non responsable du comité.' })
   addMember(
     @Param('uuid') uuid: string,
     @Body() payload: AddCommitteeMemberDto,
@@ -120,7 +129,9 @@ export class CommitteeController {
   }
 
   @Delete(':uuid/members/:memberUuid')
+  @RequirePermissions(MANAGE_COMMITTEE_MEMBERS)
   @ApiOperation({ summary: 'Retirer un membre du comité (responsable ou admin)' })
+  @ApiResponse({ status: 403, description: 'Permission manquante ou non responsable du comité.' })
   removeMember(
     @Param('uuid') uuid: string,
     @Param('memberUuid') memberUuid: string,

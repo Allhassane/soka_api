@@ -24,6 +24,94 @@ Une entrée par session significative, la plus récente en haut.
 
 ---
 
+## 2026-07-25 (2) — Permission `membres_gerer_membres_comite` : restreindre l'affectation à un comité — modules `comités` + `membres`
+**Contexte :** l'onglet « Comité » de la fiche membre permet au responsable d'un comité spécialisé
+d'y affecter des membres (`POST /comite/:uuid/members`, `DELETE /comite/:uuid/members/:memberUuid`).
+Ces routes n'étaient gardées que par `CommitteeService.canManage()` — **responsable du comité ou
+`is_admin`** — donc **aucun moyen de restreindre la fonctionnalité depuis Paramètres → Rôles** :
+désigner quelqu'un responsable d'un comité lui donnait mécaniquement le droit d'y affecter qui il
+voulait. Demande : rendre ce droit débrayable comme les autres.
+- **Fait :**
+  - Migration `src/migrations/1782700000000-AddCommitteeMemberManagementPermission.ts` — crée le
+    slug **`membres_gerer_membres_comite`** (« Gérer les membres de son comité »), rattaché au
+    module **Membres** (`module_uuid` résolu depuis `membres_ajouter_un_membre`, pas codé en dur).
+  - `src/committees/committee.controller.ts` — `@UseGuards(JwtAuthGuard, PermissionsGuard)` au
+    niveau de la classe + `@RequirePermissions('membres_gerer_membres_comite')` sur `addMember` et
+    `removeMember` uniquement. `canManage()` est **conservé** : il faut désormais la permission
+    **ET** être responsable du comité (ou `is_admin`).
+- **Décision — une seule permission pour ajouter ET retirer.** Deux slugs séparés auraient permis
+  « ajouter sans pouvoir retirer », un état incohérent : celui qui compose son équipe doit pouvoir
+  corriger une erreur d'affectation. Arbitré explicitement le 2026-07-25.
+- **Décision — l'onglet « Comité » reste visible pour tous.** Il affiche les comités du membre
+  consulté (information de lecture, déjà accessible ailleurs) ; seule l'**action** est gardée.
+- **Décision — la migration rattache la permission aux TROIS rôles**, pas seulement à celui qu'on
+  veut autoriser : `RESPONSABLE` **1**, `ADMINISTRATEUR` **1**, `MEMBRE` **0**. Deux raisons :
+  1. **Sans ligne `roles_permissions`, la case est incochable.** `findGlobalPermissions` renvoie
+     `role_permission_uuid: null` et `togglePermission` répond « Aucun élément trouvé » — c'est
+     exactement le trou que comble `seed:sync-role-permissions`. Les permissions du transfert
+     (2026-07-22) n'ont d'ailleurs de ligne que pour `RESPONSABLE` : elles sont **incochables pour
+     `ADMINISTRATEUR` et `MEMBRE`** dans l'écran des rôles (dette existante, non traitée ici).
+  2. **Statut 1 sur `RESPONSABLE` = aucune régression au déploiement.** La fonctionnalité continue
+     de marcher comme avant la migration ; restreindre devient une action volontaire (décocher).
+  Le rejeu de la migration **n'éteint jamais** un lien existant (un statut a pu être changé
+  volontairement depuis l'écran des rôles) — il n'active que ce qui doit l'être.
+- **⚠️ Piège à connaître — les permissions sont gelées dans le JWT au login** (`auth.service.ts`,
+  `payload.permissions`), en plus du localStorage front. Après `migration:run`, **les sessions déjà
+  ouvertes n'ont pas le nouveau slug** : un responsable connecté verra `403` jusqu'à sa
+  reconnexion. Même famille que le gotcha « permissions chargées au login uniquement ».
+- **Exécutée sur `soka_db` le 2026-07-25** (`npm run migration:run`, sur confirmation explicite).
+  Vérifié en base : `membres_gerer_membres_comite` présent dans le module **Membres**, liens
+  `roles_permissions` = ADMINISTRATEUR **1**, RESPONSABLE **1**, MEMBRE **0**.
+- **⚠️ Effet de bord — `migration:run` a joué DEUX AUTRES migrations en attente**, hors du module
+  membres/comités (elles étaient déjà dans le repo, non appliquées sur cette base) :
+  `CreateAppSettings1782500000000` (crée la table `app_settings` + 4 réglages SMS) et
+  `SeedSmsParametrePermissions1782500100000` (crée le module « Paramètres » et les permissions
+  `parametres_voir_sms` / `parametres_gerer_sms`, accordées à ADMINISTRATEUR). Bilan global :
+  `permissions` 47 → 50, `roles_permissions` 133 → 138. **À signaler à l'équipe** — `soka_db` est
+  partagée et ces deux migrations relèvent du module SMS/paramètres de quelqu'un d'autre.
+  À retenir : sur cette base, `migration:run` n'est jamais une opération « ma migration seule »,
+  vérifier `typeorm_migrations` vs `src/migrations/` **avant** de lancer.
+  ⚠️ Au passage, `1782500100000` est porté par **deux** migrations distinctes
+  (`AddMemberTransferPermissions` et `SeedSmsParametrePermissions`) — collision de timestamp, sans
+  conséquence ici mais l'ordre relatif entre les deux n'est pas garanti.
+- **TODO :** recette navigateur à faire avec **reconnexion** : un responsable de comité peut
+  ajouter/retirer ; case décochée dans Paramètres → Rôles + reconnexion ⇒ bloc « Ajouter à mon
+  comité » et corbeille disparus, et `403` si l'appel est rejoué à la main.
+
+---
+
+## 2026-07-25 — Seed correctif : numéros de téléphone saisis avec la lettre « O » — module `membres`
+**Contexte :** le front impose désormais **10 chiffres** sur les champs téléphone (connexion et
+« mot de passe oublié », cf. `web/docs/JOURNAL.md` du 2026-07-25). Un audit de `soka_db` a montré
+que **4 comptes** ont un numéro contenant la **lettre `O`** au lieu du chiffre `0` — ils étaient
+déjà impossibles à connecter (le login se fait sur `users.phone_number`), et la lettre est
+maintenant impossible à saisir. Sur 7668 comptes, 7663 ont bien 10 chiffres ; le 5ᵉ écart est un
+compte de test à 8 chiffres (id 11054), laissé tel quel.
+- **Fait :** `src/seeds/seed-fix-phone-letter-o.ts` + script `npm run seed:fix-phone-letter-o`.
+  Corrige `users.phone_number` (identifiant de login) **et** `members.phone` (fiche membre) —
+  4 lignes de chaque côté, les **mêmes 4 personnes** : BI PO CHARLES TRA, LIASU SOULEYMANE,
+  GAYE BORIS PACOME GAHIE, AMENAN SIMONE KOUADIO.
+- **Décision — les deux colonnes, pas seulement `users`.** Ne corriger que le login aurait fait
+  diverger l'identifiant de connexion et le téléphone affiché sur la fiche membre.
+- **Décision — `members.phone_whatsapp` volontairement exclu.** Cette colonne est de la saisie
+  libre : on y trouve « NEANT », « V », un nom de famille (« KOUAME »), des espaces internes, un
+  point en préfixe, « 0565730664ASS »… Un `REPLACE` automatique n'y a aucun sens ; il faut un
+  arbitrage humain. Le seed **signale** ces valeurs sans y toucher.
+- **Décision — SQL paramétré direct plutôt que le repository.** `UserEntity` porte un
+  `@BeforeUpdate()` qui re-hash le mot de passe ; passer par `repo.save()` ferait transiter des
+  champs qu'on ne veut pas réécrire. L'`UPDATE` ne touche que la colonne visée.
+- **Garde-fous :** ne corrige que les valeurs `^[0-9Oo]{10}$` (donc résultat forcément à
+  10 chiffres) ; ignore les lignes soft-deleted ; **refuse** une correction qui collisionnerait
+  avec un numéro déjà pris ; **dry-run par défaut**, écriture seulement avec `-- --apply` ;
+  écritures en transaction. Idempotent.
+- **Simulation jouée** (`npm run seed:fix-phone-letter-o`, sans `--apply`) : **8 corrections**
+  identifiées, **0 ignorée**, **0 collision**. Vérifié au préalable en SQL que les 4 numéros
+  corrigés ne sont utilisés par personne.
+- **TODO :** exécution réelle (`-- --apply`) **non faite** — écriture sur `soka_db`, à confirmer.
+  Et arbitrage sur `members.phone_whatsapp` (~15 valeurs libres).
+
+---
+
 ## 2026-07-24 — Recette intégrale création + modification de membre — module `membres`
 **Contexte :** recette demandée de bout en bout sur `POST /members` et `PUT /members/:uuid`,
 API **et** formulaire. 47 assertions jouées contre l'API réelle, plus un parcours complet du
