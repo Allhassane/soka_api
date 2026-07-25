@@ -49,8 +49,8 @@ export class SubscriptionService {
       .orderBy('s.stops_at', 'ASC')
       .getMany();
 
-    // Campagnes déjà souscrites par le membre (paiement réussi, bénéficiaire).
-    let subscribed = new Set<string>();
+    // Nombre de paiements réussis du membre par campagne (bénéficiaire).
+    const paidCount = new Map<string, number>();
     if (memberUuid && open.length) {
       const paid = await this.subscriptionPaymentRepo.find({
         where: {
@@ -59,11 +59,23 @@ export class SubscriptionService {
         },
         select: ['subscription_uuid'],
       });
-      subscribed = new Set(paid.map((p) => p.subscription_uuid));
+      for (const p of paid) {
+        paidCount.set(
+          p.subscription_uuid,
+          (paidCount.get(p.subscription_uuid) ?? 0) + 1,
+        );
+      }
     }
 
+    // On garde la campagne tant que le membre n'a pas atteint sa limite de
+    // paiements. max null ou <= 0  ⇒  illimité (toujours proposé). Aligné sur
+    // l'enforcement au paiement (subscription-payment.service : count >= max).
     const campaigns = open
-      .filter((s) => !subscribed.has(s.uuid))
+      .filter((s) => {
+        const max = s.max_payments_per_beneficiary;
+        if (!max || max <= 0) return true;
+        return (paidCount.get(s.uuid) ?? 0) < max;
+      })
       .map((s) => ({
         uuid: s.uuid,
         name: s.name,
