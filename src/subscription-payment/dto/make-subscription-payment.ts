@@ -4,6 +4,7 @@ import {
   IsNotEmpty,
   IsNumber,
   IsOptional,
+  IsString,
   Min,
 } from 'class-validator';
 
@@ -24,6 +25,13 @@ export class MakeSubscriptionPaymentDto {
   @IsNotEmpty({ message: "Le bénéficiaire est requis." })
   beneficiary_uuid: string;
 
+  @ApiPropertyOptional({
+    description: 'Numéro de téléphone utilisé pour le paiement (guichet Hub)',
+    example: '+2250700000000',
+  })
+  @IsString()
+  @IsOptional()
+  paymentNumber?: string;
 
   @ApiPropertyOptional({
     description: "Quantité du paiement (généralement 1 pour un don)",

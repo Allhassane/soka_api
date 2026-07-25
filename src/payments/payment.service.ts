@@ -166,7 +166,7 @@ export class PaymentService {
     //  - payer/beneficiary name+phone → affichés sur le reçu PDF.
     const paymentMeta: Record<string, unknown> = {
       payerName: dto.actor_name,
-      payerPhone: actor.phone ?? '',
+      payerPhone: dto.paymentNumber ?? actor.phone ?? '',
       beneficiaryName: dto.beneficiary_name,
       beneficiaryPhone: beneficiary.phone ?? '',
     };
@@ -1222,7 +1222,7 @@ async findTransactionsForSubGroupsExport(
       case PaymentSource.SUBSCRIPTION:
         return 'abonnement';
       case PaymentSource.DONATION:
-        return 'zaïmu';
+        return 'zaimu';
       case PaymentSource.SHOP_ITEM:
         return 'boutique';
       default:

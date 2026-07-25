@@ -53,8 +53,8 @@ export class DonateService {
       .orderBy('d.stops_at', 'ASC')
       .getMany();
 
-    // Campagnes déjà contribuées par le membre (paiement réussi, donateur).
-    let contributed = new Set<string>();
+    // Nombre de paiements réussis du membre par campagne (donateur).
+    const paidCount = new Map<string, number>();
     if (memberUuid && open.length) {
       const paid = await this.donatePaymentRepo.find({
         where: {
@@ -63,11 +63,20 @@ export class DonateService {
         },
         select: ['donate_uuid'],
       });
-      contributed = new Set(paid.map((p) => p.donate_uuid));
+      for (const p of paid) {
+        paidCount.set(p.donate_uuid, (paidCount.get(p.donate_uuid) ?? 0) + 1);
+      }
     }
 
+    // On garde la campagne tant que le membre n'a pas atteint sa limite de
+    // paiements. max null ou <= 0  ⇒  illimité (toujours proposé). Aligné sur
+    // l'enforcement au paiement (donate-payment.service : count >= max).
     const campaigns = open
-      .filter((d) => !contributed.has(d.uuid))
+      .filter((d) => {
+        const max = d.max_payments_per_beneficiary;
+        if (!max || max <= 0) return true;
+        return (paidCount.get(d.uuid) ?? 0) < max;
+      })
       .map((d) => ({
         uuid: d.uuid,
         name: d.name,

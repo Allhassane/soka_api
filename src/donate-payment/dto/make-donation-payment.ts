@@ -4,6 +4,7 @@ import {
   IsNotEmpty,
   IsNumber,
   IsOptional,
+  IsString,
   Min,
 } from 'class-validator';
 
@@ -32,6 +33,13 @@ export class MakeDonationPaymentDto {
   @IsOptional()
   search?: string;
 
+  @ApiPropertyOptional({
+    description: 'Numéro de téléphone utilisé pour le paiement (guichet Hub)',
+    example: '+2250700000000',
+  })
+  @IsString()
+  @IsOptional()
+  paymentNumber?: string;
 
   @ApiPropertyOptional({
     description: "Montant du don (utilisé uniquement pour les dons libres)",

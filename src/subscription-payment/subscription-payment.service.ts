@@ -68,6 +68,8 @@ export class SubscriptionPaymentService {
       );
     }
 
+    let totalPaid: number = 0;
+
     // -----------------------------------------
     // Vérifier quota de paiements
     // -----------------------------------------
@@ -75,17 +77,16 @@ export class SubscriptionPaymentService {
       subscription.max_payments_per_beneficiary &&
       subscription.max_payments_per_beneficiary > 0
     ) {
-      const totalPaid = await this.subscriptionPaymentRepo.count({
+      totalPaid = await this.subscriptionPaymentRepo.count({
         where: {
           subscription_uuid: subscription.uuid,
-          beneficiary_uuid: beneficiary.uuid,
           status: GlobalStatus.SUCCESS,
         },
       });
 
       if (totalPaid >= subscription.max_payments_per_beneficiary) {
         throw new BadRequestException(
-          `Limite de paiements atteinte pour ce bénéficiaire.`,
+          `Limite de paiements atteinte pour cette campagne d'abonnement.`,
         );
       }
     }
@@ -98,6 +99,18 @@ export class SubscriptionPaymentService {
     if (!Number.isInteger(quantity) || quantity < 1) {
       throw new BadRequestException(
         'La quantité doit être un entier >= 1.',
+      );
+    }
+
+    let restToPay: number = (subscription.max_payments_per_beneficiary ?? 0) - totalPaid;
+
+    if (
+      subscription.max_payments_per_beneficiary 
+      && subscription.max_payments_per_beneficiary > 0 && 
+      quantity > restToPay
+    ) {
+      throw new BadRequestException(
+        `Le nombre de paiements restant pour cette campagne d'abonnement est de ${restToPay}.`,
       );
     }
 
@@ -129,6 +142,7 @@ export class SubscriptionPaymentService {
 
         amount: unitAmount,
         quantity,
+        paymentNumber: dto.paymentNumber,
       },
       admin_uuid,
     );

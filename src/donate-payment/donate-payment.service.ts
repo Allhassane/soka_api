@@ -136,6 +136,7 @@ export class DonatePaymentService {
 
     const description = `Paiement donation par ${actor.firstname} ${actor.lastname}`;
 
+
     // -------------------------------
     // Appel PaymentService (CinetPay inclus)
     // -------------------------------
@@ -152,6 +153,7 @@ export class DonatePaymentService {
 
         amount: unitAmount, // montant unitaire
         quantity,           // quantité validée
+        paymentNumber: dto.paymentNumber,
       },
       admin_uuid,
     );
