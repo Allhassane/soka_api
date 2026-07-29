@@ -4,7 +4,7 @@ import { DateTimeEntity } from 'src/shared/entities/date-time.entity';
 
 /**
  * Réglage runtime générique (clé/valeur), source de vérité pour la configuration
- * modifiable À CHAUD sans redéploiement — d'abord utilisée pour le fournisseur SMS
+ * modifiable À CHAUD sans redéploiement - d'abord utilisée pour le fournisseur SMS
  * actif et ses toggles (cf. `SmsDispatcher`).
  *
  * ⚠️ Les colonnes s'appellent `setting_key` / `setting_value` (et NON `key`/`value`

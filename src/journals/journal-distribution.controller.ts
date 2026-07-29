@@ -26,15 +26,18 @@ import {
   DistributeEditionDto,
   SweepDistributionsDto,
 } from './dto/distribute-edition.dto';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
 @ApiTags('Journal - Distribution')
 @Controller('journals')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class JournalDistributionController {
   constructor(private readonly service: JournalDistributionService) {}
 
   @Post('editions/:uuid/distribute')
+  @RequirePermissions('journal_distribution_lancer')
   @ApiOperation({
     summary: 'Lancer la distribution d une edition',
     description:
@@ -55,6 +58,7 @@ export class JournalDistributionController {
   }
 
   @Get('editions/:uuid/distributions')
+  @RequirePermissions('journal_distribution_voir')
   @ApiOperation({
     summary: 'Liste des distributions d une edition',
     description: 'Le statut "late" est recalcule a la volee si la deadline est depassee.',
@@ -68,6 +72,7 @@ export class JournalDistributionController {
   }
 
   @Put('distributions/:uuid/ack')
+  @RequirePermissions('journal_distribution_modifier')
   @ApiOperation({
     summary: 'Confirmer la livraison d une distribution',
     description: 'Passe en delivered ou late selon la deadline de l edition.',
@@ -86,6 +91,7 @@ export class JournalDistributionController {
   }
 
   @Post('distributions/sweep')
+  @RequirePermissions('journal_distribution_lancer')
   @ApiOperation({
     summary: 'Tache de balayage : marque late et relance a J+1',
     description:
@@ -102,6 +108,7 @@ export class JournalDistributionController {
   }
 
   @Get('editions/:uuid/stats')
+  @RequirePermissions('journal_distribution_voir')
   @ApiOperation({
     summary: 'Statistiques de distribution d une edition',
     description: 'Total destinations, notifiees, livrees, en retard, taux livraison, agregat par zone.',
@@ -115,6 +122,7 @@ export class JournalDistributionController {
   }
 
   @Get('stats')
+  @RequirePermissions('journal_distribution_voir')
   @ApiOperation({
     summary: 'Statistiques globales du journal',
     description: 'Total editions, total distributions, livrees, late, taux livraison et taux retard.',
@@ -126,6 +134,7 @@ export class JournalDistributionController {
   }
 
   @Get('editions/:uuid/needs-by-zone')
+  @RequirePermissions('journal_distribution_voir')
   @ApiOperation({
     summary: 'Besoin par zone calcule depuis les abonnements',
     description:
@@ -141,6 +150,7 @@ export class JournalDistributionController {
   }
 
   @Get('editions/:uuid/zones/:zoneUuid/subscribers')
+  @RequirePermissions('journal_distribution_voir')
   @ApiOperation({
     summary: 'Abonnes nominatifs d une zone pour une edition',
     description:
@@ -165,6 +175,7 @@ export class JournalDistributionController {
   }
 
   @Get('editions/:uuid/printing-report')
+  @RequirePermissions('journal_distribution_voir')
   @ApiOperation({
     summary: 'Rapport d impression d une edition (3 listings)',
     description:
@@ -188,6 +199,7 @@ export class JournalDistributionController {
   }
 
   @Get('editions/:uuid/printing-export')
+  @RequirePermissions('journal_distribution_voir')
   @ApiOperation({
     summary: 'Export Excel mis en forme du rapport d impression',
     description:
@@ -219,6 +231,7 @@ export class JournalDistributionController {
   }
 
   @Get('members')
+  @RequirePermissions('journal_distribution_voir')
   @ApiOperation({
     summary: 'Recherche de membres pour le journal',
     description:

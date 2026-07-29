@@ -4,15 +4,18 @@ import { MaritalStatusService } from './marital-status.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateMaritalStatusDto } from './dto/create-marital-status.dto';
 import { UpdateMaritalStatusDto } from './dto/update-marital-status.dto';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
 @ApiTags('Situation Matrimoniale')
 @Controller('marital-status')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class MaritalStatusController {
   constructor(private readonly maritalStatusService: MaritalStatusService) {}
 
   @Get()
+  @RequirePermissions('situations_matrimoniales_voir')
   @ApiOperation({ summary: 'Liste toutes les situations matrimoniale' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
@@ -21,6 +24,7 @@ export class MaritalStatusController {
   }
 
   @Post()
+  @RequirePermissions('situations_matrimoniales_creer')
   @ApiOperation({ summary: 'Créer un nouveau division' })
   @ApiResponse({ status: 200, description: 'Situation matrimoniale créé avec succès.' })
   @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
@@ -29,6 +33,7 @@ export class MaritalStatusController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('situations_matrimoniales_voir')
   @ApiOperation({ summary: 'Récupérer une situation matrimoniale par UUID' })
   @ApiResponse({ status: 200, description: 'Situation matrimoniale trouvé.' })
   @ApiResponse({ status: 400, description: 'Situation matrimoniale non trouvé.' })
@@ -38,6 +43,7 @@ export class MaritalStatusController {
   }
 
  @Put(':uuid')
+ @RequirePermissions('situations_matrimoniales_modifier')
  @ApiOperation({ summary: 'Modifier une situation matrimoniale' })
  @ApiResponse({ status: 200, description: 'situation matrimoniale modifiée avec succès.' })
  @ApiResponse({ status: 400, description: 'Champs invalides ou manquants.' })
@@ -51,6 +57,7 @@ export class MaritalStatusController {
 
 
   @Delete(':uuid')
+  @RequirePermissions('situations_matrimoniales_supprimer')
   @ApiOperation({ summary: 'Supprimer une situation matrimoniale' })
   @ApiResponse({ status: 200, description: 'situation matrimoniale supprimé avec succès.' })
   @ApiResponse({ status: 400, description: 'situation matrimoniale introuvable.' })

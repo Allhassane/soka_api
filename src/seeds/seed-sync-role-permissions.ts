@@ -6,7 +6,7 @@ import { PermissionEntity } from '../permission/entities/permission.entity';
 import { RolePermissionEntity } from '../role-permission/entities/role-permission.entity';
 
 /**
- * SEED — Synchronisation des liens rôle ↔ permission.
+ * SEED - Synchronisation des liens rôle ↔ permission.
  *
  * Après avoir AJOUTÉ des permissions (ex. seed:journal-permissions), les rôles
  * existants n'ont PAS de ligne `roles_permissions` pour ces nouvelles

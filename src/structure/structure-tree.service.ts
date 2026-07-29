@@ -25,6 +25,8 @@ export interface PaginationMemberParams {
   has_gohonzon?: boolean;
   department_uuid?: string;
   division_uuid?: string;
+  /** Restreint la liste à cette structure + son sous-arbre (cascade). */
+  structure_uuid?: string;
 }
 
 export interface MemberStatsFilters {
@@ -411,10 +413,19 @@ export class StructureTreeService {
   }
   */
 
+  /**
+   * ⚠️ `perimetre` est **obligatoire**, volontairement : cette route renvoie les coordonnées
+   * personnelles (téléphone, e-mail) de tous les membres du sous-arbre demandé. Un paramètre
+   * optionnel aurait laissé un futur appelant l'oublier en silence - ici, l'oubli est une
+   * erreur de compilation.
+   */
   async getStructureMembersWithStats(
     structureUuid: string,
+    perimetre: { isAdmin?: boolean; allowedRootUuids?: (string | null | undefined)[] },
     paginationParams?: PaginationMemberParams
   ): Promise<StructureMembersStats> {
+    await this.assertStructureWithinPerimeter(structureUuid, perimetre);
+
     // Paramètres de pagination par défaut
     const page = paginationParams?.page || 1;
     const limit = paginationParams?.limit || 20;
@@ -964,13 +975,13 @@ export class StructureTreeService {
   }
 
   /**
-   * Résolveur LÉGER de structure_tree par membre — pour les LISTES de membres.
+   * Résolveur LÉGER de structure_tree par membre - pour les LISTES de membres.
    *
    * Perf : `createStructureTreeResolver` (ci-dessus) appelle `buildStructureMapWithTotals`
    * qui charge ~3562 structures via TypeORM `getMany()` + COMPTE tous les membres + joint
    * TOUS les responsables + bâtit un arbre de 3600 nœuds avec totaux → ~1,5–2 s PAR requête
    * de liste. Or le front (MembreTable / breadcrumb) ne lit du `structure_tree` que le
-   * **chemin d'ancêtres** (`name` / `level_name`) — jamais les compteurs ni les responsables.
+   * **chemin d'ancêtres** (`name` / `level_name`) - jamais les compteurs ni les responsables.
    * Ici : une seule requête BRUTE légère (uuid/name/level_uuid/parent_uuid, sans hydratation),
    * puis chemin racine→structure construit en mémoire, mémoïsé par structure. Compteurs à 0
    * (non lus). Même forme de sortie que `createStructureTreeResolver`.
@@ -1090,7 +1101,15 @@ export class StructureTreeService {
     const offset = (page - 1) * limit;
 
     // Récupérer toutes les sous-structures accessibles
-    const allStructureUuids = await this.getAllSubStructureUuids(effectiveStructureUuid);
+    let allStructureUuids = await this.getAllSubStructureUuids(effectiveStructureUuid);
+
+    // Filtre cascade : si une structure est choisie, on restreint à SON sous-arbre
+    // - mais UNIQUEMENT si elle est dans le périmètre de l'utilisateur (sécurité :
+    // le filtre ne peut que rétrécir, jamais élargir hors périmètre).
+    const filterStructureUuid = paginationParams?.structure_uuid;
+    if (filterStructureUuid && allStructureUuids.includes(filterStructureUuid)) {
+      allStructureUuids = await this.getAllSubStructureUuids(filterStructureUuid);
+    }
 
     // Construire la requête de base pour les membres
     let membersQuery = this.memberRepository
@@ -1817,6 +1836,29 @@ export class StructureTreeService {
    *
    * ⚠ À n'appeler QUE pour les non-admins : l'admin/super-admin filtre librement.
    */
+  /**
+   * Barrière d'autorisation hiérarchique, exposée aux contrôleurs.
+   *
+   * Toute route qui reçoit un **uuid de structure fourni par l'appelant** doit passer par ici :
+   * sans ça, le `@RequirePermissions` ne protège que le *droit d'utiliser la fonction*, pas le
+   * *périmètre des données* - et l'utilisateur lit tout l'arbre en changeant l'uuid dans l'URL.
+   * (C'est exactement ce qui rendait `GET /structure/members/:uuid` capable de renvoyer les
+   * 7 950 membres nationaux, téléphones et e-mails compris, à un responsable de sous-groupe.)
+   *
+   * Un admin (`isAdmin`) n'est pas contraint. Un périmètre vide **refuse** (jamais d'ouverture
+   * par défaut).
+   */
+  public async assertStructureWithinPerimeter(
+    targetStructureUuid: string,
+    perimetre: { isAdmin?: boolean; allowedRootUuids?: (string | null | undefined)[] },
+  ): Promise<void> {
+    if (perimetre?.isAdmin === true) return;
+    await this.assertTargetWithinPerimeter(
+      targetStructureUuid,
+      perimetre?.allowedRootUuids ?? [],
+    );
+  }
+
   private async assertTargetWithinPerimeter(
     targetStructureUuid: string,
     allowedRootUuids: (string | null | undefined)[],
@@ -2323,7 +2365,7 @@ export class StructureTreeService {
   ) {
     // Contrôle d'autorisation AVANT la création du job (le traitement réel tourne en
     // arrière-plan via setImmediate : impossible d'y renvoyer un 403). On résout donc
-    // ici la structure cible — même logique que le traitement asynchrone ci-dessous.
+    // ici la structure cible - même logique que le traitement asynchrone ci-dessous.
     if (!perimeter?.isAdmin) {
       let baseStructureUuid = structure_uuid;
       if (filterParams?.region_uuid) baseStructureUuid = filterParams.region_uuid;
@@ -2460,7 +2502,7 @@ export class StructureTreeService {
   }
 
   // Repli sur la structure propre du membre quand aucun scope n'est fourni (utilisateur
-  // sans responsabilité) — identique à getMemberStatsByConnectedUser, pour que l'export
+  // sans responsabilité) - identique à getMemberStatsByConnectedUser, pour que l'export
   // scope comme l'affichage du tableau de bord au lieu de sortir TOUS les membres.
   const effectiveStructureUuid = structureUuid || member.structure_uuid;
   if (!effectiveStructureUuid) {
@@ -3662,7 +3704,7 @@ export class StructureTreeService {
     // membre. Le JWT pose souvent `structure: null` quand le NIVEAU de la responsabilité ≠
     // niveau de la structure du membre (ex. resp. « GROUPE » mais membre rattaché à un
     // « CHAPITRE ») ; avant, `!responsibility_structure_uuid` levait un 404 et l'export par
-    // catégorie était INUTILISABLE pour ces responsables — même avec un filtre fourni. Ce
+    // catégorie était INUTILISABLE pour ces responsables - même avec un filtre fourni. Ce
     // repli aligne l'export sur getMemberStatsByConnectedUser (le tableau de bord) : on scope
     // donc toujours à une structure réelle, jamais à « tous les membres ».
     let targetStructureUuid = responsibility_structure_uuid ?? member.structure_uuid;

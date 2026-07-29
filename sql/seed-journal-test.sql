@@ -1,5 +1,5 @@
 -- =====================================================================
--- SOKA — Seed de test du workflow journal (à exécuter sur soka_preprod_db)
+-- SOKA - Seed de test du workflow journal (à exécuter sur soka_preprod_db)
 -- But : pouvoir tester la dérivation "besoin par zone" depuis les abonnements.
 --  - rattache 5 membres à la ville YOPOUGON TOIT ROUGE (donc à ZONE 1) ;
 --  - clôture une campagne d'abonnement (statut 'completed') ;

@@ -16,4 +16,16 @@ export const MIGRATION_URL = process.env.MIGRATION_URL;
 export const ROLE_ADMIN_SLUG = 'administrateur';
 export const ROLE_RESPONSABLE_SLUG = 'responsable';
 export const ROLE_MEMBRE_SLUG = 'membre';
+
+/**
+ * Rôles SYSTÈME : ces 3 slugs pilotent la dérivation des droits au login (`auth.service.ts`).
+ * Les renommer, les désactiver ou les supprimer casserait l'authentification ⇒ `RoleService`
+ * refuse (403) toute modification de nom, tout changement de statut et toute suppression sur eux.
+ * Seules leurs permissions restent modifiables.
+ */
+export const SYSTEM_ROLE_SLUGS: readonly string[] = [
+  ROLE_ADMIN_SLUG,
+  ROLE_RESPONSABLE_SLUG,
+  ROLE_MEMBRE_SLUG,
+];
 export const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;

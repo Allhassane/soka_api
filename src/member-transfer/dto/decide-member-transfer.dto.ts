@@ -28,7 +28,7 @@ export class TransferPlacementDto {
 
 /**
  * Approbation : l'approbateur fixe la structure d'accueil de chaque membre.
- * La décision est **globale** (tous les membres ou aucun) — cf. `docs/TRANSFERT-MEMBRES.md` §3.
+ * La décision est **globale** (tous les membres ou aucun) - cf. `docs/TRANSFERT-MEMBRES.md` §3.
  */
 export class ApproveMemberTransferDto {
   @ApiProperty({ type: [TransferPlacementDto] })
@@ -46,7 +46,7 @@ export class ApproveMemberTransferDto {
 
 /** Refus : motif obligatoire (règle R6). */
 export class RejectMemberTransferDto {
-  @ApiProperty({ description: 'Motif du refus — obligatoire' })
+  @ApiProperty({ description: 'Motif du refus - obligatoire' })
   @IsNotEmpty({ message: 'Le motif du refus est obligatoire' })
   @IsString()
   @MinLength(3, { message: 'Le motif du refus doit être explicite' })

@@ -12,7 +12,7 @@ import type {
 import { SMS_PROVIDER_LETEXTO } from '../sms.constants';
 
 /**
- * Adaptateur LeTexto (apis.letexto.com/v1) — transport pur.
+ * Adaptateur LeTexto (apis.letexto.com/v1) - transport pur.
  *
  * Reprend la logique historique de `SmsService`, mais sous l'interface
  * `ManagedSmsProvider` pour être piloté par le `SmsDispatcher`. Ne s'auto-simule
@@ -112,7 +112,7 @@ export class LetextoSmsProvider implements ManagedSmsProvider {
     }
   }
 
-  /** Solde LeTexto (XOF) — best-effort, ne throw jamais. */
+  /** Solde LeTexto (XOF) - best-effort, ne throw jamais. */
   async getBalance(): Promise<ProviderBalance> {
     if (!this.apiKey) {
       return { provider: this.name, available: false, display: null };

@@ -6,7 +6,7 @@ import { SettingsService } from './settings.service';
 /**
  * Réglages runtime génériques (clé/valeur). Fournit `SettingsService`, réutilisable
  * au-delà du SMS. `AppSetting` est chargée via `autoLoadEntities` (dev) et le glob
- * des entités compilées (prod) — aucun enregistrement racine requis.
+ * des entités compilées (prod) - aucun enregistrement racine requis.
  */
 @Module({
   imports: [TypeOrmModule.forFeature([AppSetting])],

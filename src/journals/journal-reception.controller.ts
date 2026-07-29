@@ -20,15 +20,18 @@ import {
   ValidateDistrictLotDto,
   ValidateMemberReceptionDto,
 } from './dto/reception.dto';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
 @ApiTags('Journal - Réception')
 @Controller('journals')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class JournalReceptionController {
   constructor(private readonly service: JournalReceptionService) {}
 
   @Get('priority-actions')
+  @RequirePermissions('journal_reception_voir')
   @ApiOperation({
     summary: "Actions prioritaires de l'utilisateur connecté",
     description:
@@ -40,6 +43,7 @@ export class JournalReceptionController {
   }
 
   @Get('editions/:uuid/reception')
+  @RequirePermissions('journal_reception_voir')
   @ApiOperation({
     summary: 'Réception par district (cascade District → Membre)',
     description:
@@ -57,6 +61,7 @@ export class JournalReceptionController {
   }
 
   @Get('editions/:uuid/reception-stats')
+  @RequirePermissions('journal_reception_voir')
   @ApiOperation({
     summary: 'Statistiques de réception (suivi distribution)',
     description:
@@ -69,6 +74,7 @@ export class JournalReceptionController {
   }
 
   @Get('editions/:uuid/reception-analytics')
+  @RequirePermissions('journal_reception_voir')
   @ApiOperation({
     summary: 'Tableau de bord analytique du suivi de distribution aux membres',
     description:
@@ -84,6 +90,7 @@ export class JournalReceptionController {
   }
 
   @Put('editions/:uuid/districts/:districtUuid/reception')
+  @RequirePermissions('journal_reception_modifier')
   @ApiOperation({
     summary: "Valider la réception du lot d'un district",
     description:
@@ -108,6 +115,7 @@ export class JournalReceptionController {
   }
 
   @Put('editions/:uuid/members/:memberUuid/reception')
+  @RequirePermissions('journal_reception_modifier')
   @ApiOperation({
     summary: "Valider la réception individuelle d'un membre",
   })

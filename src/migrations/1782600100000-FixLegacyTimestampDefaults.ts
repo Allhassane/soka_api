@@ -5,7 +5,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * l'application (constaté le 2026-07-24 : 0 date sur les créations du jour, et **7664 lignes
  * `users` sur 7664** sans date de création).
  *
- * **Cause** — lue dans le source de TypeORM (`query-builder/InsertQueryBuilder.js`), où le
+ * **Cause** - lue dans le source de TypeORM (`query-builder/InsertQueryBuilder.js`), où le
  * traitement des colonnes de date est explicitement désactivé :
  *
  * ```js
@@ -17,13 +17,13 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *
  * Autrement dit `@CreateDateColumn` / `@UpdateDateColumn` (`DateTimeEntity`) **n'écrivent
  * rien** : ils délèguent au `DEFAULT` de la colonne. Les tables créées par migration l'ont
- * (`datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)` — cf. `member_transfers`,
+ * (`datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)` - cf. `member_transfers`,
  * `member_responsibilities`), mais les tables **héritées** sont en `timestamp NULL DEFAULT
  * NULL` : l'INSERT omet la colonne, MySQL écrit NULL. Comme `synchronize` est OFF, l'écart
  * entre l'entité et le schéma réel n'a jamais été rattrapé, et il est resté invisible tant que
  * les lignes venaient de l'import (qui, lui, fournissait les dates explicitement).
  *
- * 🔒 `users` est une table **partagée** (module auth) : ce changement est purement additif — il
+ * 🔒 `users` est une table **partagée** (module auth) : ce changement est purement additif - il
  * ne fait que remplir une colonne qui restait vide, aucune ligne existante n'est réécrite.
  *
  * ⚠️ **Pas de backfill.** Les lignes déjà en base gardent `created_at = NULL` : inventer une

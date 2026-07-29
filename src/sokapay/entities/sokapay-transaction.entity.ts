@@ -7,7 +7,7 @@ import { GlobalStatus } from 'src/shared/enums/global-status.enum';
  * Liaison « membre ↔ session/lien SOKA Pay ↔ paiement ».
  *
  * Créée à l'ouverture d'un checkout/lien via SOKA Pay (statut PENDING), puis
- * passée à SUCCESS/FAILED par le webhook signé reçu de SOKA Pay — de façon
+ * passée à SUCCESS/FAILED par le webhook signé reçu de SOKA Pay - de façon
  * IDEMPOTENTE (un même événement n'est appliqué qu'une fois, rejouable sans
  * double comptage). Module 100 % isolé : ne modifie aucune table existante.
  */

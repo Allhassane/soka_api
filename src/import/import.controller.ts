@@ -20,15 +20,18 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { ImportService } from './import.service';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
 
 @ApiTags('Importation')
 @Controller('import')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ImportController {
   constructor(private readonly importService: ImportService) {}
 
   @Post('members/preview')
+  @RequirePermissions('importations_analyser')
   @ApiOperation({
     summary:
       'Dry-run : analyse un fichier Excel de membres (validation + résolution) sans rien écrire',
@@ -47,6 +50,7 @@ export class ImportController {
   }
 
   @Post('members')
+  @RequirePermissions('importations_confirmer')
   @ApiOperation({
     summary:
       'Commit : importe réellement (création/mise à jour) + persiste les lignes en échec',
@@ -72,12 +76,14 @@ export class ImportController {
   }
 
   @Get('members/stats')
+  @RequirePermissions('importations_voir')
   @ApiOperation({ summary: 'Statistiques : total des membres en base + total des échecs persistés' })
   async stats() {
     return this.importService.stats();
   }
 
   @Get('members/batches')
+  @RequirePermissions('importations_voir')
   @ApiOperation({
     summary:
       'Liste paginée des fichiers chargés ayant encore des erreurs (nb d\'erreurs en suspens)',
@@ -90,6 +96,7 @@ export class ImportController {
   }
 
   @Get('members/failures')
+  @RequirePermissions('importations_voir')
   @ApiOperation({
     summary:
       'Liste paginée des lignes en échec (filtrable par fichier via le paramètre « batch »)',
@@ -107,6 +114,7 @@ export class ImportController {
   }
 
   @Get('members/failures/export')
+  @RequirePermissions('importations_voir')
   @ApiOperation({
     summary:
       'Télécharge en Excel (.xlsx, ré-importable) les erreurs d\'un fichier chargé (paramètre « batch »)',

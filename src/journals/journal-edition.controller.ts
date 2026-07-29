@@ -33,15 +33,18 @@ import { CreateJournalEditionDto } from './dto/create-journal-edition.dto';
 import { UpdateJournalEditionDto } from './dto/update-journal-edition.dto';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 import { PaginationQueryDto } from 'src/shared/dtos/pagination-query.dto';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
 @ApiTags('Journal - Editions')
 @Controller('journals/editions')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class JournalEditionController {
   constructor(private readonly service: JournalEditionService) {}
 
   @Get()
+  @RequirePermissions('journal_editions_voir')
   @ApiOperation({ summary: 'Liste de toutes les editions du journal' })
   @ApiResponse({ status: 200, description: 'Retour paginé' })
   @ApiResponse({ status: 401, description: 'Non autorise.' })
@@ -51,6 +54,7 @@ export class JournalEditionController {
   }
 
   @Post()
+  @RequirePermissions('journal_editions_creer')
   @ApiOperation({
     summary: 'Creer une edition',
     description: 'distribution_deadline_at est calculee automatiquement = distribution_start_at + 2 jours (regle metier).',
@@ -65,6 +69,7 @@ export class JournalEditionController {
   }
 
   @Post('upload')
+  @RequirePermissions('journal_editions_creer')
   @ApiOperation({
     summary: 'Upload d un fichier d edition (couverture ou version numerique)',
     description:
@@ -102,6 +107,7 @@ export class JournalEditionController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('journal_editions_voir')
   @ApiOperation({ summary: 'Recuperer une edition par UUID' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Edition trouvee.' })
@@ -112,6 +118,7 @@ export class JournalEditionController {
   }
 
   @Put(':uuid')
+  @RequirePermissions('journal_editions_modifier')
   @ApiOperation({
     summary: 'Modifier une edition',
     description: 'Si distribution_start_at est modifiee, la deadline est recalculee automatiquement.',
@@ -131,6 +138,7 @@ export class JournalEditionController {
   }
 
   @Put(':uuid/status')
+  @RequirePermissions('journal_editions_modifier')
   @ApiOperation({ summary: 'Changer le statut d une edition' })
   @ApiParam({ name: 'uuid', description: 'UUID de l edition' })
   @ApiBody({
@@ -153,6 +161,7 @@ export class JournalEditionController {
   }
 
   @Delete(':uuid')
+  @RequirePermissions('journal_editions_supprimer')
   @ApiOperation({ summary: 'Supprimer une edition (soft delete)' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Edition supprimee avec succes.' })

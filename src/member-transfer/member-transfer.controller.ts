@@ -1,3 +1,4 @@
+import { allowedRootUuidsFromJwt } from 'src/access-scope/perimeter-from-jwt';
 import {
   Body,
   Controller,
@@ -41,7 +42,7 @@ export class MemberTransferController {
   constructor(private readonly transferService: MemberTransferService) {}
 
   /**
-   * Périmètre du connecté, dérivé du JWT — même logique que `buildPerimeter`
+   * Périmètre du connecté, dérivé du JWT - même logique que `buildPerimeter`
    * (`structure.controller.ts`) : les structures de ses responsabilités font office de racines.
    */
   private perimeter(req): PerimeterContext {
@@ -50,9 +51,8 @@ export class MemberTransferController {
       userUuid: user.uuid,
       userId: user.sub,
       isAdmin: user.is_admin === true,
-      allowedRootUuids: (user.responsibilities ?? [])
-        .map((r: any) => r?.structure?.uuid)
-        .filter((u: any): u is string => !!u),
+      // Racine unique issue du token : couvre responsabilités ET comités (cf. helper).
+      allowedRootUuids: allowedRootUuidsFromJwt(user),
     };
   }
 

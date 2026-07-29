@@ -18,11 +18,13 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { StatistiqueService } from './statistique.service';
 import { StructureTreeNodeDto } from './dto/tree.dto';
 import { StructureTreeService } from 'src/structure/structure-tree.service';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiTags('Statistiques')
 @Controller('stats')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class StatistiqueController {
   constructor(
     private readonly statistiqueService: StatistiqueService,
@@ -30,6 +32,7 @@ export class StatistiqueController {
   ) {}
 
   @Get('tree')
+  @RequirePermissions('statistiques_voir')
   @ApiOperation({
     summary: 'Récupérer l\'arbre des structures avec comptage des membres',
     description: `
@@ -61,6 +64,7 @@ export class StatistiqueController {
   }
 
   @Get('global')
+  @RequirePermissions('statistiques_voir')
   @ApiOperation({
     summary: 'Statistiques globales de l\'organisation',
     description: 'Retourne les statistiques globales incluant le total des membres, structures, responsables, etc.',
@@ -90,6 +94,7 @@ export class StatistiqueController {
   }
 
   @Get('demographics/:uuid')
+  @RequirePermissions('statistiques_voir')
   @ApiOperation({
     summary: 'Statistiques démographiques d\'une structure',
     description: 'Retourne les statistiques démographiques incluant la répartition par genre, âge, ancienneté, etc.',
@@ -145,6 +150,7 @@ export class StatistiqueController {
   }
 
   @Get('compare')
+  @RequirePermissions('statistiques_voir')
   @ApiOperation({
     summary: 'Comparer plusieurs structures',
     description: 'Compare les performances de plusieurs structures sur différentes métriques (membres, couverture, responsables, etc.)',
@@ -201,6 +207,7 @@ export class StatistiqueController {
   }
 
   @Get('growth/:uuid')
+  @RequirePermissions('statistiques_voir')
   @ApiOperation({
     summary: 'Évolution temporelle d\'une structure',
     description: 'Retourne les statistiques de croissance sur une période donnée (nouveaux membres, départs, croissance nette, etc.)',
@@ -268,6 +275,7 @@ export class StatistiqueController {
   }
 
    @Get('dashboard')
+   @RequirePermissions('statistiques_voir')
   @ApiOperation({
     summary: 'Dashboard du responsable connecté',
     description: `

@@ -16,6 +16,8 @@
     "migration:generate": "node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:generate -d src/data-source.ts",
     "migration:run": "node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:run -d src/data-source.ts",
     "migration:revert": "node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:revert -d src/data-source.ts",
+    "seed:permissions": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-permissions.ts",
+    "seed:reset-permissions": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-reset-permissions.ts",
     "seed:test-passwords": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-test-passwords.ts",
     "seed:edition-payments": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-simulate-edition-payments.ts",
     "seed:journal-permissions": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-journal-permissions.ts",
@@ -24,12 +26,16 @@
     "seed:city-duplicates-audit": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-city-duplicates-audit.ts",
     "seed:structure-duplicates-audit": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-structure-duplicates-audit.ts",
     "seed:fix-phone-letter-o": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-fix-phone-letter-o.ts",
+    "seed:broken-responsibilities-audit": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-broken-responsibilities-audit.ts",
+    "seed:orphan-structure-chains-audit": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-orphan-structure-chains-audit.ts",
+    "seed:check-member": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-check-member-responsibility.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "check:permissions": "node scripts/check-route-permissions.js"
   },
   "dependencies": {
     "@nestjs-modules/mailer": "^2.0.2",

@@ -12,7 +12,7 @@ import type {
 import { SMS_PROVIDER_SMSPRO } from '../sms.constants';
 
 /**
- * Adaptateur SMSPro Africa — HTTP API (app.smspro.africa/api/http) — transport pur.
+ * Adaptateur SMSPro Africa - HTTP API (app.smspro.africa/api/http) - transport pur.
  *
  * Spec : auth par paramètre `api_token` dans le BODY (pas de Bearer) ; envoi via
  * POST /sms/send { api_token, recipient, sender_id, type:'plain', message } ;
@@ -120,7 +120,7 @@ export class SmspproSmsProvider implements ManagedSmsProvider {
     }
   }
 
-  /** Solde SMSPro (data.remaining_balance, ex. « 80 FCFA ») — best-effort. */
+  /** Solde SMSPro (data.remaining_balance, ex. « 80 FCFA ») - best-effort. */
   async getBalance(): Promise<ProviderBalance> {
     if (!this.token) {
       return { provider: this.name, available: false, display: null };

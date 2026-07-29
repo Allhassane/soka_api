@@ -23,18 +23,25 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { SubscriptionPaymentService } from './subscription-payment.service';
 import { MakeSubscriptionPaymentDto } from './dto/make-subscription-payment';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiTags('Paiement d’abonnement')
 
 @Controller('subscription-payments')
+// Gardes au niveau CLASSE : elles étaient posées route par route, et la route
+// `POST cinetpay/check/status/:transaction_id` avait été oubliée - son `@RequirePermissions`
+// était donc inopérant ET la route ouverte sans authentification.
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class SubscriptionPaymentController {
   constructor(
     private readonly subscriptionPaymentService: SubscriptionPaymentService,
   ) {}
 
   @Post()
+  @RequirePermissions('abonnements_paiements_creer')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiOperation({ summary: 'Initier un paiement d’abonnement (CinetPay)' })
   @ApiResponse({ status: 201, description: 'Paiement créé avec succès' })
   @ApiResponse({ status: 400, description: 'Données invalides' })
@@ -49,8 +56,9 @@ export class SubscriptionPaymentController {
   }
 
   @Get()
+  @RequirePermissions('abonnements_paiements_voir')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiOperation({ summary: 'Liste paginée des paiements d’abonnements' })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 20 })
@@ -74,8 +82,9 @@ export class SubscriptionPaymentController {
 
 
   @Get(':uuid')
+  @RequirePermissions('abonnements_paiements_voir')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiOperation({ summary: 'Détail d’un paiement d’abonnement' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Détail du paiement' })
@@ -85,8 +94,9 @@ export class SubscriptionPaymentController {
 
 
   @Put(':uuid/status')
+  @RequirePermissions('abonnements_paiements_modifier')
   @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiOperation({ summary: 'Changer le statut du paiement d’abonnement' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Statut changé' })
@@ -104,6 +114,7 @@ export class SubscriptionPaymentController {
 
   // ========================================
 @Post('cinetpay/check/status/:transaction_id')
+@RequirePermissions('abonnements_paiements_creer')
 @ApiOperation({ summary: 'Vérifier le statut d’un paiement CinetPay' })
 @ApiResponse({ status: 200, description: 'Statut du paiement vérifié' })
 async cinetPayCheckStatus(

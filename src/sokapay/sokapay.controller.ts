@@ -55,7 +55,7 @@ export class SokaPayWebhookController {
 
   @Public()
   @Post('soka-pay')
-  @ApiOperation({ summary: 'Webhook signé SOKA Pay (HMAC) — marque la cotisation réglée (idempotent)' })
+  @ApiOperation({ summary: 'Webhook signé SOKA Pay (HMAC) - marque la cotisation réglée (idempotent)' })
   webhook(@Req() req: RawBodyRequest<ExpressRequest>) {
     const signature = req.headers['soka-pay-signature'] as string | undefined;
     return this.sokaPay.handleWebhook(req.rawBody, signature);

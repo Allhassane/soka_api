@@ -7,7 +7,7 @@ import { LevelEntity } from '../level/entities/level.entity';
 import { MemberEntity } from '../members/entities/member.entity';
 
 /**
- * AUDIT — Doublons du référentiel des STRUCTURES (LECTURE SEULE).
+ * AUDIT - Doublons du référentiel des STRUCTURES (LECTURE SEULE).
  *
  * Pourquoi ce seed : dans le formulaire de zone, le menu « Région » fusionne
  * structures + villes. Or « OSAKA » n'est PAS dans la table `cities` : les
@@ -77,8 +77,8 @@ async function run() {
         uuid: s.uuid,
         name: s.name,
         level_uuid: lu,
-        level: lu ? (levelName.get(lu) ?? 'Inconnu') : '—',
-        parent: pu ? (nameByUuid.get(pu) ?? '—') : '(racine)',
+        level: lu ? (levelName.get(lu) ?? 'Inconnu') : '-',
+        parent: pu ? (nameByUuid.get(pu) ?? '-') : '(racine)',
         members: membersByStruct.get(s.uuid) ?? 0,
       };
       const arr = groups.get(key);
@@ -113,7 +113,7 @@ async function run() {
     const printGroup = (g: (typeof dupGroups)[number], i: number) => {
       const tag = g.multiLevel ? 'multi-niveaux' : 'MÊME NIVEAU';
       console.log(
-        `${String(i + 1).padStart(2)}. « ${g.rows[0].name} »  —  ${g.rows.length} structures [${tag}] | ${g.members} membres`,
+        `${String(i + 1).padStart(2)}. « ${g.rows[0].name} »  -  ${g.rows.length} structures [${tag}] | ${g.members} membres`,
       );
       g.rows
         .slice()
@@ -149,7 +149,7 @@ async function run() {
     const csvPath = path.resolve(__dirname, '../../structure-duplicates.csv');
     fs.writeFileSync(csvPath, BOM + [header, ...rows].join('\n'), 'utf8');
     console.log(`\n[audit] Détail exporté -> ${csvPath}`);
-    console.log('[audit] (lecture seule — aucune écriture en base)');
+    console.log('[audit] (lecture seule - aucune écriture en base)');
   } finally {
     await AppDataSource.destroy();
   }

@@ -4,7 +4,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 /**
  * Les 3 permissions du transfert de membres (`docs/TRANSFERT-MEMBRES.md` §8).
  *
- * 🔒 `permissions` est une table PARTAGÉE entre tous les modules — cette migration n'y AJOUTE
+ * 🔒 `permissions` est une table PARTAGÉE entre tous les modules - cette migration n'y AJOUTE
  * que des lignes, n'en modifie ni n'en supprime aucune autre.
  *
  * Sans ces lignes la fonctionnalité est inutilisable sur un environnement neuf : un slug absent
@@ -12,7 +12,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * `is_admin`.
  *
  * Conventions respectées :
- *  - le rattachement au module suit l'existant — les permissions `*_voir_menu_*` vont au module
+ *  - le rattachement au module suit l'existant - les permissions `*_voir_menu_*` vont au module
  *    « Navigation », les permissions d'action au module « Membres ». Les uuid de modules sont
  *    RÉSOLUS depuis des permissions existantes plutôt que codés en dur (portable d'un
  *    environnement à l'autre).
@@ -81,7 +81,7 @@ export class AddMemberTransferPermissions1782500100000
     const slugs = this.permissions.map(([slug]) => slug);
 
     // ⚠️ Deux pièges vérifiés en base sur cette table :
-    //  1. elle s'appelle `roles_permissions` (pluriel des DEUX côtés) — cf.
+    //  1. elle s'appelle `roles_permissions` (pluriel des DEUX côtés) - cf.
     //     `@Entity('roles_permissions')` dans RolePermissionEntity ;
     //  2. ses colonnes `role_id` / `permission_id` valent **0 sur toutes les lignes** : le lien
     //     réel passe par `role_uuid` / `permission_uuid` (c'est ce que lit

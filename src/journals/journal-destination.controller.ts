@@ -23,15 +23,18 @@ import { JournalDestinationService } from './journal-destination.service';
 import { CreateJournalDestinationDto } from './dto/create-journal-destination.dto';
 import { UpdateJournalDestinationDto } from './dto/update-journal-destination.dto';
 import { JournalDestinationPaginationQueryDto } from './dto/journal-destination-pagination-query.dto';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
 @ApiTags('Journal - Destinations')
 @Controller('journals/destinations')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class JournalDestinationController {
   constructor(private readonly service: JournalDestinationService) {}
 
   @Get()
+  @RequirePermissions('journal_destinations_voir')
   @ApiOperation({
     summary: 'Liste des destinations (centres/chapitres)',
     description: 'Filtre optionnel par zone via le query param zone_uuid.',
@@ -50,6 +53,7 @@ export class JournalDestinationController {
   }
 
   @Post()
+  @RequirePermissions('journal_destinations_creer')
   @ApiOperation({
     summary: 'Creer une destination',
     description: 'Si correspondent_member_uuid est fourni, les telephones sont hydrates depuis le membre s ils ne sont pas explicitement fournis.',
@@ -64,6 +68,7 @@ export class JournalDestinationController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('journal_destinations_voir')
   @ApiOperation({ summary: 'Recuperer une destination par UUID' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Destination trouvee.' })
@@ -74,6 +79,7 @@ export class JournalDestinationController {
   }
 
   @Put(':uuid')
+  @RequirePermissions('journal_destinations_modifier')
   @ApiOperation({ summary: 'Modifier une destination' })
   @ApiParam({ name: 'uuid' })
   @ApiBody({ type: UpdateJournalDestinationDto })
@@ -90,6 +96,7 @@ export class JournalDestinationController {
   }
 
   @Delete(':uuid')
+  @RequirePermissions('journal_destinations_supprimer')
   @ApiOperation({ summary: 'Supprimer une destination (soft delete)' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Destination supprimee avec succes.' })

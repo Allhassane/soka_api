@@ -4,15 +4,18 @@ import { CivilityService } from './civility.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateCivilityDto } from './dto/create-civility.dto';
 import { UpdateCivilityDto } from './dto/update-civility.dto';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
 @ApiTags('Civilité')
 @Controller('civilities')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class CivilityController {
   constructor(private readonly civilityService: CivilityService) {}
 
   @Get()
+  @RequirePermissions('civilites_voir')
   @ApiOperation({ summary: 'Liste toutes les civilités ' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
@@ -21,6 +24,7 @@ export class CivilityController {
   }
 
   @Post()
+  @RequirePermissions('civilites_creer')
   @ApiOperation({ summary: 'Créer une civilité ' })
   @ApiResponse({ status: 200, description: 'Civiilité créé avec succès.' })
   @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
@@ -29,6 +33,7 @@ export class CivilityController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('civilites_voir')
   @ApiOperation({ summary: 'Récupérer une civilité par UUID' })
   @ApiResponse({ status: 200, description: 'civilité trouvé.' })
   @ApiResponse({ status: 400, description: 'Civilité non trouvé.' })
@@ -38,6 +43,7 @@ export class CivilityController {
   }
 
  @Put(':uuid')
+ @RequirePermissions('civilites_modifier')
  @ApiOperation({ summary: 'Modifier une civilité' })
  @ApiResponse({ status: 200, description: 'CIvilité modifiée avec succès.' })
  @ApiResponse({ status: 400, description: 'Champs invalides ou manquants.' })
@@ -51,6 +57,7 @@ export class CivilityController {
 
 
   @Delete(':uuid')
+  @RequirePermissions('civilites_supprimer')
   @ApiOperation({ summary: 'Supprimer une civilité' })
   @ApiResponse({ status: 200, description: 'civilité supprimé avec succès.' })
   @ApiResponse({ status: 400, description: 'ciivilité introuvable.' })

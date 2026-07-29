@@ -8,7 +8,7 @@ import { MemberEntity } from '../members/entities/member.entity';
 import { GlobalStatus } from '../shared/enums/global-status.enum';
 
 /**
- * SEED — Simuler le paiement de TOUS les membres pour une édition de journal.
+ * SEED - Simuler le paiement de TOUS les membres pour une édition de journal.
  *
  * Crée des `subscription_payments` au statut SUCCESS (bénéficiaire = membre)
  * pour la campagne d'abonnement liée à l'édition. C'est exactement ce que lit

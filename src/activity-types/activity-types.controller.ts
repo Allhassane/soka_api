@@ -24,15 +24,18 @@ import { ActivityTypesService } from './activity-types.service';
 import { CreateActivityTypeDto } from './dto/create-activity-type.dto';
 import { UpdateActivityTypeDto } from './dto/update-activity-type.dto';
 import { ActivityTypeFamily } from './entities/activity-type.entity';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
 @ApiTags('Activity Types')
 @Controller('activity-types')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ActivityTypesController {
   constructor(private readonly activityTypesService: ActivityTypesService) {}
 
   @Get()
+  @RequirePermissions('types_activite_voir')
   @ApiOperation({
     summary: "Liste des types d'activité",
     description: "Filtre optionnel par famille : 'traditionnelle' ou 'sporadique'.",
@@ -45,6 +48,7 @@ export class ActivityTypesController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('types_activite_voir')
   @ApiOperation({ summary: "Récupérer un type d'activité par UUID" })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: "Type d'activité trouvé." })
@@ -54,6 +58,7 @@ export class ActivityTypesController {
   }
 
   @Post()
+  @RequirePermissions('types_activite_creer')
   @ApiOperation({ summary: "Créer un type d'activité" })
   @ApiBody({ type: CreateActivityTypeDto })
   @ApiResponse({ status: 201, description: "Type d'activité créé avec succès." })
@@ -63,6 +68,7 @@ export class ActivityTypesController {
   }
 
   @Put(':uuid')
+  @RequirePermissions('types_activite_modifier')
   @ApiOperation({ summary: "Modifier un type d'activité" })
   @ApiParam({ name: 'uuid' })
   @ApiBody({ type: UpdateActivityTypeDto })
@@ -77,6 +83,7 @@ export class ActivityTypesController {
   }
 
   @Delete(':uuid')
+  @RequirePermissions('types_activite_supprimer')
   @ApiOperation({ summary: "Supprimer un type d'activité (soft delete)" })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: "Type d'activité supprimé." })

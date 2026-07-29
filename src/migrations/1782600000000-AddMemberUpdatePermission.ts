@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
- * `membres_modifier_un_membre` — la permission exigée par `PUT /members/:uuid`
+ * `membres_modifier_un_membre` - la permission exigée par `PUT /members/:uuid`
  * (`MemberController.update`) **n'a jamais existé en base**.
  *
  * Conséquence mesurée le 2026-07-24 : la modification d'un membre renvoyait `403 « Vous n'avez
@@ -17,16 +17,16 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Conventions reprises de `1782500100000-AddMemberTransferPermissions` :
  *  - le `module_uuid` est **résolu** depuis une permission existante plutôt que codé en dur
  *    (portable d'un environnement à l'autre) ;
- *  - aucun `UUID()` SQL — blocage binlog STATEMENT déjà rencontré sur cette base : les uuid
+ *  - aucun `UUID()` SQL - blocage binlog STATEMENT déjà rencontré sur cette base : les uuid
  *    sont générés côté Node et passés en paramètres.
  *
  * ⚠️ **Différence assumée avec la migration transfert**, qui laissait l'attribution aux rôles à
- * l'administration : ici on rattache aussi la permission au rôle `RESPONSABLE`. Raison — ce
+ * l'administration : ici on rattache aussi la permission au rôle `RESPONSABLE`. Raison - ce
  * n'est pas l'ouverture d'une fonctionnalité nouvelle, c'est la réparation d'un endpoint qui
  * existe depuis toujours et que l'UI expose déjà à tous les responsables. Sans le rattachement,
  * la migration ne changerait rien au symptôme. Rappel : les permissions d'un non-admin viennent
  * du rôle porté par sa **responsabilité** (`responsibilities.role_uuid`), et les 31
- * responsabilités pointent toutes vers `RESPONSABLE` — `user_roles` est vide.
+ * responsabilités pointent toutes vers `RESPONSABLE` - `user_roles` est vide.
  */
 export class AddMemberUpdatePermission1782600000000 implements MigrationInterface {
   name = 'AddMemberUpdatePermission1782600000000';
@@ -35,7 +35,7 @@ export class AddMemberUpdatePermission1782600000000 implements MigrationInterfac
   private readonly label = 'Modifier un membre';
   private readonly description =
     "Modifier la fiche d'un membre situé dans son périmètre (hors changement de district, qui relève du transfert)";
-  /** Permission dont on hérite le module — même famille d'action. */
+  /** Permission dont on hérite le module - même famille d'action. */
   private readonly referenceSlug = 'membres_ajouter_un_membre';
   private readonly roleName = 'RESPONSABLE';
 
@@ -75,7 +75,7 @@ export class AddMemberUpdatePermission1782600000000 implements MigrationInterfac
 
     // ⚠️ Trois pièges vérifiés en base sur cette table :
     //  1. elle s'appelle `roles_permissions` (pluriel des DEUX côtés) ;
-    //  2. `role_id` / `permission_id` valent 0 sur toutes les lignes — le lien réel passe par
+    //  2. `role_id` / `permission_id` valent 0 sur toutes les lignes - le lien réel passe par
     //     `role_uuid` / `permission_uuid`, c'est ce que lit `RoleService.findGlobalPermissions` ;
     //  3. `status` vaut 0 par défaut alors que `findGlobalPermissions` renvoie
     //     `status: rolePerm.status` et que le front ne garde que `status === true` : une ligne

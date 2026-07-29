@@ -22,8 +22,10 @@ import { CreateRoleDto } from './dtos/create-role.dto';
 import { Role } from './entities/role.entity';
 import { SuccessMessage } from 'src/shared/decorators/success-message.decorator';
 import { UpdateRoleDto } from './dtos/update-role.dto';
+import { UpdateRoleStatusDto } from './dtos/update-role-status.dto';
+import { SetModulePermissionsDto } from './dtos/set-module-permissions.dto';
+import { FindRolesQueryDto } from './dtos/find-roles-query.dto';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
-import { PaginationQueryDto } from 'src/shared/dtos/pagination-query.dto';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
 
@@ -41,17 +43,21 @@ export class RoleController {
   @SuccessMessage('Rôle créé avec succès')
   @ApiOperation({ summary: 'Créer un nouveau rôle' })
   @ApiResponse({ status: 201, description: 'Rôle créé' })
+  @ApiResponse({ status: 409, description: 'Un rôle porte déjà ce nom' })
   create(@Body() createRoleDto: CreateRoleDto): Promise<Role> {
     return this.roleService.create(createRoleDto);
   }
 
   @Get()
+  @RequirePermissions('roles_voir_le_module_role')
   @SuccessMessage('Liste des rôles récupérés')
-  @ApiOperation({ summary: 'Liste des rôles' })
+  @ApiOperation({
+    summary: 'Liste des rôles (filtre `status` optionnel ; chaque item porte `is_system`)',
+  })
   @ApiResponse({ status: 200, description: 'Retour paginé' })
-  findAll(@Query() query: PaginationQueryDto) {
-    const { page, limit } = query;
-    return this.roleService.findAll(page, limit);
+  findAll(@Query() query: FindRolesQueryDto) {
+    const { page, limit, status } = query;
+    return this.roleService.findAll(page, limit, status);
   }
 
   @Put(':uuid')
@@ -59,6 +65,8 @@ export class RoleController {
   @SuccessMessage('Rôle mis à jour')
   @ApiOperation({ summary: 'Mettre à jour un rôle' })
   @ApiResponse({ status: 200, description: 'Rôle mis à jour' })
+  @ApiResponse({ status: 403, description: 'Rôle système : non modifiable' })
+  @ApiResponse({ status: 409, description: 'Un autre rôle porte déjà ce nom' })
   update(
     @Param('uuid') uuid: string,
     @Body() updateDto: UpdateRoleDto,
@@ -67,6 +75,7 @@ export class RoleController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('roles_voir_le_module_role')
   @SuccessMessage('Détails du rôle récupérés')
   @ApiOperation({ summary: 'Trouver un rôle par UUID' })
   findOne(@Param('uuid') uuid: string): Promise<Role> {
@@ -78,22 +87,39 @@ export class RoleController {
   @SuccessMessage('Rôle supprimé (soft delete)')
   @ApiOperation({ summary: 'Supprimer un rôle (soft delete)' })
   @ApiResponse({ status: 200, description: 'Rôle supprimé avec succès' })
+  @ApiResponse({ status: 403, description: 'Rôle système : non supprimable' })
   async softDelete(@Param('uuid') uuid: string): Promise<void> {
     await this.roleService.softDelete(uuid);
     return;
   }
 
+  // Deux segments comme `:uuid/delete`, mais le second est littéral : aucun recouvrement.
+  @Patch(':uuid/status')
+  @RequirePermissions('roles_activer_ou_desactiver_un_role')
+  @SuccessMessage('Statut du rôle mis à jour')
+  @ApiOperation({ summary: 'Activer ou désactiver un rôle' })
+  @ApiParam({ name: 'uuid', description: 'UUID du rôle' })
+  @ApiResponse({ status: 200, description: 'Statut mis à jour' })
+  @ApiResponse({ status: 403, description: 'Rôle système : statut non modifiable' })
+  setStatus(
+    @Param('uuid') uuid: string,
+    @Body() dto: UpdateRoleStatusDto,
+  ): Promise<Role> {
+    return this.roleService.setStatus(uuid, dto.status);
+  }
+
   @Get('levels/:uuid')
+  @RequirePermissions('roles_voir_le_module_role')
   @SuccessMessage('Niveaux liés au rôle récupérés')
   @ApiOperation({ summary: 'Lister les niveaux liés à un rôle via son UUID' })
   findLevelsByRole(
     @Param('uuid') uuid: string,
   ): Promise<any> {
-    console.log('Fetching levels for role with UUID:', uuid);
     return this.roleService.findLevelsByRoleUuid(uuid);
   }
 
   @Get(':uuid/permissions')
+  @RequirePermissions('roles_voir_le_module_role')
   @ApiParam({ name: 'uuid', description: 'UUID du rôle' })
   @ApiResponse({ status: 200, description: 'Permissions récupérées avec succès' })
   async findAllPermissions(@Param('uuid') uuid: string) {
@@ -101,6 +127,7 @@ export class RoleController {
   }
 
   @Get(':uuid/global-permissions')
+  @RequirePermissions('roles_voir_le_module_role')
   @ApiParam({ name: 'uuid', description: 'UUID du rôle' })
   @ApiOperation({ summary: 'Recupérer toutes les permissions du role' })
   @ApiResponse({ status: 200, description: 'Permissions récupérées avec succès' })
@@ -117,6 +144,31 @@ export class RoleController {
   async togglePermission(@Param('uuid') uuid: string) {
     await this.roleService.togglePermission(uuid);
     return { message: 'Permission mise à jour avec succès' };
+  }
+
+  /**
+   * Bascule en une fois toutes les permissions d'un module pour un rôle.
+   * 4 segments : ne recouvre ni `PUT :uuid` (1) ni `PUT permissions/:uuid/toggle` (3).
+   */
+  @Put(':roleUuid/modules/:moduleUuid/permissions')
+  @RequirePermissions('roles_activer_ou_desactiver_un_role')
+  @SuccessMessage('Permissions du module mises à jour')
+  @ApiParam({ name: 'roleUuid', description: 'UUID du rôle' })
+  @ApiParam({ name: 'moduleUuid', description: 'UUID du module' })
+  @ApiOperation({
+    summary: 'Cocher / décocher toutes les permissions d’un module pour un rôle',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Retourne { module_uuid, status, updated, created }',
+  })
+  @ApiResponse({ status: 404, description: 'Rôle ou module introuvable' })
+  setModulePermissions(
+    @Param('roleUuid') roleUuid: string,
+    @Param('moduleUuid') moduleUuid: string,
+    @Body() dto: SetModulePermissionsDto,
+  ) {
+    return this.roleService.setModulePermissions(roleUuid, moduleUuid, dto.status);
   }
 
   /**

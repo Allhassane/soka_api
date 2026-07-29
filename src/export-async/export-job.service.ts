@@ -94,7 +94,7 @@ export class ExportJobService {
       });
     }
 
-    // Statut(s) — multi-sélection
+    // Statut(s) - multi-sélection
     const statuses = (filters.statuses ?? []).filter((s): s is ExportJobStatus =>
       Object.values(ExportJobStatus).includes(s as ExportJobStatus),
     );
@@ -107,7 +107,7 @@ export class ExportJobService {
       qb.andWhere('job.type = :type', { type: filters.type.trim() });
     }
 
-    // Catégorie/spécificité (statistiques membres) — recoupée dans le JSON params.
+    // Catégorie/spécificité (statistiques membres) - recoupée dans le JSON params.
     if (filters.category && filters.category.trim()) {
       qb.andWhere(
         "JSON_UNQUOTE(JSON_EXTRACT(job.params, '$.category')) = :category",
@@ -128,7 +128,7 @@ export class ExportJobService {
       });
     }
 
-    // Plage de dates (created_at) — bornes inclusives sur la journée
+    // Plage de dates (created_at) - bornes inclusives sur la journée
     if (filters.dateFrom) {
       qb.andWhere('job.created_at >= :dateFrom', {
         dateFrom: `${filters.dateFrom} 00:00:00`,
@@ -140,7 +140,7 @@ export class ExportJobService {
       });
     }
 
-    // Tri — colonne autorisée uniquement (anti-injection)
+    // Tri - colonne autorisée uniquement (anti-injection)
     const sortColumnMap: Record<string, string> = {
       date: 'created_at',
       created_at: 'created_at',

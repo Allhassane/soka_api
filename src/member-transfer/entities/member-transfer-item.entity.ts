@@ -16,7 +16,7 @@ import { MemberTransferEntity } from './member-transfer.entity';
  *
  * ⚠️ Cette table **est** l'historique de mobilité du membre : `from_structure_uuid` et
  * `to_structure_uuid` sont figés au moment de la demande / de l'application. Pas de table
- * d'audit séparée — l'information est déjà ici.
+ * d'audit séparée - l'information est déjà ici.
  *
  * Jointures sur les colonnes `*_uuid` (`referencedColumnName: 'uuid'`), comme partout dans le
  * domaine membre.

@@ -72,7 +72,7 @@ export class JournalZoneService {
 
   /**
    * Remplace l'ensemble des villes rattachées à une zone par la liste fournie.
-   * (suppression des liens existants puis recréation — idempotent)
+   * (suppression des liens existants puis recréation - idempotent)
    */
   private async syncZoneCities(
     zone_uuid: string,
@@ -92,7 +92,7 @@ export class JournalZoneService {
   /**
    * Mappe une zone (avec zoneCities chargées) vers la forme renvoyée au front.
    * On expose uniquement les UUIDs des villes (le front résout les libellés via
-   * son référentiel cities) — évite tout JOIN inter-tables sensible aux collations.
+   * son référentiel cities) - évite tout JOIN inter-tables sensible aux collations.
    */
   private mapZone(
     zone: JournalZoneEntity,
@@ -111,7 +111,7 @@ export class JournalZoneService {
 
   /**
    * Résout le nom de la « région » d'une zone, sans JOIN (collation-safe).
-   * La région peut référencer une STRUCTURE (pyramide) OU une VILLE (cities) —
+   * La région peut référencer une STRUCTURE (pyramide) OU une VILLE (cities) -
    * liste unifiée côté front. On cherche donc dans les deux référentiels.
    */
   private async resolveStructureName(
@@ -148,7 +148,7 @@ export class JournalZoneService {
       'Récupération de la liste des zones du journal',
     );
 
-    // Hydratation des membres responsables — sans JOIN (collation-safe).
+    // Hydratation des membres responsables - sans JOIN (collation-safe).
     const respUuids = Array.from(
       new Set(
         data.map((z) => z.responsible_member_uuid).filter(Boolean) as string[],
@@ -166,7 +166,7 @@ export class JournalZoneService {
       }
     }
 
-    // Résolution par lot des noms de « région » (structure OU ville) — sans JOIN.
+    // Résolution par lot des noms de « région » (structure OU ville) - sans JOIN.
     const regionUuids = Array.from(
       new Set(data.map((z) => z.structure_uuid).filter(Boolean) as string[]),
     );

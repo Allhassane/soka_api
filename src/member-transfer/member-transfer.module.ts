@@ -12,7 +12,7 @@ import { MemberTransferService } from './member-transfer.service';
 import { ResponsibilityAnchorService } from './responsibility-anchor.service';
 
 /**
- * Transfert de membres entre structures — cf. `docs/TRANSFERT-MEMBRES.md`.
+ * Transfert de membres entre structures - cf. `docs/TRANSFERT-MEMBRES.md`.
  *
  * `ResponsibilityAnchorService` (règle R8) est **exporté** : il devra aussi être consommé par
  * `MemberModule` (`PUT /members/:uuid`, étape 5), pour que tous les chemins qui modifient

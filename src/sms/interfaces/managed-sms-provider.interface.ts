@@ -16,13 +16,13 @@ export interface ProviderBalance {
  * envoyer (`canSend`) et, optionnellement, à remonter son solde.
  *
  * `send()` effectue l'appel réseau réel sans se soucier des toggles : c'est le
- * DISPATCHER qui décide QUI appeler (provider actif, failover, simulation) — les
+ * DISPATCHER qui décide QUI appeler (provider actif, failover, simulation) - les
  * providers ne s'auto-simulent pas (sinon un « succès simulé » masquerait un échec
  * et défairait le failover).
  */
 export interface ManagedSmsProvider extends NotificationProvider {
   /** `true` si credentials présents ET envoi réel autorisé par l'environnement. */
   canSend(): boolean;
-  /** Solde best-effort — ne LÈVE JAMAIS (retourne available:false en cas d'erreur). */
+  /** Solde best-effort - ne LÈVE JAMAIS (retourne available:false en cas d'erreur). */
   getBalance?(): Promise<ProviderBalance>;
 }

@@ -4,15 +4,18 @@ import { FormationService } from './formation.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateFormationDto } from './dto/create-formation.dto';
 import { UpdateFormationDto } from './dto/update-formation.dto';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
 @ApiTags('Formations')
 @Controller('formations')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class FormationController {
   constructor(private readonly formationService: FormationService) {}
 
   @Get()
+  @RequirePermissions('formations_voir')
   @ApiOperation({ summary: 'Liste toutes les formations ' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
@@ -21,6 +24,7 @@ export class FormationController {
   }
 
   @Post()
+  @RequirePermissions('formations_creer')
   @ApiOperation({ summary: 'Créer une civilité ' })
   @ApiResponse({ status: 200, description: 'Formation créé avec succès.' })
   @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
@@ -29,6 +33,7 @@ export class FormationController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('formations_voir')
   @ApiOperation({ summary: 'Récupérer une civilité par UUID' })
   @ApiResponse({ status: 200, description: 'Formation trouvé.' })
   @ApiResponse({ status: 400, description: 'Formation non trouvé.' })
@@ -38,6 +43,7 @@ export class FormationController {
   }
 
  @Put(':uuid')
+ @RequirePermissions('formations_modifier')
  @ApiOperation({ summary: 'Modifier une civilité' })
  @ApiResponse({ status: 200, description: 'Formation modifiée avec succès.' })
  @ApiResponse({ status: 400, description: 'Champs invalides ou manquants.' })
@@ -51,6 +57,7 @@ export class FormationController {
 
 
   @Delete(':uuid')
+  @RequirePermissions('formations_supprimer')
   @ApiOperation({ summary: 'Supprimer une civilité' })
   @ApiResponse({ status: 200, description: 'Formation supprimé avec succès.' })
   @ApiResponse({ status: 400, description: 'Fotmation introuvable.' })

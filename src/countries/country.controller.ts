@@ -4,15 +4,18 @@ import { CountryService } from './country.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateCountryDto } from './dto/create-countries.dto';
 import { UpdateCountryDto } from './dto/update-countries.dto';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
 @ApiTags('Pays')
 @Controller('countries')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class CountryController {
   constructor(private readonly countryService: CountryService) {}
 
   @Get()
+  @RequirePermissions('pays_voir')
   @ApiOperation({ summary: 'Liste toutes les métiers ' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
@@ -21,6 +24,7 @@ export class CountryController {
   }
 
   @Post()
+  @RequirePermissions('pays_creer')
   @ApiOperation({ summary: 'Créer un pays ' })
   @ApiResponse({ status: 200, description: 'Pays créé avec succès.' })
   @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
@@ -29,6 +33,7 @@ export class CountryController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('pays_voir')
   @ApiOperation({ summary: 'Récupérer une métier par UUID' })
   @ApiResponse({ status: 200, description: 'Métier trouvé.' })
   @ApiResponse({ status: 400, description: 'Metier non trouvé.' })
@@ -38,6 +43,7 @@ export class CountryController {
   }
 
  @Put(':uuid')
+ @RequirePermissions('pays_modifier')
  @ApiOperation({ summary: 'Modifier un pays' })
  @ApiResponse({ status: 200, description: 'Pays modifié avec succès.' })
  @ApiResponse({ status: 400, description: 'Champs invalides ou manquants.' })
@@ -51,6 +57,7 @@ export class CountryController {
 
 
   @Delete(':uuid')
+  @RequirePermissions('pays_supprimer')
   @ApiOperation({ summary: 'Supprimer un pays' })
   @ApiResponse({ status: 200, description: 'Pays supprimé avec succès.' })
   @ApiResponse({ status: 400, description: 'Pays introuvable.' })

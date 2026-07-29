@@ -6,6 +6,9 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ENFORCED_PERMISSION_SLUGS } from './decorators/require-permissions.decorator';
+import { AccessScopeService } from 'src/access-scope/access-scope.service';
+import { UserRoleService } from 'src/user-roles/user-roles.service';
 import * as bcrypt from 'bcrypt';
 import { UserService } from '../users/user.service';
 import { User } from '../users/entities/user.entity';
@@ -44,6 +47,12 @@ export class AuthService {
     // l'ancien SmsService direct. Rollback : réinjecter SmsService et rétablir les
     // 2 appels sendSms() ci-dessous (SmsService reste exporté par SmsModule).
     private readonly smsDispatcher: SmsDispatcher,
+
+    // Calcul unique des rôles ET du périmètre hiérarchique (responsabilités + comités + user_roles).
+    private readonly accessScopeService: AccessScopeService,
+
+    // Convergence du rôle socle (MEMBRE / RESPONSABLE) à chaque connexion.
+    private readonly userRoleService: UserRoleService,
 
   ) {}
 
@@ -84,7 +93,6 @@ export class AuthService {
     void _password;
     return userWithoutPassword as Omit<User, 'password'>;
   }
-
 
   async login(user: User) {
   // Flux « 1re connexion » : tant que le compte a encore le mot de passe par défaut
@@ -180,24 +188,58 @@ export class AuthService {
 
   // Le token est signé plus bas, une fois rôles & permissions connus (pour les embarquer dans le JWT).
 
-  // Récupération des rôles de l'utilisateur
-  const roles = await this.userService.findUserRoles(user.uuid);
+  // ---- DROITS ET PÉRIMÈTRE : un seul calcul, trois requêtes ----
+  // `AccessScopeService` réunit les rôles portés par les responsabilités du membre, par ses
+  // comités et par `user_roles`, et calcule au passage les paliers hiérarchiques accessibles.
+  // ⚠️ Ne jamais revenir à `roles[0]` : `findUserRoles` n'a aucun `ORDER BY`, le « premier »
+  // rôle était indéterminé - c'est précisément pour ça que tout est fusionné.
+  // Le rôle socle est aligné AVANT le calcul : un membre qui vient de recevoir (ou de perdre)
+  // une responsabilité doit se connecter avec le bon rôle dès cette session.
+  await this.userRoleService.syncBaseRoleForMember({
+    uuid: user.uuid,
+    member_uuid: user.member_uuid,
+    is_admin: user.is_admin,
+  });
 
-  // Récupération des permissions globales liées au rôle de l'utilisateur
+  const scope = await this.accessScopeService.compute({
+    uuid: user.uuid,
+    member_uuid: user.member_uuid,
+    is_admin: user.is_admin,
+  });
+
   let globalPermissions: any[] = [];
-  let permissionsSource:
-    | 'user_role'
-    | 'responsibility_role'
-    | 'default_membre'
-    | 'none' = 'none';
+  let permissionsSource: string = 'none';
 
-  if (roles && roles.length > 0) {
-    const firstRole = roles[0];
-    const rolePermData = await this.roleService.findGlobalPermissions(firstRole.role_uuid);
-    globalPermissions = rolePermData.permissions || [];
-    if (globalPermissions.length > 0) {
-      permissionsSource = 'user_role';
+  // `roles` reflète désormais TOUTES les provenances (responsabilités, comités, user_roles),
+  // plus la seule table `user_roles`.
+  const roles = await this.roleService.findRoleRefsByUuids(scope.role_uuids);
+
+  if (scope.role_uuids.length > 0) {
+    globalPermissions =
+      await this.roleService.findActivePermissionsForRoleUuids(scope.role_uuids);
+  }
+
+  // Repli : un membre sans responsabilité, sans comité et sans rôle utilisateur reste un
+  // simple MEMBRE. L'invariant `user_roles` >= 1 rend ce cas rare, mais il protège un compte
+  // dont la ligne aurait été supprimée à la main.
+  if (globalPermissions.length === 0) {
+    try {
+      const membreRole = await this.roleService.findOneBySlug(ROLE_MEMBRE_SLUG);
+      globalPermissions =
+        await this.roleService.findActivePermissionsForRoleUuids([membreRole.uuid]);
+      if (globalPermissions.length > 0) permissionsSource = 'default_membre';
+    } catch {
+      // rôle MEMBRE absent : aucune permission par défaut
     }
+  } else {
+    permissionsSource =
+      [
+        scope.sources.responsibility.length > 0 ? 'responsibility_role' : null,
+        scope.sources.committee.length > 0 ? 'committee_role' : null,
+        scope.sources.user_role.length > 0 ? 'user_role' : null,
+      ]
+        .filter(Boolean)
+        .join('+') || 'none';
   }
 
   // Récupération des informations du membre associé (reste du code)
@@ -254,29 +296,9 @@ export class AuthService {
         .getRawMany();
 
       // Si l'utilisateur n'a pas de permissions et qu'il a des responsabilités
-      if (globalPermissions.length === 0 && responsibilities.length > 0) {
-        const sortedResponsibilities = responsibilities
-          .filter(r => r.role_uuid)
-          .sort((a, b) => {
-            const orderA = a.level_order ? parseInt(a.level_order) : 999;
-            const orderB = b.level_order ? parseInt(b.level_order) : 999;
-            return orderA - orderB;
-          });
-
-        if (sortedResponsibilities.length > 0) {
-          const highestResponsibility = sortedResponsibilities[0];
-
-          const rolePermData = await this.roleService.findGlobalPermissions(
-            highestResponsibility.role_uuid
-          );
-
-          globalPermissions = rolePermData.permissions || [];
-
-          if (globalPermissions.length > 0) {
-            permissionsSource = 'responsibility_role';
-          }
-        }
-      }
+      // (L'ancien repli « rôle de la responsabilité la plus haute » a disparu : les rôles des
+      // responsabilités sont désormais une source de PREMIER rang dans `AccessScopeService`,
+      // fusionnée avec les comités et `user_roles` - plus un repli conditionnel.)
 
       // Si le membre est responsable, récupérer l'arbre de sa structure
       if (responsibilities.length > 0 && member.structure_uuid) {
@@ -331,35 +353,35 @@ export class AuthService {
     }
   }
 
-  // Fallback MEMBRE : un compte sans rôle (user_role) ni responsabilité reçoit les
-  // permissions du rôle MEMBRE (il ne voit alors que ses propres infos).
-  if (globalPermissions.length === 0) {
-    try {
-      const membreRole = await this.roleService.findOneBySlug(ROLE_MEMBRE_SLUG);
-      const rolePermData = await this.roleService.findGlobalPermissions(
-        membreRole.uuid,
-      );
-      globalPermissions = rolePermData.permissions || [];
-      if (globalPermissions.length > 0) {
-        permissionsSource = 'default_membre';
-      }
-    } catch {
-      // rôle MEMBRE absent : aucune permission par défaut
-    }
-  }
+  // (Le repli MEMBRE est appliqué plus haut, juste après le calcul du périmètre : il n'a pas
+  // besoin d'attendre le chargement des informations du membre.)
 
   // Embarquer les droits dans le JWT (calculés une seule fois ici, pas à chaque requête).
   const isActive = (s: unknown) =>
     s === true || s === 1 || s === '1' || s === 'enable' || s === 'active';
-  payload.permissions = Array.from(
-    new Set(
-      (globalPermissions ?? [])
-        .filter((p: any) => isActive(p?.status))
-        .map((p: any) => p?.slug)
-        .filter((slug: any): slug is string => typeof slug === 'string' && slug.length > 0),
-    ),
-  );
   payload.is_admin = user.is_admin === true;
+
+  // Périmètre embarqué dans le token : les gardes et services le lisent sans requête
+  // supplémentaire à chaque appel. 3 champs scalaires, impact négligeable sur la taille.
+  payload.scope_structure_uuid = scope.scope_structure_uuid;
+  payload.default_structure_uuid = scope.default_structure_uuid;
+  payload.max_level_order = scope.max_level?.level_order ?? null;
+
+  // ⚠️ AUCUNE PERMISSION DANS LE TOKEN - à ne pas défaire.
+  //
+  // Le front re-chiffre le JWT avant de le poser en cookie (`useAuth.login` → `encryptData`,
+  // +38 % de volume) et un navigateur **jette silencieusement** tout cookie > 4 096 o : la
+  // connexion boucle alors sur la page de login, sans le moindre message. Ce plafond a été
+  // atteint deux fois (46 slugs, puis 138) et chaque contournement par filtrage n'a fait que
+  // repousser l'échéance. La taille du token ne dépend donc plus du nombre de permissions ni
+  // du nombre de routes protégées : `PermissionsGuard` les résout depuis la base
+  // (`EffectivePermissionsService`, cache de 30 s par utilisateur).
+  //
+  // Effet de bord voulu : accorder ou retirer une permission prend effet en moins de 30 s,
+  // là où il fallait auparavant se reconnecter.
+  //
+  // L'interface, elle, lit `user.global_permissions` dans le CORPS de la réponse (non filtré).
+  payload.permissions = [];
 
   const token = this.jwtService.sign(payload);
   const decoded = this.jwtService.decode(token) as null | { exp?: number };
@@ -378,6 +400,19 @@ export class AuthService {
       is_admin: user.is_admin === true,
       global_permissions: globalPermissions,
       permissions_source: permissionsSource,
+      /**
+       * Périmètre hiérarchique : jusqu'où le membre a le droit de voir, et où l'affichage
+       * doit s'ouvrir par défaut. `max_level` est la LIMITE (niveau le plus élevé atteint par
+       * une responsabilité ou par un comité), `default_level` le palier le plus bas - le front
+       * pré-remplit sur celui-ci et laisse remonter librement jusqu'à `max_level`.
+       */
+      access_scope: {
+        levels: scope.levels,
+        max_level: scope.max_level,
+        default_level: scope.default_level,
+        scope_structure_uuid: scope.scope_structure_uuid,
+        default_structure_uuid: scope.default_structure_uuid,
+      },
     },
     access_token: token,
     expires_in: typeof decoded?.exp === 'number' ? decoded.exp : null,
@@ -400,7 +435,7 @@ export class AuthService {
   ): Promise<any> {
     // RÉ-ÉCRIT (perf login & co.) : avant, cette méthode chargeait ~3562 structures via
     // TypeORM getMany() + comptait tous les membres + tous les responsables, puis bâtissait
-    // un arbre de 3600 nœuds — ≈2 à 3,4 s PAR APPEL, et le login l'appelait 2x (~5,6 s). Or
+    // un arbre de 3600 nœuds - ≈2 à 3,4 s PAR APPEL, et le login l'appelait 2x (~5,6 s). Or
     // le résultat n'est qu'un CHEMIN d'ancêtres (racine → structure du membre) dont le front
     // ne lit que name/level_name. On récupère donc UNIQUEMENT ce chemin via un CTE remontant
     // (≈5 ms). Forme de retour identique (compteurs/responsables à 0/[], non lus). Le paramètre

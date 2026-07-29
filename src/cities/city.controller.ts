@@ -4,15 +4,18 @@ import { CityService } from './city.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateCityDto } from './dto/create-city.dto';
 import { UpdateCityDto } from './dto/update-city.dto';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
 @ApiTags('Cities')
 @Controller('cities')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class CityController {
   constructor(private readonly cityService: CityService) {}
 
   @Get()
+  @RequirePermissions('villes_voir')
   @ApiOperation({ summary: 'Liste de toutes les localités ' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
@@ -21,6 +24,7 @@ export class CityController {
   }
 
   @Post()
+  @RequirePermissions('villes_creer')
   @ApiOperation({ summary: 'Créer un Localité ' })
   @ApiResponse({ status: 200, description: 'Localité créé avec succès.' })
   @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
@@ -29,6 +33,7 @@ export class CityController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('villes_voir')
   @ApiOperation({ summary: 'Récupérer une localité par UUID' })
   @ApiResponse({ status: 200, description: 'Localité trouvé.' })
   @ApiResponse({ status: 400, description: 'Localité non trouvé.' })
@@ -38,6 +43,7 @@ export class CityController {
   }
 
  @Put(':uuid')
+ @RequirePermissions('villes_modifier')
  @ApiOperation({ summary: 'Modifier une localité' })
  @ApiResponse({ status: 200, description: 'Localité modifié avec succès.' })
  @ApiResponse({ status: 400, description: 'Champs invalides ou manquants.' })
@@ -51,6 +57,7 @@ export class CityController {
 
 
   @Delete(':uuid')
+  @RequirePermissions('villes_supprimer')
   @ApiOperation({ summary: 'Supprimer une localité' })
   @ApiResponse({ status: 200, description: 'Localité supprimé avec succès.' })
   @ApiResponse({ status: 400, description: 'Localité introuvable.' })

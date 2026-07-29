@@ -24,6 +24,47 @@ Une entrée par session significative, la plus récente en haut.
 
 ---
 
+## 2026-07-28 — Référentiel de permissions rechargé depuis `permissions-soka-digital.md` — module `permission`
+**Contexte :** le document fonctionnel `permissions/permissions-soka-digital.md` (racine du dépôt)
+liste les permissions attendues module par module. Demande : vider `modules` / `permissions` /
+`roles_permissions`, puis tout recréer depuis ce document, avec **toutes les permissions accordées
+aux rôles ADMINISTRATEUR et RESPONSABLE**.
+- **Fait :**
+  - `src/permission/permission-catalog.ts` — transcription du document : **28 modules, 257
+    permissions** (libellés repris tels quels) + **85 alias techniques**, soit **342 slugs**.
+  - `src/permission/permission-code-usage.ts` — relève par lecture des sources les slugs réellement
+    exigés : **143 côté API** (`@RequirePermissions`, y compris passés par constante) et **99 côté
+    web** (`<Protected>`, `hasPermission`, `config/menus.ts`).
+  - `src/seeds/seed-reset-permissions.ts` — purge des 3 tables (ordre enfant → parent) avec
+    sauvegarde JSON dans `backups/`. Exporte `resetPermissionTables(manager)`, réutilisée par le
+    seed de rechargement pour que purge et insertion soient **atomiques**.
+  - `src/seeds/seed-permissions.ts` — purge + modules + permissions + **un lien
+    `roles_permissions` par rôle × permission** (1 368 lignes pour 4 rôles), `status = 1` pour
+    ADMINISTRATEUR et RESPONSABLE, `0` pour les autres. Se termine par un contrôle de couverture.
+  - `package.json` — `seed:reset-permissions`, `seed:permissions` (options `--dry-run`, `--no-backup`).
+- **Décision — reprendre les slugs existants plutôt que d'en dériver de nouveaux.** Un slug absent
+  de `permissions` est refusé à tout le monde sauf `is_admin`, et un menu du front dont le slug
+  n'existe pas disparaît. Chaque puce du document réutilise donc le slug déjà exigé par le code
+  quand elle décrit le même droit : **142 des 143 slugs API sont couverts**. Seule exception,
+  `migration_executer`, qui n'existait déjà pas en base (route réservée à `is_admin`).
+- **Décision — les alias.** Un droit exigé par le code sans entrée propre dans le document devient
+  un `alias` de la puce la plus proche, dans le même module : 20 côté API (écritures des accessoires
+  et responsabilités d'un membre, `DELETE` de campagne rattaché à « Archiver »…) et 65 côté web
+  (`civilites_ajouter_civilites`, `structures_modifier_structures`…). Ces 65-là étaient **absents de
+  la base** : les boutons correspondants sont déjà masqués aujourd'hui pour les non-admins. Sans
+  eux, accorder « tout » à RESPONSABLE n'aurait rien changé à l'écran.
+- **Décision — `DELETE` et non `TRUNCATE`** : `TRUNCATE` provoque un commit implicite en MySQL et
+  ferait sauter la transaction. Aucune FK réelle n'existe sur ces 3 tables (vérifié sur `soka_db`),
+  l'ordre enfant → parent suffit.
+- **Vérifié :** `tsc --noEmit` ✅ · `seed:permissions --dry-run` ✅ (28 modules, 342 permissions,
+  1 368 liens) · base **inchangée** après le dry-run, contrôlée en SQL.
+  ⚠️ `npm run lint` échoue sur **tout** le repo (`parserOptions.tsconfigRootDir` reçoit `/C:/…`),
+  anomalie de configuration préexistante.
+- **TODO :** jouer les seeds (non exécutés) ; **reconnexion obligatoire** pour que les droits
+  prennent effet ; aligner un jour les 65 slugs « boutons » du web sur ceux de l'API et retirer ces
+  alias ; `permission-manifest.ts` n'est plus la source de vérité (conservé pour la migration
+  historique `1782800300000-SeedPermissionCatalog`, à ne pas rejouer).
+
 ## 2026-07-25 (2) — Permission `membres_gerer_membres_comite` : restreindre l'affectation à un comité — modules `comités` + `membres`
 **Contexte :** l'onglet « Comité » de la fiche membre permet au responsable d'un comité spécialisé
 d'y affecter des membres (`POST /comite/:uuid/members`, `DELETE /comite/:uuid/members/:memberUuid`).

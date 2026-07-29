@@ -4,7 +4,7 @@ import AppDataSource from '../data-source';
 import { User } from '../users/entities/user.entity';
 
 /**
- * SEED — Mot de passe partagé pour des comptes de test.
+ * SEED - Mot de passe partagé pour des comptes de test.
  *
  * Réutilise le DataSource de l'API (src/data-source.ts) : il charge le même
  * `.env`, donc il cible AUTOMATIQUEMENT la bonne base (DB_NAME, ex.
