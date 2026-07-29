@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException,ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { AccessScopeService } from 'src/access-scope/access-scope.service';
 import { In, Repository } from 'typeorm';
 
 import { PaymentEntity, PaymentStatus } from './entities/payment.entity';
@@ -60,11 +61,22 @@ export class PaymentService {
 
     private readonly logService: LogActivitiesService,
     private readonly hubService: HubService,
+
+    /** Périmètre hiérarchique du demandeur (service @Global). */
+    private readonly accessScopeService: AccessScopeService,
   ) { }
 
   // ----------------------------------------------------------
   //  LISTER LES PAIEMENTS
   // ----------------------------------------------------------
+  /**
+   * ⚠️ Cette liste joint l'**entité membre complète** du bénéficiaire et de l'acteur (téléphone,
+   * WhatsApp, e-mail, date de naissance, adresse). Elle était renvoyée **sans aucun filtre** :
+   * toute personne détenant `paiements_voir` lisait les coordonnées de l'organisation entière.
+   *
+   * Le périmètre est un contrôle **distinct** de la permission : `paiements_voir` accorde le
+   * droit d'ouvrir l'écran, le filtre ci-dessous borne les lignes au sous-arbre du demandeur.
+   */
   async findAll(admin_uuid: string, source?: PaymentSource) {
     const query = this.paymentRepo
       .createQueryBuilder('p')
@@ -74,12 +86,45 @@ export class PaymentService {
 
     if (source) query.andWhere('p.source = :source', { source });
 
+    const autorisees = await this.accessScopeService.structuresAutorisees(admin_uuid);
+    if (autorisees !== null) {
+      // Ensemble vide ⇒ aucune ligne (et surtout pas `IN ()`, SQL invalide).
+      if (autorisees.size === 0) return [];
+      query.andWhere('beneficiary.structure_uuid IN (:...structures)', {
+        structures: [...autorisees],
+      });
+    }
+
     return await query.getMany();
   }
 
   // ----------------------------------------------------------
   //  TROUVER UN PAIEMENT
   // ----------------------------------------------------------
+  /**
+   * Vérifie qu'un membre appartient au périmètre du demandeur. `null` = demandeur non contraint.
+   * Refuse aussi un membre sans structure : le défaut est le refus, jamais l'ouverture.
+   */
+  private async assertMembreDansPerimetre(
+    member_uuid: string,
+    admin_uuid: string,
+  ): Promise<void> {
+    const autorisees =
+      await this.accessScopeService.structuresAutorisees(admin_uuid);
+    if (autorisees === null) return;
+
+    const rows = await this.paymentRepo.manager.query(
+      'SELECT `structure_uuid` FROM `members` WHERE `uuid` = ? AND `deleted_at` IS NULL LIMIT 1',
+      [member_uuid],
+    );
+    const structure = rows?.[0]?.structure_uuid;
+    if (!structure || !autorisees.has(structure)) {
+      throw new ForbiddenException(
+        'Accès refusé : ce membre est hors de votre périmètre.',
+      );
+    }
+  }
+
   async findOne(uuid: string, admin_uuid: string): Promise<PaymentEntity> {
     const payment = await this.paymentRepo.findOne({
       where: { uuid },
@@ -88,6 +133,11 @@ export class PaymentService {
 
     if (!payment)
       throw new NotFoundException('Paiement introuvable.');
+
+    // Le détail expose les mêmes données personnelles que la liste : même barrière.
+    if (payment.beneficiary_uuid) {
+      await this.assertMembreDansPerimetre(payment.beneficiary_uuid, admin_uuid);
+    }
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
     if (!admin) {
@@ -263,6 +313,10 @@ export class PaymentService {
     if (!admin) {
       throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
+
+    // Le membre ciblé doit être dans le périmètre : sans ce contrôle, il suffisait de changer
+    // l'uuid dans l'URL pour lire l'historique de paiement de n'importe qui.
+    await this.assertMembreDansPerimetre(member_uuid, admin_uuid);
     await this.logService.logAction(
       'payments-changeStatus',
       admin.id,

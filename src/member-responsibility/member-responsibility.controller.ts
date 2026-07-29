@@ -8,15 +8,18 @@ import {
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { MemberResponsibilityService } from './member-responsibility.service';
 import { CreateMemberResponsibilityDto } from './dto/create-member-responsibility.dto';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiTags('Responsabilités Membre')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('member-responsibility')
 export class MemberResponsibilityController {
   constructor(private readonly service: MemberResponsibilityService) {}
 
   @Post()
+  @RequirePermissions('membres_responsabilites_creer')
   @ApiOperation({
     summary: 'Ajouter une responsabilité',
   })

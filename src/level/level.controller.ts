@@ -22,15 +22,18 @@ import {
   ApiParam,
   ApiBearerAuth,
 } from '@nestjs/swagger';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
 @ApiTags('Niveaux')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('levels')
 export class LevelController {
   constructor(private readonly levelService: LevelService) {}
 
   @Get()
+  @RequirePermissions('niveaux_voir')
   @ApiOperation({ summary: 'Lister tous les niveaux' })
   @ApiResponse({ status: 200, description: 'Retour paginé' })
   findAllLevels(@Query() query: LevelPaginationQueryDto) {
@@ -39,6 +42,7 @@ export class LevelController {
   }
 
   @Post()
+  @RequirePermissions('niveaux_creer')
   @ApiOperation({ summary: 'Créer un niveau' })
   @ApiResponse({ status: 201, description: 'Niveau créé avec succès.' })
   @ApiBody({ type: CreateLevelDto })
@@ -47,6 +51,7 @@ export class LevelController {
   }
 
   @Get('find-by-category/:category')
+  @RequirePermissions('niveaux_voir')
   @ApiOperation({ summary: 'Lister les niveaux' })
   @ApiResponse({ status: 200, description: 'Liste des niveaux.' })
   @ApiParam({
@@ -60,6 +65,7 @@ export class LevelController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('niveaux_voir')
   @ApiOperation({ summary: 'Afficher un niveau' })
   @ApiParam({ name: 'uuid', description: 'UUID du niveau' })
   @ApiResponse({ status: 200, description: 'Détails du niveau.' })
@@ -68,6 +74,7 @@ export class LevelController {
   }
 
   @Put('update/:uuid')
+  @RequirePermissions('niveaux_modifier')
   @ApiOperation({ summary: 'Modifier un niveau' })
   @ApiParam({ name: 'uuid', description: 'UUID du niveau à modifier' })
   @ApiBody({ type: UpdateLevelDto })
@@ -76,6 +83,7 @@ export class LevelController {
   }
 
   @Delete('delete/:uuid')
+  @RequirePermissions('niveaux_supprimer')
   @ApiOperation({ summary: 'Supprimer un niveau (soft delete)' })
   @ApiParam({ name: 'uuid', description: 'UUID du niveau à supprimer' })
   @ApiResponse({ status: 200, description: 'Niveau marqué comme supprimé.' })

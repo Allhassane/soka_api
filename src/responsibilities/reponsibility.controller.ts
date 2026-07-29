@@ -20,15 +20,18 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateResponsibilityDto } from './dto/create-responsibility.dto';
 import { UpdateResponsibilityDto } from './dto/update-responsibility.dto';
 import { ResponsibilityService } from './reponsibility.service';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
 @ApiTags('Responsabilité')
 @Controller('responsibilities')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ResponsibilityController {
   constructor(private readonly responsibilityService: ResponsibilityService) {}
 
   @Get()
+  @RequirePermissions('responsabilites_voir')
   @ApiOperation({ summary: 'Liste de toutes les reponsabilités ' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
@@ -37,6 +40,7 @@ export class ResponsibilityController {
   }
 
   @Post()
+  @RequirePermissions('responsabilites_creer')
   @ApiOperation({ summary: 'Créer une reponsabilité ' })
   @ApiResponse({ status: 200, description: 'reponsabilité créé avec succès.' })
   @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
@@ -45,6 +49,7 @@ export class ResponsibilityController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('responsabilites_voir')
   @ApiOperation({ summary: 'Récupérer une reponsabilité par UUID' })
   @ApiResponse({ status: 200, description: 'reponsabilité trouvé.' })
   @ApiResponse({ status: 400, description: 'reponsabilité non trouvé.' })
@@ -54,6 +59,7 @@ export class ResponsibilityController {
   }
 
   @Get('find-by-level/:uuid')
+  @RequirePermissions('responsabilites_voir')
   @ApiOperation({ summary: 'Récupérer une reponsabilité par uuid du niveau' })
   @ApiResponse({ status: 200, description: 'reponsabilité trouvé.' })
   @ApiResponse({ status: 400, description: 'reponsabilité non trouvé.' })
@@ -63,6 +69,7 @@ export class ResponsibilityController {
   }
 
   @Get('find-by/:level_uuid/gender/:gender')
+  @RequirePermissions('responsabilites_voir')
   @ApiOperation({ summary: 'Récupérer une reponsabilité par uuid du niveau' })
   @ApiResponse({ status: 200, description: 'reponsabilité trouvé.' })
   @ApiResponse({ status: 400, description: 'reponsabilité non trouvé.' })
@@ -82,6 +89,7 @@ export class ResponsibilityController {
   }
 
   @Put(':uuid')
+  @RequirePermissions('responsabilites_modifier')
   @ApiOperation({ summary: 'Modifier une responsabilité' })
   @ApiResponse({ status: 200, description: 'Localité modifié avec succès.' })
   @ApiResponse({ status: 400, description: 'Champs invalides ou manquants.' })
@@ -94,6 +102,7 @@ export class ResponsibilityController {
   }
 
   @Delete(':uuid')
+  @RequirePermissions('responsabilites_supprimer')
   @ApiOperation({ summary: 'Supprimer une responsabilité' })
   @ApiResponse({
     status: 200,

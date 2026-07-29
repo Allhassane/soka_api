@@ -253,6 +253,35 @@ services) : abonnements et dons.
   rattaché **au-dessus** du district (anomalie des 104 membres sur un CHAPITRE) n'a pas de
   district source - il n'est bloqué ni ici ni par le workflow, sinon il serait immobile à vie.
 
+- **🧭 `AccessScopeService` (`src/access-scope/`) = LE point de calcul des droits et du périmètre.**
+  Une passe, 3 requêtes : rôles (responsabilités ∪ comités ∪ `user_roles`), paliers accessibles,
+  et la structure du membre à chaque palier. **Ne pas recalculer un périmètre ailleurs.**
+  - **Portée = niveau le plus ÉLEVÉ** atteint par une responsabilité **ou** un comité
+    (`max_level`) ; l'interface s'ouvre sur le **plus bas** (`default_level`) et remonte jusqu'à
+    la limite. Un responsable DISTRICT dans un comité REGION voit toute la REGION.
+  - **Une seule racine suffit** (`scope_structure_uuid`) : tous les paliers sont des ancêtres
+    d'une même chaîne, le sous-arbre du plus haut contient ceux des autres.
+  - Côté contrôleur, lire le périmètre avec **`allowedRootUuidsFromJwt(req.user)`** - jamais
+    `responsibilities[0].structure.uuid` (ignore les comités, et l'ordre du tableau est indéterminé).
+
+- **🗂️ Catalogue des permissions : `src/permission/permission-catalog.ts`** (depuis le 2026-07-28).
+  Transcription du document fonctionnel **`permissions/permissions-soka-digital.md`** (racine du
+  monorepo), qui est la source de vérité métier : une section « ## Module … » = un module, une puce
+  = une permission. **28 modules / 342 slugs** (257 puces + 85 alias).
+  Rechargement : `npm run seed:permissions` (purge + insertion + **un lien `roles_permissions` par
+  rôle**, tout coché pour ADMINISTRATEUR et RESPONSABLE, à 0 pour les autres) ; `--dry-run` joue
+  tout puis annule. `npm run seed:reset-permissions` ne fait que vider (sauvegarde JSON dans
+  `backups/`). Ajouter une permission = puce dans le .md → entrée dans le catalogue → seed rejoué
+  → `@RequirePermissions` sur la route.
+  ⚠️ **Ne jamais renommer un slug** (référencé côté web et stocké en base) : quand une puce décrit
+  un droit déjà contrôlé, on **reprend son slug existant**. Un droit exigé par le code sans puce
+  dédiée s'ajoute en `aliases` - le seed en fait une permission du même module. Le seed relit les
+  sources (`permission-code-usage.ts`) et **liste les slugs exigés mais non créés**.
+  ⚠️ Une permission naît **décochée** pour les rôles non servis d'office : ouvrir explicitement les
+  rôles concernés, sinon la fonctionnalité est fermée à tous sauf `is_admin`.
+  ⚠️ `permission-manifest.ts` n'est **plus** la source de vérité : il ne sert qu'à la migration
+  historique `1782800300000-SeedPermissionCatalog`, qui ne doit plus être rejouée.
+
 - **🚨 D'où viennent les permissions d'un non-admin : d'une FUSION** (refonte du 2026-07-25) :
   ```
   permissions = ⋃ rôles de `user_roles` (is_active=1)  ∪  ⋃ rôles des comités du membre
@@ -294,6 +323,26 @@ services) : abonnements et dons.
   uuid générés côté Node, migration **idempotente** qui n'éteint jamais un lien déjà actif.
   ⚠️ Dette connue : les 3 permissions du transfert (2026-07-22) n'ont de ligne que pour
   `RESPONSABLE` - elles sont **incochables** pour `ADMINISTRATEUR` et `MEMBRE`.
+
+- **🔐 Les permissions ne sont PLUS dans le JWT.** `PermissionsGuard` les résout depuis la base
+  (`EffectivePermissionsService`, une requête, cache 30 s par utilisateur, service `@Global`).
+  Conséquences : la taille du token ne dépend plus du nombre de routes protégées, et **accorder
+  une permission prend effet en < 30 s, sans reconnexion**. Ne pas remettre de slugs dans le
+  payload : le plafond du cookie (ci-dessous) a été atteint trois fois.
+
+- **🛡️ Toute route doit être protégée ou explicitement exemptée.** `npm run check:permissions`
+  échoue sinon. Une exemption s'écrit dans `scripts/check-route-permissions.js` **avec sa
+  justification** (ou via `@Public()`). Ce garde-fou existe parce qu'un codemod avait protégé
+  les lectures d'un contrôleur en laissant ses écritures ouvertes - import de masse et envoi
+  SMS de masse accessibles à tout compte authentifié, sans que rien ne le détecte.
+
+- **🧱 `@RequirePermissions` ne borne PAS les données.** Il accorde le droit d'utiliser une
+  fonction ; le périmètre hiérarchique est un contrôle **distinct**. Toute route recevant un
+  **uuid de structure fourni par l'appelant** doit appeler
+  `StructureTreeService.assertStructureWithinPerimeter()` - sinon changer l'uuid dans l'URL
+  suffit à lire tout l'arbre (fuite réelle : 7 950 membres avec téléphones et e-mails exposés à
+  un responsable de sous-groupe). Idem pour une structure de **destination** en écriture
+  (`PUT /members/:uuid`), sans quoi l'utilisateur élargit son propre périmètre.
 
 - **🍪 Le JWT finit dans un cookie de 4 096 o max - budget serré.** Le front **re-chiffre** le token
   (`useAuth.login` → `encryptData`, A256GCM+base64 = **+38 %**) avant de le poser en cookie. Chrome

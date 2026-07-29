@@ -413,10 +413,19 @@ export class StructureTreeService {
   }
   */
 
+  /**
+   * ⚠️ `perimetre` est **obligatoire**, volontairement : cette route renvoie les coordonnées
+   * personnelles (téléphone, e-mail) de tous les membres du sous-arbre demandé. Un paramètre
+   * optionnel aurait laissé un futur appelant l'oublier en silence - ici, l'oubli est une
+   * erreur de compilation.
+   */
   async getStructureMembersWithStats(
     structureUuid: string,
+    perimetre: { isAdmin?: boolean; allowedRootUuids?: (string | null | undefined)[] },
     paginationParams?: PaginationMemberParams
   ): Promise<StructureMembersStats> {
+    await this.assertStructureWithinPerimeter(structureUuid, perimetre);
+
     // Paramètres de pagination par défaut
     const page = paginationParams?.page || 1;
     const limit = paginationParams?.limit || 20;
@@ -1095,7 +1104,7 @@ export class StructureTreeService {
     let allStructureUuids = await this.getAllSubStructureUuids(effectiveStructureUuid);
 
     // Filtre cascade : si une structure est choisie, on restreint à SON sous-arbre
-    // — mais UNIQUEMENT si elle est dans le périmètre de l'utilisateur (sécurité :
+    // - mais UNIQUEMENT si elle est dans le périmètre de l'utilisateur (sécurité :
     // le filtre ne peut que rétrécir, jamais élargir hors périmètre).
     const filterStructureUuid = paginationParams?.structure_uuid;
     if (filterStructureUuid && allStructureUuids.includes(filterStructureUuid)) {
@@ -1827,6 +1836,29 @@ export class StructureTreeService {
    *
    * ⚠ À n'appeler QUE pour les non-admins : l'admin/super-admin filtre librement.
    */
+  /**
+   * Barrière d'autorisation hiérarchique, exposée aux contrôleurs.
+   *
+   * Toute route qui reçoit un **uuid de structure fourni par l'appelant** doit passer par ici :
+   * sans ça, le `@RequirePermissions` ne protège que le *droit d'utiliser la fonction*, pas le
+   * *périmètre des données* - et l'utilisateur lit tout l'arbre en changeant l'uuid dans l'URL.
+   * (C'est exactement ce qui rendait `GET /structure/members/:uuid` capable de renvoyer les
+   * 7 950 membres nationaux, téléphones et e-mails compris, à un responsable de sous-groupe.)
+   *
+   * Un admin (`isAdmin`) n'est pas contraint. Un périmètre vide **refuse** (jamais d'ouverture
+   * par défaut).
+   */
+  public async assertStructureWithinPerimeter(
+    targetStructureUuid: string,
+    perimetre: { isAdmin?: boolean; allowedRootUuids?: (string | null | undefined)[] },
+  ): Promise<void> {
+    if (perimetre?.isAdmin === true) return;
+    await this.assertTargetWithinPerimeter(
+      targetStructureUuid,
+      perimetre?.allowedRootUuids ?? [],
+    );
+  }
+
   private async assertTargetWithinPerimeter(
     targetStructureUuid: string,
     allowedRootUuids: (string | null | undefined)[],

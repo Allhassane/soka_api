@@ -38,11 +38,13 @@ import { CreateActivityCommitteeDto, UpdateActivityCommitteeDto } from './dto/cr
 import { CreateActivityCommitteeMemberDto, UpdateActivityCommitteeMemberDto } from './dto/create-activity-committee-member.dto';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 import { ActivityParticipantRole } from './entities/activity-participant.entity';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
 @ApiTags('Activites')
 @Controller('activities')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ActivityController {
   constructor(
     private readonly activityService: ActivityService,
@@ -59,6 +61,7 @@ export class ActivityController {
   // ============================================================
 
   @Get()
+  @RequirePermissions('activites_voir')
   @ApiOperation({
     summary: 'Liste filtrable et paginee des activites',
     description:
@@ -71,6 +74,7 @@ export class ActivityController {
   }
 
   @Post()
+  @RequirePermissions('activites_creer')
   @ApiOperation({
     summary: 'Creer une activite avec organigramme et criteres de ciblage',
   })
@@ -84,6 +88,7 @@ export class ActivityController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('activites_voir')
   @ApiOperation({ summary: 'Recuperer une activite par UUID (avec participants)' })
   @ApiParam({ name: 'uuid', description: 'UUID de l activite' })
   @ApiResponse({ status: 200, description: 'Activite trouvee.' })
@@ -94,6 +99,7 @@ export class ActivityController {
   }
 
   @Put(':uuid')
+  @RequirePermissions('activites_modifier')
   @ApiOperation({ summary: 'Modifier une activite' })
   @ApiParam({ name: 'uuid' })
   @ApiBody({ type: UpdateActivityDto })
@@ -106,6 +112,7 @@ export class ActivityController {
   }
 
   @Put(':uuid/status')
+  @RequirePermissions('activites_modifier')
   @ApiOperation({ summary: 'Changer le statut d une activite' })
   @ApiParam({ name: 'uuid' })
   @ApiBody({
@@ -124,6 +131,7 @@ export class ActivityController {
   }
 
   @Delete(':uuid')
+  @RequirePermissions('activites_supprimer')
   @ApiOperation({ summary: 'Supprimer une activite (soft delete)' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Activite supprimee avec succes.' })
@@ -138,6 +146,7 @@ export class ActivityController {
   // ============================================================
 
   @Post(':uuid/targets/preview')
+  @RequirePermissions('activites_creer')
   @ApiOperation({
     summary: 'Previsualiser les cibles selon les criteres de l activite',
     description:
@@ -153,6 +162,7 @@ export class ActivityController {
   }
 
   @Post('targets/preview')
+  @RequirePermissions('activites_creer')
   @ApiOperation({
     summary: 'Previsualiser des cibles ad hoc (sans activite existante)',
     description: 'Utile au formulaire de creation pour montrer le nombre de cibles en temps reel.',
@@ -165,6 +175,7 @@ export class ActivityController {
   }
 
   @Post(':uuid/participants/auto-assign')
+  @RequirePermissions('activites_creer')
   @ApiOperation({
     summary: 'Auto-assigner les membres cibles comme participants. Idempotent.',
     description: 'Sautent silencieusement les membres deja inscrits. Body optionnel pour overrider.',
@@ -200,6 +211,7 @@ export class ActivityController {
   // ============================================================
 
   @Get(':uuid/participants')
+  @RequirePermissions('activites_voir')
   @ApiOperation({ summary: 'Liste des participants d une activite' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Liste des participants.' })
@@ -210,6 +222,7 @@ export class ActivityController {
   }
 
   @Post(':uuid/participants')
+  @RequirePermissions('activites_creer')
   @ApiOperation({ summary: 'Assigner des membres comme participants (bulk)' })
   @ApiParam({ name: 'uuid' })
   @ApiBody({ type: AssignParticipantsDto })
@@ -226,6 +239,7 @@ export class ActivityController {
   }
 
   @Put('participants/:participant_uuid/role')
+  @RequirePermissions('activites_modifier')
   @ApiOperation({ summary: 'Changer le role d un participant' })
   @ApiParam({ name: 'participant_uuid' })
   @ApiBody({
@@ -248,6 +262,7 @@ export class ActivityController {
   }
 
   @Delete('participants/:participant_uuid')
+  @RequirePermissions('activites_supprimer')
   @ApiOperation({ summary: 'Retirer un participant (soft delete)' })
   @ApiParam({ name: 'participant_uuid' })
   @ApiResponse({ status: 200, description: 'Participant retire.' })
@@ -262,6 +277,7 @@ export class ActivityController {
   // ============================================================
 
   @Get(':uuid/attendance')
+  @RequirePermissions('activites_voir')
   @ApiOperation({
     summary: 'Feuille de presence (participants x pointage fusionnes)',
     description: 'Inclut les inscrits non encore pointes (present=false, arrived_at=null).',
@@ -275,6 +291,7 @@ export class ActivityController {
   }
 
   @Post(':uuid/attendance')
+  @RequirePermissions('activites_creer')
   @ApiOperation({ summary: 'Marquer la presence d un membre' })
   @ApiParam({ name: 'uuid' })
   @ApiBody({ type: MarkAttendanceDto })
@@ -291,6 +308,7 @@ export class ActivityController {
   }
 
   @Post(':uuid/attendance/bulk')
+  @RequirePermissions('activites_creer')
   @ApiOperation({ summary: 'Marquer la presence en masse (bulk)' })
   @ApiParam({ name: 'uuid' })
   @ApiBody({ type: BulkMarkAttendanceDto })
@@ -311,6 +329,7 @@ export class ActivityController {
   // ============================================================
 
   @Get(':uuid/stats')
+  @RequirePermissions('activites_voir')
   @ApiOperation({
     summary: 'Statistiques d une activite',
     description: 'Taux de presence global, par structure, par role.',
@@ -324,6 +343,7 @@ export class ActivityController {
   }
 
   @Get('stats/dashboard')
+  @RequirePermissions('activites_voir')
   @ApiOperation({
     summary: 'Dashboard activites du perimetre du responsable',
     description: 'Si structure_uuid fourni, restreint au sous-arbre via findByAllChildrens.',
@@ -345,6 +365,7 @@ export class ActivityController {
   // ============================================================
 
   @Get(':uuid/quotas')
+  @RequirePermissions('activites_voir')
   @ApiOperation({ summary: 'Liste des quotas par structure pour une activité' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Liste des quotas.' })
@@ -355,6 +376,7 @@ export class ActivityController {
   }
 
   @Get(':uuid/quotas/summary')
+  @RequirePermissions('activites_voir')
   @ApiOperation({ summary: 'Récapitulatif des quotas alloués/utilisés pour une activité' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Récapitulatif des quotas.' })
@@ -365,6 +387,7 @@ export class ActivityController {
   }
 
   @Post(':uuid/quotas')
+  @RequirePermissions('activites_creer')
   @ApiOperation({ summary: 'Créer un quota pour une structure dans une activité' })
   @ApiParam({ name: 'uuid' })
   @ApiBody({ type: CreateActivityQuotaDto })
@@ -382,6 +405,7 @@ export class ActivityController {
   }
 
   @Put('quotas/:quota_uuid')
+  @RequirePermissions('activites_modifier')
   @ApiOperation({ summary: 'Modifier un quota' })
   @ApiParam({ name: 'quota_uuid' })
   @ApiBody({ type: UpdateActivityQuotaDto })
@@ -398,6 +422,7 @@ export class ActivityController {
   }
 
   @Delete('quotas/:quota_uuid')
+  @RequirePermissions('activites_supprimer')
   @ApiOperation({ summary: 'Supprimer un quota (soft delete)' })
   @ApiParam({ name: 'quota_uuid' })
   @ApiResponse({ status: 200, description: 'Quota supprimé.' })
@@ -412,6 +437,7 @@ export class ActivityController {
   // ============================================================
 
   @Get(':uuid/committees')
+  @RequirePermissions('activites_voir')
   @ApiOperation({ summary: "Liste des comités d'organisation d'une activité" })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Liste des comités.' })
@@ -422,6 +448,7 @@ export class ActivityController {
   }
 
   @Post(':uuid/committees')
+  @RequirePermissions('activites_creer')
   @ApiOperation({ summary: "Créer un comité d'organisation pour une activité" })
   @ApiParam({ name: 'uuid' })
   @ApiBody({ type: CreateActivityCommitteeDto })
@@ -438,6 +465,7 @@ export class ActivityController {
   }
 
   @Get('committees/:committee_uuid')
+  @RequirePermissions('activites_voir')
   @ApiOperation({ summary: "Récupérer un comité par UUID (avec ses membres)" })
   @ApiParam({ name: 'committee_uuid' })
   @ApiResponse({ status: 200, description: 'Comité trouvé.' })
@@ -448,6 +476,7 @@ export class ActivityController {
   }
 
   @Put('committees/:committee_uuid')
+  @RequirePermissions('activites_modifier')
   @ApiOperation({ summary: "Modifier un comité d'organisation" })
   @ApiParam({ name: 'committee_uuid' })
   @ApiBody({ type: UpdateActivityCommitteeDto })
@@ -463,6 +492,7 @@ export class ActivityController {
   }
 
   @Delete('committees/:committee_uuid')
+  @RequirePermissions('activites_supprimer')
   @ApiOperation({ summary: "Supprimer un comité (soft delete)" })
   @ApiParam({ name: 'committee_uuid' })
   @ApiResponse({ status: 200, description: 'Comité supprimé.' })
@@ -475,6 +505,7 @@ export class ActivityController {
   // ---- Membres des comités ----
 
   @Get('committees/:committee_uuid/members')
+  @RequirePermissions('activites_voir')
   @ApiOperation({ summary: 'Liste des membres d\'un comité' })
   @ApiParam({ name: 'committee_uuid' })
   @ApiResponse({ status: 200, description: 'Liste des membres.' })
@@ -485,6 +516,7 @@ export class ActivityController {
   }
 
   @Post('committees/:committee_uuid/members')
+  @RequirePermissions('activites_creer')
   @ApiOperation({ summary: 'Ajouter un membre à un comité' })
   @ApiParam({ name: 'committee_uuid' })
   @ApiBody({ type: CreateActivityCommitteeMemberDto })
@@ -502,6 +534,7 @@ export class ActivityController {
   }
 
   @Put('committees/members/:member_uuid')
+  @RequirePermissions('activites_modifier')
   @ApiOperation({ summary: 'Modifier le rôle ou la commission d\'un membre du comité' })
   @ApiParam({ name: 'member_uuid' })
   @ApiBody({ type: UpdateActivityCommitteeMemberDto })
@@ -517,6 +550,7 @@ export class ActivityController {
   }
 
   @Delete('committees/members/:member_uuid')
+  @RequirePermissions('activites_supprimer')
   @ApiOperation({ summary: 'Retirer un membre d\'un comité (soft delete)' })
   @ApiParam({ name: 'member_uuid' })
   @ApiResponse({ status: 200, description: 'Membre retiré du comité.' })

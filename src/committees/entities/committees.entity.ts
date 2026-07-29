@@ -41,10 +41,10 @@ export class CommitteesEntity extends DateTimeEntity {
    * à la création côté DTO, nullable en base car les comités antérieurs n'ont pas pu être remplis.
    *
    * Pas de relation `@ManyToOne` vers `Role` : le rôle est résolu par une requête séparée et
-   * batchée dans `CommitteeService.loadRefs()` (« pattern B » du projet — liaison par uuid,
+   * batchée dans `CommitteeService.loadRefs()` (« pattern B » du projet - liaison par uuid,
    * jointure à la main), ce qui évite un N+1 sur la liste des comités.
    * (Note : une jointure SQL `committees` × `roles` serait parfaitement valide malgré les
-   * collations différentes — MySQL convertit latin1 vers utf8mb4. Cf. gotcha « Collations »
+   * collations différentes - MySQL convertit latin1 vers utf8mb4. Cf. gotcha « Collations »
    * dans `CLAUDE.md`.)
    */
   @Column({ type: 'char', length: 36, nullable: true })

@@ -33,6 +33,7 @@ export class CommitteeController {
   constructor(private readonly committeeService: CommitteeService) {}
 
   @Get()
+  @RequirePermissions('comites_voir')
   @ApiOperation({ summary: 'Liste tous les comités' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
@@ -41,6 +42,7 @@ export class CommitteeController {
   }
 
   @Post()
+  @RequirePermissions('comites_creer')
   @ApiOperation({ summary: 'Créer un nouveau comité' })
   @ApiResponse({ status: 200, description: 'Comité créé avec succès.' })
   @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
@@ -51,18 +53,21 @@ export class CommitteeController {
   // --- Routes statiques AVANT les routes paramétrées (:uuid) ---
 
   @Get('mine')
+  @RequirePermissions('comites_voir')
   @ApiOperation({ summary: 'Comités dont je suis responsable' })
   findMine(@Request() req) {
     return this.committeeService.findMine(req.user);
   }
 
   @Get('by-member/:memberUuid')
+  @RequirePermissions('comites_voir')
   @ApiOperation({ summary: "Comités auxquels un membre est rattaché" })
   findByMember(@Param('memberUuid') memberUuid: string, @Request() req) {
     return this.committeeService.findByMember(memberUuid, req.user.uuid as string);
   }
 
   @Get(':uuid')
+  @RequirePermissions('comites_voir')
   @ApiOperation({ summary: 'Récupérer un comité par UUID' })
   @ApiResponse({ status: 200, description: 'Comité trouvé.' })
   @ApiResponse({ status: 400, description: 'Comité non trouvé.' })
@@ -72,6 +77,7 @@ export class CommitteeController {
   }
 
   @Put(':uuid')
+  @RequirePermissions('comites_modifier')
   @ApiOperation({ summary: 'Modifier un comité' })
   @ApiResponse({ status: 200, description: 'Comité modifié avec succès.' })
   @ApiResponse({ status: 400, description: 'Champs invalides ou manquants.' })
@@ -84,6 +90,7 @@ export class CommitteeController {
   }
 
   @Delete(':uuid')
+  @RequirePermissions('comites_supprimer')
   @ApiOperation({ summary: 'Supprimer un comité' })
   @ApiResponse({ status: 200, description: 'Comité supprimé avec succès.' })
   @ApiResponse({ status: 400, description: 'Comité introuvable.' })
@@ -95,6 +102,7 @@ export class CommitteeController {
   // --- Responsable ---
 
   @Patch(':uuid/responsible')
+  @RequirePermissions('comites_modifier')
   @ApiOperation({ summary: 'Désigner / retirer le responsable d’un comité' })
   assignResponsible(
     @Param('uuid') uuid: string,
@@ -111,9 +119,15 @@ export class CommitteeController {
   // --- Membres du comité ---
 
   @Get(':uuid/members')
+  @RequirePermissions('comites_voir')
   @ApiOperation({ summary: 'Lister les membres d’un comité' })
+  @ApiResponse({ status: 403, description: 'Permission manquante.' })
   listMembers(@Param('uuid') uuid: string, @Request() req) {
-    return this.committeeService.listMembers(uuid, req.user.uuid as string);
+    // ⚠️ Cette route renvoie des données personnelles (téléphone, WhatsApp, e-mail, matricule).
+    // Elle était la SEULE route `/comite` sans permission : un compte à zéro droit comité
+    // lisait la composition de n'importe quel comité, y compris hors de son périmètre.
+    // Le service filtre en plus les membres sur le périmètre de l'appelant.
+    return this.committeeService.listMembers(uuid, req.user);
   }
 
   @Post(':uuid/members')

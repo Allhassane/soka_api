@@ -1,3 +1,4 @@
+import { AccessScopeService } from 'src/access-scope/access-scope.service';
 import {
   Injectable,
   NotFoundException,
@@ -105,6 +106,9 @@ export class MemberService {
 
     /** Règle d'ancre R8 - partagée avec le workflow de transfert (`docs/TRANSFERT-MEMBRES.md` §5). */
     private readonly anchorService: ResponsibilityAnchorService,
+
+    /** Périmètre unifié (responsabilités + comités) - cf. `getAccessibleStructureUuids`. */
+    private readonly accessScopeService: AccessScopeService,
 
   ) {}
 
@@ -362,6 +366,24 @@ export class MemberService {
     if (!existingMember) throw new NotFoundException('Membre introuvable.');
 
     await this.assertStructureInScope(existingMember.structure_uuid, admin_uuid);
+
+    /**
+     * ⚠️ La structure de DESTINATION doit elle aussi être dans le périmètre du demandeur.
+     *
+     * Sans ce contrôle, seule la source était validée : un utilisateur pouvait se déplacer
+     * lui-même (ou déplacer un membre de son périmètre) vers **n'importe quelle** structure,
+     * et donc s'attribuer un périmètre plus large à la connexion suivante - le périmètre étant
+     * dérivé de la structure du membre. La garde R1 ci-dessous ne rattrapait pas le cas :
+     * elle exige `fromDistrict && toDistrict`, or `resolveDistrict` renvoie `null` pour une
+     * destination située AU-DESSUS du district (NATIONAL / REGION / CENTRE / CHAPITRE) -
+     * exactement les destinations qui élargissent le périmètre.
+     */
+    if (
+      dto.structure_uuid &&
+      dto.structure_uuid !== existingMember.structure_uuid
+    ) {
+      await this.assertStructureInScope(dto.structure_uuid, admin_uuid);
+    }
 
     /**
      * ── Changement de structure : frontière de district + règle d'ancre R8 ──
@@ -798,45 +820,22 @@ async findAll(
     if (user.is_admin === true) return null;
     if (!user.member_uuid) return [];
 
-    const responsibilities = await this.memberResponsibilityRepo.find({
-      where: { member_uuid: user.member_uuid },
-      relations: ['member', 'responsibility'],
+    // Périmètre unifié : `AccessScopeService` prend le niveau le plus élevé atteint par une
+    // responsabilité OU par un comité, et remonte les ancêtres du membre jusqu'à ce niveau.
+    // ⚠️ UNE seule racine suffit : tous les paliers accessibles appartiennent à la même chaîne
+    // d'ancêtres, donc le sous-arbre du plus haut contient ceux de tous les autres. C'est ce qui
+    // remplace l'ancienne boucle sur chaque responsabilité (qui, elle, ignorait les comités).
+    const scope = await this.accessScopeService.compute({
+      uuid: user.uuid,
+      member_uuid: user.member_uuid,
+      is_admin: user.is_admin,
     });
 
-    // Sans responsabilité, on ne couvre que sa propre structure et ses descendants.
-    if (responsibilities.length === 0) {
-      const self = await this.memberRepo.findOne({
-        where: { uuid: user.member_uuid },
-        select: ['uuid', 'structure_uuid'],
-      });
-      return self?.structure_uuid
-        ? this.structureTreeService.getAllSubStructureUuids(self.structure_uuid)
-        : [];
-    }
+    if (!scope.scope_structure_uuid) return [];
 
-    // Une seule lecture de l'arbre, réutilisée pour toutes les responsabilités.
-    const index = await this.anchorService.loadStructureIndex();
-
-    const roots = new Set<string>();
-    for (const mr of responsibilities) {
-      const residence = mr.member?.structure_uuid;
-      if (!residence) continue;
-
-      // `level_uuid` NULL (anomalie connue sur certaines responsabilités) ⇒ ancre indéterminée :
-      // on retombe sur la structure de résidence plutôt que d'ouvrir tout l'arbre.
-      const anchor = ancestorAtLevel(index, residence, mr.responsibility?.level_uuid);
-      roots.add(anchor ?? residence);
-    }
-
-    if (roots.size === 0) return [];
-
-    const accessible = new Set<string>();
-    for (const root of roots) {
-      const subtree = await this.structureTreeService.getAllSubStructureUuids(root);
-      subtree.forEach((uuid) => accessible.add(uuid));
-    }
-
-    return [...accessible];
+    return this.structureTreeService.getAllSubStructureUuids(
+      scope.scope_structure_uuid,
+    );
   }
 
   /** Vérifie qu'une structure est dans le périmètre du demandeur (sinon 403). */

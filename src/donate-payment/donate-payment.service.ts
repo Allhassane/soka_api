@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { DonatePaymentEntity } from './entities/donate-payment.entity';
 import { InjectRepository } from '@nestjs/typeorm';
+import { AccessScopeService } from 'src/access-scope/access-scope.service';
 import { ILike, Repository } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
 import { LogActivitiesService } from 'src/log-activities/log-activities.service';
@@ -43,6 +44,9 @@ export class DonatePaymentService {
 
     private readonly paymentService: PaymentService,
     private readonly hubService: HubService,
+
+    /** Périmètre hiérarchique du demandeur (service @Global). */
+    private readonly accessScopeService: AccessScopeService,
   ) { }
 
   // ============================================================
@@ -208,12 +212,40 @@ export class DonatePaymentService {
         ]
       : {};
 
-    const [items, total] = await this.donateRepo.findAndCount({
-      where,
-      order: { created_at: 'DESC' },
-      skip,
-      take,
-    });
+    /**
+     * ⚠️ Périmètre. Cette liste expose `beneficiary_uuid` / `beneficiary_name` et
+     * `actor_uuid` / `actor_name` : sans filtre, tout détenteur de `dons_paiements_voir`
+     * lisait qui donne quoi dans l'organisation entière.
+     */
+    const autorisees =
+      await this.accessScopeService.structuresAutorisees(admin_uuid);
+
+    if (autorisees !== null && autorisees.size === 0) {
+      return { total: 0, page: Number(page), limit: take, data: [], search: search || null };
+    }
+
+    const qb = this.donateRepo
+      .createQueryBuilder('dp')
+      .orderBy('dp.created_at', 'DESC')
+      .skip(skip)
+      .take(take);
+
+    if (search && search.trim() !== '') {
+      qb.andWhere(
+        '(dp.actor_name LIKE :recherche OR dp.beneficiary_name LIKE :recherche)',
+        { recherche: `%${search.trim()}%` },
+      );
+    }
+
+    if (autorisees !== null) {
+      // Sous-requête : aucune relation ORM vers `members` (« pattern B », liaison par uuid).
+      qb.andWhere(
+        'dp.beneficiary_uuid IN (SELECT m.uuid FROM members m WHERE m.structure_uuid IN (:...structures))',
+        { structures: [...autorisees] },
+      );
+    }
+
+    const [items, total] = await qb.getManyAndCount();
 
     return {
       total,

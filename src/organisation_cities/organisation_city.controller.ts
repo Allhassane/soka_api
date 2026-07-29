@@ -4,15 +4,18 @@ import { OrganisationCityService } from './organisation_city.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateOrganisationCityDto } from './dto/create-organisation_city.dto';
 import { UpdateOrganisationCityDto } from './dto/update-organisation_city.dto';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
 @ApiTags('Organisation cities')
 @Controller('organisation-city')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class OrganisationCityController {
   constructor(private readonly organisationCityService: OrganisationCityService) {}
 
   @Get()
+  @RequirePermissions('villes_organisation_voir')
   @ApiOperation({ summary: 'Liste toutes les villes ' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
@@ -21,6 +24,7 @@ export class OrganisationCityController {
   }
 
   @Post()
+  @RequirePermissions('villes_organisation_creer')
   @ApiOperation({ summary: 'Créer une ville ' })
   @ApiResponse({ status: 200, description: 'ville créé avec succès.' })
   @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
@@ -29,6 +33,7 @@ export class OrganisationCityController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('villes_organisation_voir')
   @ApiOperation({ summary: 'Récupérer une ville par UUID' })
   @ApiResponse({ status: 200, description: 'ville trouvé.' })
   @ApiResponse({ status: 400, description: 'ville non trouvé.' })
@@ -38,6 +43,7 @@ export class OrganisationCityController {
   }
 
  @Put(':uuid')
+ @RequirePermissions('villes_organisation_modifier')
  @ApiOperation({ summary: 'Modifier une ville' })
  @ApiResponse({ status: 200, description: 'Ville modifiée avec succès.' })
  @ApiResponse({ status: 400, description: 'Champs invalides ou manquants.' })
@@ -51,6 +57,7 @@ export class OrganisationCityController {
 
 
   @Delete(':uuid')
+  @RequirePermissions('villes_organisation_supprimer')
   @ApiOperation({ summary: 'Supprimer une ville' })
   @ApiResponse({ status: 200, description: 'ville supprimé avec succès.' })
   @ApiResponse({ status: 400, description: 'ville introuvable.' })

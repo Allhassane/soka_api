@@ -16,6 +16,8 @@ import { DonatePaymentService } from './donate-payment.service';
 import { MakeDonationPaymentDto } from '../donate-payment/dto/make-donation-payment';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 import { Public } from 'src/shared/decorators/public.decorator';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiTags('Paiement de don')
 
@@ -25,8 +27,9 @@ export class DonatePaymentController {
 
 
   @Post()
+  @RequirePermissions('dons_paiements_creer')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiOperation({ summary: 'Initier un paiement de don + redirection CinetPay' })
   @ApiResponse({ status: 201, description: 'Paiement créé avec succès' })
   @ApiResponse({ status: 400, description: 'Données invalides' })
@@ -36,8 +39,9 @@ export class DonatePaymentController {
 
 
   @Get()
+  @RequirePermissions('dons_paiements_voir')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiOperation({ summary: 'Liste paginée des paiements d’abonnements' })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 20 })
@@ -58,8 +62,9 @@ export class DonatePaymentController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('dons_paiements_voir')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiOperation({ summary: 'Récupérer un paiement de don par UUID' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Détail du don' })
@@ -69,8 +74,9 @@ export class DonatePaymentController {
 
 
   @Put(':uuid')
+  @RequirePermissions('dons_paiements_modifier')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiOperation({ summary: 'Modifier un paiement de don' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Données modifiées avec succès' })
@@ -84,8 +90,9 @@ export class DonatePaymentController {
 
 
   @Put(':uuid/status')
+  @RequirePermissions('dons_paiements_modifier')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiOperation({ summary: 'Changer le statut du paiement de don' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Statut modifié' })
@@ -100,6 +107,8 @@ export class DonatePaymentController {
 
   @Public()
   @Post('hub/check/status/:transaction_id')
+  // Pas de @RequirePermissions : route @Public() (webhook du prestataire, authentifié
+  // par signature). Le décorateur y était inopérant et laissait croire à un contrôle.
   @ApiOperation({ summary: 'Vérifier le statut d’un paiement Hub' })
   @ApiResponse({ status: 200, description: 'Statut du paiement vérifié' })
   async hubCheckStatus(@Param('transaction_id') transaction_id: string) {
@@ -111,6 +120,8 @@ export class DonatePaymentController {
 
   @Public()
   @Post('cinetpay/check/status/:transaction_id')
+  // Pas de @RequirePermissions : route @Public() (webhook du prestataire, authentifié
+  // par signature). Le décorateur y était inopérant et laissait croire à un contrôle.
   @ApiOperation({ summary: 'Vérifier le statut d’un paiement CinetPay' })
   @ApiResponse({ status: 200, description: 'Statut du paiement vérifié' })
   async cinetPayCheckStatus(
@@ -125,8 +136,9 @@ export class DonatePaymentController {
 
 
   @Delete(':uuid')
+  @RequirePermissions('dons_paiements_supprimer')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiOperation({ summary: 'Supprimer un paiement de don' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Supprimé avec succès' })

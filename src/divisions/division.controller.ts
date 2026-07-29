@@ -4,15 +4,18 @@ import { DivisionService } from './division.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateDivisionDto } from './dto/create-division.dto';
 import { UpdateDivisionDto } from './dto/update-division.dto';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
 @ApiTags('Division')
 @Controller('division')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class DivisionController {
   constructor(private readonly divisionService: DivisionService) {}
 
   @Get()
+  @RequirePermissions('divisions_voir')
   @ApiOperation({ summary: 'Liste toutes les divisions' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
@@ -21,6 +24,7 @@ export class DivisionController {
   }
 
   @Post()
+  @RequirePermissions('divisions_creer')
   @ApiOperation({ summary: 'Créer un nouveau division' })
   @ApiResponse({ status: 200, description: 'Division créé avec succès.' })
   @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
@@ -29,6 +33,7 @@ export class DivisionController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('divisions_voir')
   @ApiOperation({ summary: 'Récupérer un division par UUID' })
   @ApiResponse({ status: 200, description: 'Division trouvé.' })
   @ApiResponse({ status: 400, description: 'Division non trouvé.' })
@@ -39,6 +44,7 @@ export class DivisionController {
 
 
   @Get('find-by/:department_uuid/gender/:gender')
+  @RequirePermissions('divisions_voir')
   @ApiOperation({ summary: 'Récupérer une division par uuid du niveau' })
   @ApiResponse({ status: 200, description: 'Division trouvé.' })
   @ApiResponse({ status: 400, description: 'Division non trouvé.' })
@@ -58,6 +64,7 @@ export class DivisionController {
   }
 
  @Put(':uuid')
+ @RequirePermissions('divisions_modifier')
  @ApiOperation({ summary: 'Modifier un division' })
  @ApiResponse({ status: 200, description: 'Division modifié avec succès.' })
  @ApiResponse({ status: 400, description: 'Champs invalides ou manquants.' })
@@ -71,6 +78,7 @@ export class DivisionController {
 
 
   @Delete(':uuid')
+  @RequirePermissions('divisions_supprimer')
   @ApiOperation({ summary: 'Supprimer une division' })
   @ApiResponse({ status: 200, description: 'Division supprimé avec succès.' })
   @ApiResponse({ status: 400, description: 'Division introuvable.' })

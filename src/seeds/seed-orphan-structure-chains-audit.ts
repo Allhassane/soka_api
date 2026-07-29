@@ -9,13 +9,13 @@ import { LevelEntity } from '../level/entities/level.entity';
 import { User } from '../users/entities/user.entity';
 
 /**
- * AUDIT — Chaînes de structure incomplètes (LECTURE SEULE).
+ * AUDIT - Chaînes de structure incomplètes (LECTURE SEULE).
  *
  * On extrait tous les membres dont l'ARBRE de structure ne remonte PAS jusqu'au
  * niveau NATIONAL. Concrètement, en partant de `member.structure_uuid` et en
  * remontant via `parent_uuid` (comme le CTE de l'auth), la chaîne doit atteindre
  * une structure de niveau NATIONAL (order minimal). Si elle s'arrête avant
- * (parent nul, parent introuvable, cycle), l'arbre est « cassé » — c'est ce qui
+ * (parent nul, parent introuvable, cycle), l'arbre est « cassé » - c'est ce qui
  * empêche ensuite certaines responsabilités de résoudre leur structure.
  *
  * Pour chaque membre concerné : matricule, nom, numéro de connexion (téléphone du
@@ -229,7 +229,7 @@ async function run() {
         if (mu && ph) loginByMember.set(mu, ph);
       }
     }
-    const loginOf = (r: Row) => loginByMember.get(r.member_uuid) || r.phone || '—';
+    const loginOf = (r: Row) => loginByMember.get(r.member_uuid) || r.phone || '-';
 
     // ---- Rapport ----
     console.log('\n===== AUDIT CHAÎNES DE STRUCTURE (n\'atteignant pas le NATIONAL) =====');
@@ -251,7 +251,7 @@ async function run() {
     const preview = rows.filter((r) => r.type === 'chaine_incomplete').slice(0, 25);
     for (const r of preview) {
       console.log(
-        `• ${(r.matricule || '—').padEnd(9)} ${r.nom.padEnd(24).slice(0, 24)} | login ${loginOf(r).padEnd(12)} | ${r.chaine}  ✗ ${r.raison}`,
+        `• ${(r.matricule || '-').padEnd(9)} ${r.nom.padEnd(24).slice(0, 24)} | login ${loginOf(r).padEnd(12)} | ${r.chaine}  ✗ ${r.raison}`,
       );
     }
     if (incomplete > 25) console.log(`… +${incomplete - 25} membres (voir CSV).`);
@@ -277,7 +277,7 @@ async function run() {
     const csvPath = path.resolve(__dirname, '../../orphan-structure-chains.csv');
     fs.writeFileSync(csvPath, BOM + [header, ...csvRows].join('\n'), 'utf8');
     console.log(`\n[audit] Détail exporté -> ${csvPath}`);
-    console.log('[audit] (lecture seule — aucune écriture en base)');
+    console.log('[audit] (lecture seule - aucune écriture en base)');
   } finally {
     await AppDataSource.destroy();
   }

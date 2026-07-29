@@ -9,6 +9,7 @@ import { Request } from 'express';
 import { IS_PUBLIC_KEY } from 'src/shared/decorators/public.decorator';
 import { REQUIRE_PERMISSIONS_KEY } from '../decorators/require-permissions.decorator';
 import { JwtPayload } from '../interfaces/auth.interface';
+import { EffectivePermissionsService } from 'src/access-scope/effective-permissions.service';
 
 /**
  * Contrôle d'autorisation par permission (slug).
@@ -21,9 +22,12 @@ import { JwtPayload } from '../interfaces/auth.interface';
  */
 @Injectable()
 export class PermissionsGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector) {}
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly effectivePermissions: EffectivePermissionsService,
+  ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
@@ -46,10 +50,14 @@ export class PermissionsGuard implements CanActivate {
     // Le superadmin technique (compte bootstrap) contourne le contrôle de permissions.
     if (user.is_admin === true) return true;
 
-    const userPermissions = Array.isArray(user.permissions)
-      ? user.permissions
-      : [];
-    const hasPermission = required.some((p) => userPermissions.includes(p));
+    // Les droits ne voyagent PLUS dans le JWT : ils sont résolus depuis la base, avec un cache
+    // court par utilisateur. Voir `EffectivePermissionsService` pour le pourquoi (plafond de
+    // 4 096 o du cookie de session, et droits qui restaient figés jusqu'à la reconnexion).
+    const userPermissions = await this.effectivePermissions.slugsFor({
+      uuid: user.uuid,
+      member_uuid: user.member_uuid,
+    });
+    const hasPermission = required.some((p) => userPermissions.has(p));
 
     if (!hasPermission) {
       throw new ForbiddenException(

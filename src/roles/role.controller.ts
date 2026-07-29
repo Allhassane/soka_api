@@ -49,6 +49,7 @@ export class RoleController {
   }
 
   @Get()
+  @RequirePermissions('roles_voir_le_module_role')
   @SuccessMessage('Liste des rôles récupérés')
   @ApiOperation({
     summary: 'Liste des rôles (filtre `status` optionnel ; chaque item porte `is_system`)',
@@ -74,6 +75,7 @@ export class RoleController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('roles_voir_le_module_role')
   @SuccessMessage('Détails du rôle récupérés')
   @ApiOperation({ summary: 'Trouver un rôle par UUID' })
   findOne(@Param('uuid') uuid: string): Promise<Role> {
@@ -107,6 +109,7 @@ export class RoleController {
   }
 
   @Get('levels/:uuid')
+  @RequirePermissions('roles_voir_le_module_role')
   @SuccessMessage('Niveaux liés au rôle récupérés')
   @ApiOperation({ summary: 'Lister les niveaux liés à un rôle via son UUID' })
   findLevelsByRole(
@@ -116,6 +119,7 @@ export class RoleController {
   }
 
   @Get(':uuid/permissions')
+  @RequirePermissions('roles_voir_le_module_role')
   @ApiParam({ name: 'uuid', description: 'UUID du rôle' })
   @ApiResponse({ status: 200, description: 'Permissions récupérées avec succès' })
   async findAllPermissions(@Param('uuid') uuid: string) {
@@ -123,6 +127,7 @@ export class RoleController {
   }
 
   @Get(':uuid/global-permissions')
+  @RequirePermissions('roles_voir_le_module_role')
   @ApiParam({ name: 'uuid', description: 'UUID du rôle' })
   @ApiOperation({ summary: 'Recupérer toutes les permissions du role' })
   @ApiResponse({ status: 200, description: 'Permissions récupérées avec succès' })

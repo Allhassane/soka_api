@@ -24,6 +24,7 @@ import { StructureModule } from './structure/structure.module';
 import { MemberResponsibilityModule } from './member-responsibility/member-responsibility.module';
 import { UserRole } from './user-roles/entities/user-roles.entity';
 import { UserRoleModule } from './user-roles/user-roles.module';
+import { AccessScopeModule } from './access-scope/access-scope.module';
 import { AccessoryModule } from './accessories/accessory.module';
 import { MemberAccessoryModule } from './member-accessories/member-accessories.module';
 import { MemberModule } from './members/member.module';
@@ -100,6 +101,7 @@ import { SokaPayModule } from './sokapay/sokapay.module';
     AuthModule,
     UserRole,
     UserRoleModule,
+    AccessScopeModule,
     LogActivitiesModule,
     ModuleModule,
     PermissionModule,

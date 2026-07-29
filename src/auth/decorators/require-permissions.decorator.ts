@@ -10,7 +10,7 @@ export const REQUIRE_PERMISSIONS_KEY = 'require_permissions';
 
 /**
  * Registre des slugs **réellement contrôlés côté API**, alimenté à l'exécution par le décorateur
- * lui-même (donc toujours exhaustif et jamais à maintenir à la main — y compris quand le slug est
+ * lui-même (donc toujours exhaustif et jamais à maintenir à la main - y compris quand le slug est
  * passé via une constante, ex. `@RequirePermissions(MANAGE_COMMITTEE_MEMBERS)`).
  *
  * À quoi ça sert : seuls ces slugs ont besoin de voyager dans le JWT (c'est la seule chose que lit

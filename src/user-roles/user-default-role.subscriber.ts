@@ -13,7 +13,7 @@ import { UserRoleService } from './user-roles.service';
  *
  * Pourquoi un subscriber plutôt qu'un appel explicite : les utilisateurs sont créés depuis
  * QUATRE endroits (`UserService.create`, `createUserByMigration`, le seed superadmin de
- * `onModuleInit`, et la création d'un membre dans `MemberService` — cette dernière à l'intérieur
+ * `onModuleInit`, et la création d'un membre dans `MemberService` - cette dernière à l'intérieur
  * d'une transaction, via `manager.save`). Un appel explicite à chaque endroit serait oublié au
  * cinquième. Le hook `afterInsert` couvre toutes les voies, présentes et futures, et s'exécute
  * dans la **même transaction** que l'insertion (`event.manager`) : pas d'utilisateur sans rôle,

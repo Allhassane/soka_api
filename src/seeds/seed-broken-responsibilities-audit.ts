@@ -9,7 +9,7 @@ import { LevelEntity } from '../level/entities/level.entity';
 import { User } from '../users/entities/user.entity';
 
 /**
- * AUDIT — Responsabilités « cassées » (LECTURE SEULE).
+ * AUDIT - Responsabilités « cassées » (LECTURE SEULE).
  *
  * Reproduit la logique de l'auth (auth.service : getStructureTreeForResponsible +
  * findStructureByLevelUuid) qui attache une `structure` à chaque responsabilité.
@@ -160,7 +160,7 @@ async function run() {
       const nom = `${(m as unknown as { lastname?: string }).lastname ?? ''} ${(m as unknown as { firstname?: string }).firstname ?? ''}`.trim();
       const matricule = (m as unknown as { matricule?: string }).matricule ?? '';
       const memberPhone = (m as unknown as { phone?: string }).phone ?? '';
-      const login = loginByMember.get(memberUuid) || memberPhone || '—';
+      const login = loginByMember.get(memberUuid) || memberPhone || '-';
       const su = (m as unknown as { structure_uuid?: string | null }).structure_uuid ?? null;
 
       // Cas B : membre sans structure → responsabilités non affichées.
@@ -230,7 +230,7 @@ async function run() {
     const preview = broken.slice(0, 25);
     for (const b of preview) {
       console.log(
-        `• ${(b.matricule || '—').padEnd(9)} ${b.nom.padEnd(26).slice(0, 26)} | login ${b.login.padEnd(12)} | ${b.responsabilite} @ ${b.niveau_cassure}  [${b.type === 'membre_sans_structure' ? 'sans structure membre' : 'niveau hors chaîne'}]`,
+        `• ${(b.matricule || '-').padEnd(9)} ${b.nom.padEnd(26).slice(0, 26)} | login ${b.login.padEnd(12)} | ${b.responsabilite} @ ${b.niveau_cassure}  [${b.type === 'membre_sans_structure' ? 'sans structure membre' : 'niveau hors chaîne'}]`,
       );
     }
     if (broken.length > 25) console.log(`… +${broken.length - 25} lignes (voir CSV).`);
@@ -254,7 +254,7 @@ async function run() {
     const csvPath = path.resolve(__dirname, '../../broken-responsibilities.csv');
     fs.writeFileSync(csvPath, BOM + [header, ...rows].join('\n'), 'utf8');
     console.log(`\n[audit] Détail exporté -> ${csvPath}`);
-    console.log('[audit] (lecture seule — aucune écriture en base)');
+    console.log('[audit] (lecture seule - aucune écriture en base)');
   } finally {
     await AppDataSource.destroy();
   }

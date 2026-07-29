@@ -23,15 +23,18 @@ import { JournalZoneService } from './journal-zone.service';
 import { CreateJournalZoneDto } from './dto/create-journal-zone.dto';
 import { UpdateJournalZoneDto } from './dto/update-journal-zone.dto';
 import { PaginationQueryDto } from 'src/shared/dtos/pagination-query.dto';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
 @ApiTags('Journal - Zones')
 @Controller('journals/zones')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class JournalZoneController {
   constructor(private readonly zoneService: JournalZoneService) {}
 
   @Get()
+  @RequirePermissions('journal_zones_voir')
   @ApiOperation({ summary: 'Liste de toutes les zones de distribution' })
   @ApiResponse({ status: 200, description: 'Retour paginé' })
   @ApiResponse({ status: 401, description: 'Non autorise.' })
@@ -41,6 +44,7 @@ export class JournalZoneController {
   }
 
   @Post()
+  @RequirePermissions('journal_zones_creer')
   @ApiOperation({ summary: 'Creer une zone' })
   @ApiBody({ type: CreateJournalZoneDto })
   @ApiResponse({ status: 201, description: 'Zone creee avec succes.' })
@@ -52,6 +56,7 @@ export class JournalZoneController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('journal_zones_voir')
   @ApiOperation({ summary: 'Recuperer une zone par UUID' })
   @ApiParam({ name: 'uuid', description: 'UUID de la zone' })
   @ApiResponse({ status: 200, description: 'Zone trouvee.' })
@@ -62,6 +67,7 @@ export class JournalZoneController {
   }
 
   @Put(':uuid')
+  @RequirePermissions('journal_zones_modifier')
   @ApiOperation({ summary: 'Modifier une zone' })
   @ApiParam({ name: 'uuid' })
   @ApiBody({ type: UpdateJournalZoneDto })
@@ -78,6 +84,7 @@ export class JournalZoneController {
   }
 
   @Delete(':uuid')
+  @RequirePermissions('journal_zones_supprimer')
   @ApiOperation({ summary: 'Supprimer une zone (soft delete)' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Zone supprimee avec succes.' })

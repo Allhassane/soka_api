@@ -4,15 +4,18 @@ import { DepartmentService } from './department.service';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateDepartmentDto } from './dto/create-department.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
 @ApiTags('Departement')
 @Controller('departement')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class DepartmentController {
   constructor(private readonly departmentService: DepartmentService) {}
 
   @Get()
+  @RequirePermissions('departements_voir')
   @ApiOperation({ summary: 'Liste tous les département' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
@@ -23,6 +26,7 @@ export class DepartmentController {
 
 
     @Get('find-by-gender/:gender')
+    @RequirePermissions('departements_voir')
     @ApiOperation({ summary: 'Récupérer un département par genre' })
     @ApiResponse({ status: 200, description: 'Département trouvé.' })
     @ApiResponse({ status: 400, description: 'Département non trouvé.' })
@@ -39,6 +43,7 @@ export class DepartmentController {
     }
 
   @Post()
+  @RequirePermissions('departements_creer')
   @ApiOperation({ summary: 'Créer un nouveau département' })
   @ApiResponse({ status: 200, description: 'Département créé avec succès.' })
   @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
@@ -47,6 +52,7 @@ export class DepartmentController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('departements_voir')
   @ApiOperation({ summary: 'Récupérer un département par UUID' })
   @ApiResponse({ status: 200, description: 'Département trouvé.' })
   @ApiResponse({ status: 400, description: 'Département non trouvé.' })
@@ -56,6 +62,7 @@ export class DepartmentController {
   }
 
  @Put(':uuid')
+ @RequirePermissions('departements_modifier')
  @ApiOperation({ summary: 'Modifier un département' })
  @ApiResponse({ status: 200, description: 'Département modifié avec succès.' })
  @ApiResponse({ status: 400, description: 'Champs invalides ou manquants.' })
@@ -69,6 +76,7 @@ export class DepartmentController {
 
 
   @Delete(':uuid')
+  @RequirePermissions('departements_supprimer')
   @ApiOperation({ summary: 'Supprimer un département' })
   @ApiResponse({ status: 200, description: 'Département supprimé avec succès.' })
   @ApiResponse({ status: 400, description: 'Département introuvable.' })

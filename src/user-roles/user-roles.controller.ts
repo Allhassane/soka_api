@@ -41,6 +41,7 @@ export class UserRoleController {
   }
 
   @Get()
+  @RequirePermissions('utilisateurs_roles_voir')
   @ApiOperation({
     summary: 'Lister les affectations utilisateurs/rôles paginées',
   })
@@ -51,6 +52,7 @@ export class UserRoleController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('utilisateurs_roles_voir')
   @ApiOperation({ summary: 'Voir une affectation utilisateur/rôle' })
   @ApiParam({ name: 'uuid', description: 'UUID de la liaison user/role' })
   @ApiResponse({ status: 200, type: UserRole })

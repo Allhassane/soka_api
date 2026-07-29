@@ -8,16 +8,19 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { SuccessMessage } from 'src/shared/decorators/success-message.decorator';
 import { AssignPermissionToRoleDto } from './dto/assign-permission-to-role.dto';
 import { RevokePermissionFromRoleDto } from './dto/revoke-permission-from-role.dto';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiTags('Permission')
 
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('permission')
 export class PermissionsController {
   constructor(private readonly permissionsService: PermissionsService) {}
 
   @Post()
+  @RequirePermissions('permissions_creer')
   @ApiOperation({ summary: 'Créer une nouvelle permission' })
   @ApiBody({ type: CreatePermissionsDto })
   @ApiResponse({ status: 201, description: 'Permission créée', type: PermissionEntity })
@@ -26,6 +29,7 @@ export class PermissionsController {
   }
 
   @Get()
+  @RequirePermissions('permissions_voir')
   @ApiOperation({ summary: 'Récupérer toutes les permissions d’un module' })
   @ApiQuery({ name: 'module_uuid', description: 'UUID du module', required: true })
   @ApiResponse({ status: 200, description: 'Liste des permissions', type: [PermissionEntity] })
@@ -34,6 +38,7 @@ export class PermissionsController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('permissions_voir')
   @ApiOperation({ summary: 'Récupérer une permission par UUID' })
   @ApiParam({ name: 'uuid', description: 'UUID de la permission' })
   @ApiResponse({ status: 200, description: 'Permission trouvée', type: PermissionEntity })
@@ -42,6 +47,7 @@ export class PermissionsController {
   }
 
   @Put(':uuid')
+  @RequirePermissions('permissions_modifier')
   @ApiOperation({ summary: 'Mettre à jour une permission' })
   @ApiParam({ name: 'uuid', description: 'UUID de la permission' })
   @ApiBody({ type: UpdatePermissionsDto })
@@ -54,6 +60,7 @@ export class PermissionsController {
   }
 
   @Delete(':uuid')
+  @RequirePermissions('permissions_supprimer')
   @HttpCode(200)
   @ApiOperation({ summary: 'Supprimer une permission' })
   @ApiParam({ name: 'uuid', description: 'UUID de la permission' })
@@ -64,6 +71,7 @@ export class PermissionsController {
 
   
   @Post('assign-to-role')
+  @RequirePermissions('permissions_creer')
   @ApiOperation({ summary: 'Assigner une permission à un rôle' })
   @SuccessMessage('Permission assignée au rôle')
   assignToRole(@Body() dto: AssignPermissionToRoleDto): Promise<void> {
@@ -71,6 +79,7 @@ export class PermissionsController {
   }
 
   @Post('revoke-from-role')
+  @RequirePermissions('permissions_creer')
   @ApiOperation({ summary: 'Retirer une permission d’un rôle' })
   @SuccessMessage('Permission retirée du rôle')
   revokeFromRole(@Body() dto: RevokePermissionFromRoleDto): Promise<void> {
@@ -78,6 +87,7 @@ export class PermissionsController {
   }
 
   @Get('role/:role_uuid')
+  @RequirePermissions('permissions_voir')
   @ApiOperation({ summary: 'Lister les permissions d’un rôle' })
   @SuccessMessage('Permissions du rôle récupérées')
   listForRole(@Param('role_uuid') role_uuid: string): Promise<PermissionEntity[]> {
@@ -85,6 +95,7 @@ export class PermissionsController {
   }
 
   @Get('user/:user_uuid')
+  @RequirePermissions('permissions_voir')
   @ApiOperation({
     summary:
       'Lister les permissions effectives d’un utilisateur (via ses rôles)',

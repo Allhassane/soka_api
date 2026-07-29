@@ -69,6 +69,7 @@ async findAll(
   }
 
   @Get('beneficiary')
+  @RequirePermissions('membres_voir_menu_liste_membres')
   @ApiOperation({ summary: 'Récupérer tous les bénéficiaires en fonction du membre connecté par son UUID' })
   @ApiResponse({ status: 200, description: 'Liste des bénéficiaires récupérée avec succès.' })
   @ApiResponse({ status: 400, description: 'Liste des bénéficiaires non trouvée.' })
@@ -101,6 +102,7 @@ async findAll(
   }
 
   @Post('/verify/phone-number')
+  @RequirePermissions('membres_ajouter_un_membre')
   @ApiOperation({ summary: 'Verifier si le numero de telephone est disponible ' })
   @ApiResponse({ status: 200, description: 'Numero de telephone disponible.' })
   @ApiResponse({ status: 400, description: 'Champs requis manquants.' })

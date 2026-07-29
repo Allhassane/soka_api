@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ENFORCED_PERMISSION_SLUGS } from './decorators/require-permissions.decorator';
+import { AccessScopeService } from 'src/access-scope/access-scope.service';
+import { UserRoleService } from 'src/user-roles/user-roles.service';
 import * as bcrypt from 'bcrypt';
 import { UserService } from '../users/user.service';
 import { User } from '../users/entities/user.entity';
@@ -46,6 +48,12 @@ export class AuthService {
     // 2 appels sendSms() ci-dessous (SmsService reste exporté par SmsModule).
     private readonly smsDispatcher: SmsDispatcher,
 
+    // Calcul unique des rôles ET du périmètre hiérarchique (responsabilités + comités + user_roles).
+    private readonly accessScopeService: AccessScopeService,
+
+    // Convergence du rôle socle (MEMBRE / RESPONSABLE) à chaque connexion.
+    private readonly userRoleService: UserRoleService,
+
   ) {}
 
   async validateUser(
@@ -84,43 +92,6 @@ export class AuthService {
     const { password: _password, ...userWithoutPassword } = user;
     void _password;
     return userWithoutPassword as Omit<User, 'password'>;
-  }
-
-  /**
-   * Rôles hérités des comités du membre : `committee_members` → `committees.role_uuid`.
-   * Un membre peut appartenir à zéro ou plusieurs comités, chaque comité porte au plus un rôle.
-   *
-   * Requête brute (pas de relation ORM entre `committee_members` et `committees`) et jointure
-   * assumée entre une colonne `utf8mb4_unicode_ci` et une colonne `latin1_general_ci` : MySQL 8
-   * convertit latin1 vers utf8mb4, dont le répertoire est un sur-ensemble. (Le « Illegal mix of
-   * collations » déjà rencontré sur ce projet opposait deux collations du MÊME charset —
-   * `utf8mb4_general_ci` vs `utf8mb4_unicode_ci` — ce qui, lui, est irréconciliable.)
-   *
-   * ⚠️ Seuls les comités **et** les rattachements vivants comptent (`deleted_at IS NULL`), et un
-   * comité désactivé n'accorde rien. Le **responsable** d'un comité
-   * (`committees.responsible_member_uuid`) n'est PAS pris en compte ici : il n'hérite que s'il
-   * figure aussi dans `committee_members`.
-   */
-  private async findCommitteeRoleUuids(
-    memberUuid: string | null | undefined,
-  ): Promise<string[]> {
-    if (!memberUuid) return [];
-
-    const rows = await this.memberRepository.manager.query(
-      `SELECT DISTINCT c.role_uuid AS role_uuid
-         FROM committee_members cm
-         INNER JOIN committees c ON c.uuid = cm.committee_uuid
-        WHERE cm.member_uuid = ?
-          AND cm.deleted_at IS NULL
-          AND c.deleted_at IS NULL
-          AND c.role_uuid IS NOT NULL
-          AND COALESCE(c.status, 'enable') <> 'disable'`,
-      [memberUuid],
-    );
-
-    return (rows ?? [])
-      .map((row: any) => row?.role_uuid)
-      .filter((uuid: any): uuid is string => !!uuid);
   }
 
   async login(user: User) {
@@ -217,49 +188,58 @@ export class AuthService {
 
   // Le token est signé plus bas, une fois rôles & permissions connus (pour les embarquer dans le JWT).
 
-  // Récupération des rôles de l'utilisateur (TOUS ses rôles actifs, pas seulement le premier)
-  const roles = await this.userService.findUserRoles(user.uuid);
-
-  // Récupération des permissions globales : FUSION de deux sources
-  let globalPermissions: any[] = [];
-  let permissionsSource:
-    | 'user_role'
-    | 'committee_role'
-    | 'user_role+committee_role'
-    | 'responsibility_role'
-    | 'default_membre'
-    | 'none' = 'none';
-
-  // ---- FUSION DES DROITS ----
-  // Un utilisateur cumule les permissions de :
-  //   1. TOUS ses rôles dans `user_roles` (il peut en porter plusieurs) ;
-  //   2. les rôles portés par les comités auxquels son membre appartient
-  //      (`committee_members` → `committees.role_uuid`), zéro ou plusieurs.
-  // L'union est un OU : une permission est accordée dès qu'une seule source la porte.
+  // ---- DROITS ET PÉRIMÈTRE : un seul calcul, trois requêtes ----
+  // `AccessScopeService` réunit les rôles portés par les responsabilités du membre, par ses
+  // comités et par `user_roles`, et calcule au passage les paliers hiérarchiques accessibles.
   // ⚠️ Ne jamais revenir à `roles[0]` : `findUserRoles` n'a aucun `ORDER BY`, le « premier »
-  // rôle est indéterminé — c'est précisément pour ça qu'on les fusionne tous.
-  const userRoleUuids: string[] = (roles ?? [])
-    .map((r: any) => r?.role_uuid)
-    .filter((uuid: any): uuid is string => !!uuid);
+  // rôle était indéterminé - c'est précisément pour ça que tout est fusionné.
+  // Le rôle socle est aligné AVANT le calcul : un membre qui vient de recevoir (ou de perdre)
+  // une responsabilité doit se connecter avec le bon rôle dès cette session.
+  await this.userRoleService.syncBaseRoleForMember({
+    uuid: user.uuid,
+    member_uuid: user.member_uuid,
+    is_admin: user.is_admin,
+  });
 
-  const committeeRoleUuids = await this.findCommitteeRoleUuids(user.member_uuid);
+  const scope = await this.accessScopeService.compute({
+    uuid: user.uuid,
+    member_uuid: user.member_uuid,
+    is_admin: user.is_admin,
+  });
 
-  const mergedRoleUuids = Array.from(
-    new Set([...userRoleUuids, ...committeeRoleUuids]),
-  );
+  let globalPermissions: any[] = [];
+  let permissionsSource: string = 'none';
 
-  if (mergedRoleUuids.length > 0) {
+  // `roles` reflète désormais TOUTES les provenances (responsabilités, comités, user_roles),
+  // plus la seule table `user_roles`.
+  const roles = await this.roleService.findRoleRefsByUuids(scope.role_uuids);
+
+  if (scope.role_uuids.length > 0) {
     globalPermissions =
-      await this.roleService.findActivePermissionsForRoleUuids(mergedRoleUuids);
+      await this.roleService.findActivePermissionsForRoleUuids(scope.role_uuids);
+  }
 
-    if (globalPermissions.length > 0) {
-      permissionsSource =
-        userRoleUuids.length > 0 && committeeRoleUuids.length > 0
-          ? 'user_role+committee_role'
-          : committeeRoleUuids.length > 0
-            ? 'committee_role'
-            : 'user_role';
+  // Repli : un membre sans responsabilité, sans comité et sans rôle utilisateur reste un
+  // simple MEMBRE. L'invariant `user_roles` >= 1 rend ce cas rare, mais il protège un compte
+  // dont la ligne aurait été supprimée à la main.
+  if (globalPermissions.length === 0) {
+    try {
+      const membreRole = await this.roleService.findOneBySlug(ROLE_MEMBRE_SLUG);
+      globalPermissions =
+        await this.roleService.findActivePermissionsForRoleUuids([membreRole.uuid]);
+      if (globalPermissions.length > 0) permissionsSource = 'default_membre';
+    } catch {
+      // rôle MEMBRE absent : aucune permission par défaut
     }
+  } else {
+    permissionsSource =
+      [
+        scope.sources.responsibility.length > 0 ? 'responsibility_role' : null,
+        scope.sources.committee.length > 0 ? 'committee_role' : null,
+        scope.sources.user_role.length > 0 ? 'user_role' : null,
+      ]
+        .filter(Boolean)
+        .join('+') || 'none';
   }
 
   // Récupération des informations du membre associé (reste du code)
@@ -316,29 +296,9 @@ export class AuthService {
         .getRawMany();
 
       // Si l'utilisateur n'a pas de permissions et qu'il a des responsabilités
-      if (globalPermissions.length === 0 && responsibilities.length > 0) {
-        const sortedResponsibilities = responsibilities
-          .filter(r => r.role_uuid)
-          .sort((a, b) => {
-            const orderA = a.level_order ? parseInt(a.level_order) : 999;
-            const orderB = b.level_order ? parseInt(b.level_order) : 999;
-            return orderA - orderB;
-          });
-
-        if (sortedResponsibilities.length > 0) {
-          const highestResponsibility = sortedResponsibilities[0];
-
-          const rolePermData = await this.roleService.findGlobalPermissions(
-            highestResponsibility.role_uuid
-          );
-
-          globalPermissions = rolePermData.permissions || [];
-
-          if (globalPermissions.length > 0) {
-            permissionsSource = 'responsibility_role';
-          }
-        }
-      }
+      // (L'ancien repli « rôle de la responsabilité la plus haute » a disparu : les rôles des
+      // responsabilités sont désormais une source de PREMIER rang dans `AccessScopeService`,
+      // fusionnée avec les comités et `user_roles` - plus un repli conditionnel.)
 
       // Si le membre est responsable, récupérer l'arbre de sa structure
       if (responsibilities.length > 0 && member.structure_uuid) {
@@ -393,56 +353,35 @@ export class AuthService {
     }
   }
 
-  // Fallback MEMBRE : un compte sans rôle (user_role) ni responsabilité reçoit les
-  // permissions du rôle MEMBRE (il ne voit alors que ses propres infos).
-  if (globalPermissions.length === 0) {
-    try {
-      const membreRole = await this.roleService.findOneBySlug(ROLE_MEMBRE_SLUG);
-      const rolePermData = await this.roleService.findGlobalPermissions(
-        membreRole.uuid,
-      );
-      globalPermissions = rolePermData.permissions || [];
-      if (globalPermissions.length > 0) {
-        permissionsSource = 'default_membre';
-      }
-    } catch {
-      // rôle MEMBRE absent : aucune permission par défaut
-    }
-  }
+  // (Le repli MEMBRE est appliqué plus haut, juste après le calcul du périmètre : il n'a pas
+  // besoin d'attendre le chargement des informations du membre.)
 
   // Embarquer les droits dans le JWT (calculés une seule fois ici, pas à chaque requête).
   const isActive = (s: unknown) =>
     s === true || s === 1 || s === '1' || s === 'enable' || s === 'active';
   payload.is_admin = user.is_admin === true;
 
-  // ⚠️ BUDGET DU TOKEN — à ne pas défaire. Le front re-chiffre le JWT avant de le poser en
-  // cookie (`useAuth.login` → `encryptData`, +38 % de volume) et un navigateur **jette
-  // silencieusement** tout cookie > 4 096 o : la connexion boucle alors sur la page de login,
-  // sans le moindre message. Deux filtres bornent donc `payload.permissions` :
+  // Périmètre embarqué dans le token : les gardes et services le lisent sans requête
+  // supplémentaire à chaque appel. 3 champs scalaires, impact négligeable sur la taille.
+  payload.scope_structure_uuid = scope.scope_structure_uuid;
+  payload.default_structure_uuid = scope.default_structure_uuid;
+  payload.max_level_order = scope.max_level?.level_order ?? null;
+
+  // ⚠️ AUCUNE PERMISSION DANS LE TOKEN - à ne pas défaire.
   //
-  //  1. `is_admin` → tableau VIDE. `PermissionsGuard` court-circuite sur `is_admin` et ne lit
-  //     jamais ces slugs (cas réel : 46 slugs = cookie de 4 106 o, connexion impossible).
-  //  2. non-admin → uniquement les slugs **réellement contrôlés par l'API**
-  //     (`ENFORCED_PERMISSION_SLUGS`, alimenté par le décorateur `@RequirePermissions`).
-  //     Depuis la fusion des droits (rôles de `user_roles` + rôles des comités), un utilisateur
-  //     peut cumuler les 71 permissions : sans ce filtre le cookie atteint 5 117 o.
+  // Le front re-chiffre le JWT avant de le poser en cookie (`useAuth.login` → `encryptData`,
+  // +38 % de volume) et un navigateur **jette silencieusement** tout cookie > 4 096 o : la
+  // connexion boucle alors sur la page de login, sans le moindre message. Ce plafond a été
+  // atteint deux fois (46 slugs, puis 138) et chaque contournement par filtrage n'a fait que
+  // repousser l'échéance. La taille du token ne dépend donc plus du nombre de permissions ni
+  // du nombre de routes protégées : `PermissionsGuard` les résout depuis la base
+  // (`EffectivePermissionsService`, cache de 30 s par utilisateur).
   //
-  // Dans les deux cas l'interface n'est pas concernée : elle lit `user.global_permissions`
-  // (corps de la réponse, non filtré), jamais le token.
-  payload.permissions = payload.is_admin
-    ? []
-    : Array.from(
-        new Set(
-          (globalPermissions ?? [])
-            .filter((p: any) => isActive(p?.status))
-            .map((p: any) => p?.slug)
-            .filter(
-              (slug: any): slug is string =>
-                typeof slug === 'string' && slug.length > 0,
-            )
-            .filter((slug: string) => ENFORCED_PERMISSION_SLUGS.has(slug)),
-        ),
-      );
+  // Effet de bord voulu : accorder ou retirer une permission prend effet en moins de 30 s,
+  // là où il fallait auparavant se reconnecter.
+  //
+  // L'interface, elle, lit `user.global_permissions` dans le CORPS de la réponse (non filtré).
+  payload.permissions = [];
 
   const token = this.jwtService.sign(payload);
   const decoded = this.jwtService.decode(token) as null | { exp?: number };
@@ -461,6 +400,19 @@ export class AuthService {
       is_admin: user.is_admin === true,
       global_permissions: globalPermissions,
       permissions_source: permissionsSource,
+      /**
+       * Périmètre hiérarchique : jusqu'où le membre a le droit de voir, et où l'affichage
+       * doit s'ouvrir par défaut. `max_level` est la LIMITE (niveau le plus élevé atteint par
+       * une responsabilité ou par un comité), `default_level` le palier le plus bas - le front
+       * pré-remplit sur celui-ci et laisse remonter librement jusqu'à `max_level`.
+       */
+      access_scope: {
+        levels: scope.levels,
+        max_level: scope.max_level,
+        default_level: scope.default_level,
+        scope_structure_uuid: scope.scope_structure_uuid,
+        default_structure_uuid: scope.default_structure_uuid,
+      },
     },
     access_token: token,
     expires_in: typeof decoded?.exp === 'number' ? decoded.exp : null,

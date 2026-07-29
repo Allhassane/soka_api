@@ -3,7 +3,7 @@ import AppDataSource from '../data-source';
 import { MemberEntity } from '../members/entities/member.entity';
 
 /**
- * AUDIT — Un membre est-il responsable ou simple membre ? (LECTURE SEULE)
+ * AUDIT - Un membre est-il responsable ou simple membre ? (LECTURE SEULE)
  *
  * Recherche un membre par TÉLÉPHONE (ou MATRICULE) et affiche ses
  * responsabilités (member_responsibilities). Répond sans ambiguïté à
@@ -41,12 +41,12 @@ async function run() {
 
     console.log('\n========== VÉRIFICATION MEMBRE ==========');
     console.log(`Nom          : ${nom}`);
-    console.log(`Matricule    : ${(member as unknown as { matricule?: string }).matricule ?? '—'}`);
-    console.log(`Téléphone    : ${(member as unknown as { phone?: string }).phone ?? '—'}`);
+    console.log(`Matricule    : ${(member as unknown as { matricule?: string }).matricule ?? '-'}`);
+    console.log(`Téléphone    : ${(member as unknown as { phone?: string }).phone ?? '-'}`);
     console.log(`member_uuid  : ${member.uuid}`);
-    console.log(`structure_uuid: ${su ?? '—'}`);
+    console.log(`structure_uuid: ${su ?? '-'}`);
 
-    // Structure du membre (nom + niveau) — ce que le header affiche en repli.
+    // Structure du membre (nom + niveau) - ce que le header affiche en repli.
     if (su) {
       const s = await ds.query(
         `SELECT s.name AS structure_name, l.name AS level_name
@@ -55,7 +55,7 @@ async function run() {
         [su],
       );
       if (s.length) {
-        console.log(`Structure    : ${s[0].structure_name} (niveau ${s[0].level_name ?? '—'})`);
+        console.log(`Structure    : ${s[0].structure_name} (niveau ${s[0].level_name ?? '-'})`);
       }
     }
 
@@ -71,16 +71,16 @@ async function run() {
 
     console.log('------------------------------------------');
     if (!resp.length) {
-      console.log('VERDICT : SIMPLE MEMBRE — aucune responsabilité en base.');
+      console.log('VERDICT : SIMPLE MEMBRE - aucune responsabilité en base.');
       console.log('(Le header devrait donc afficher « Membre », pas « RESPONSABLE ».)');
     } else {
-      console.log(`VERDICT : RESPONSABLE — ${resp.length} responsabilité(s) :`);
+      console.log(`VERDICT : RESPONSABLE - ${resp.length} responsabilité(s) :`);
       for (const x of resp) {
         console.log(`   • ${x.responsibility}  | niveau ${x.level ?? '(inconnu)'}`);
       }
     }
     console.log('------------------------------------------');
-    console.log('[check] (lecture seule — aucune écriture en base)');
+    console.log('[check] (lecture seule - aucune écriture en base)');
   } finally {
     await AppDataSource.destroy();
   }

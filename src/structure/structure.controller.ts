@@ -1,3 +1,4 @@
+import { allowedRootUuidsFromJwt } from 'src/access-scope/perimeter-from-jwt';
 import {
   Controller,
   Post,
@@ -54,15 +55,30 @@ export class StructureController {
    */
   private buildPerimeter(req): { isAdmin: boolean; allowedRootUuids: string[] } {
     const user = req?.user ?? {};
-    const isAdmin = user.is_admin === true;
-    const allowedRootUuids: string[] = (user.responsibilities ?? [])
-      .map((r: any) => r?.structure?.uuid)
-      .filter((u: any): u is string => !!u);
-    return { isAdmin, allowedRootUuids };
+    return {
+      isAdmin: user.is_admin === true,
+      // Racine unique issue du token : couvre responsabilités ET comités (cf. helper).
+      allowedRootUuids: allowedRootUuidsFromJwt(user),
+    };
+  }
+
+  /**
+   * À appeler dans TOUTE route qui reçoit un uuid de structure fourni par l'appelant.
+   * `@RequirePermissions` accorde le droit d'utiliser la fonction ; ceci borne les DONNÉES.
+   * Sans lui, changer l'uuid dans l'URL suffit à lire tout l'arbre (fuite constatée le
+   * 2026-07-25 sur `GET /structure/members/:uuid`).
+   */
+  private async assertDansPerimetre(req, structureUuid?: string): Promise<void> {
+    if (!structureUuid) return;
+    await this.structureTreeService.assertStructureWithinPerimeter(
+      structureUuid,
+      this.buildPerimeter(req),
+    );
   }
 
     @Get('my-members')
-    @UseGuards(JwtAuthGuard)
+    @RequirePermissions('structures_voir')
+    @UseGuards(JwtAuthGuard, PermissionsGuard)
     @ApiOperation({
       summary: 'Récupérer les membres accessibles par l\'utilisateur connecté avec leur structure_tree',
     })
@@ -86,10 +102,12 @@ export class StructureController {
       @Query('structure_uuid') structure_uuid?: string,
     ) {
       const user = req.user;
-      //console.log(user.responsibilities[0].structure)
+      // Racine du périmètre issue du token : couvre responsabilités ET comités.
+      // (Avant : `responsibilities[0].structure.uuid`, qui ignorait les comités ET dépendait
+      // de l'ordre indéterminé du tableau quand le membre porte plusieurs responsabilités.)
       return this.structureTreeService.getMembersWithTreeByConnectedUser(
         user.member_uuid,
-        user.responsibilities?.[0]?.structure?.uuid,
+        allowedRootUuidsFromJwt(user)[0],
         {
           page: page ? Number(page) : undefined,
           limit: limit ? Number(limit) : undefined,
@@ -211,12 +229,14 @@ async queueMembersExport(
 }
 
 @Get('async-export/status/:jobId')
+@RequirePermissions('structures_voir')
 @ApiOperation({ summary: 'Vérifier le statut d\'un export de membres' })
 async getExportStatus(@Param('jobId') jobId: string) {
   return this.structureTreeService.getExportJobStatus(jobId);
 }
 
 @Get('async-exports/download/:jobUuid')
+@RequirePermissions('structures_voir')
 @ApiOperation({ summary: 'Télécharger un export de membres terminé' })
 async downloadMembersExport(
   @Param('jobUuid') jobUuid: string,
@@ -242,7 +262,8 @@ async downloadMembersExport(
 }
 
     @Get('my-beneficiary')
-    @UseGuards(JwtAuthGuard)
+    @RequirePermissions('structures_voir')
+    @UseGuards(JwtAuthGuard, PermissionsGuard)
     @ApiOperation({
       summary: 'Récupérer tous les membres accessibles par l\'utilisateur connecté (bénéficiaires)',
     })
@@ -276,7 +297,7 @@ async downloadMembersExport(
     }
 
   @Get('my-stats')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions('dashboard_voir_menu_dashboard')
   @ApiOperation({
     summary: 'Récupérer les statistiques basées sur la structure du membre connecté',
@@ -324,7 +345,8 @@ async downloadMembersExport(
   }
 
   @Get('my-committee')
-  @UseGuards(JwtAuthGuard)
+  @RequirePermissions('structures_voir')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiOperation({
     summary: 'Comité de la structure de l\'utilisateur connecté',
   })
@@ -333,17 +355,19 @@ async downloadMembersExport(
   }
 
   @Get(':uuid/committee')
-  @UseGuards(JwtAuthGuard)
+  @RequirePermissions('structures_voir')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiOperation({
     summary: 'Comité (responsables + responsabilités vacantes) d\'une structure',
   })
   @ApiParam({ name: 'uuid', description: 'UUID de la structure' })
-  async getCommitteeByStructure(@Param('uuid') uuid: string) {
+  async getCommitteeByStructure(@Req() req, @Param('uuid') uuid: string) {
+    await this.assertDansPerimetre(req, uuid);
     return this.structureService.getCommittee(uuid);
   }
 
 @Post('stats/export/:category')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @RequirePermissions('exports_voir_menu_exports')
 @ApiOperation({
   summary: 'Exporter les membres par catégorie de statistiques',
@@ -457,6 +481,7 @@ async exportStatCategory(
 }
 
   @Get('tree')
+  @RequirePermissions('structures_voir')
   @ApiOperation({
     summary: 'Récupérer l\'arbre des structures avec comptage des membres',
     description: `
@@ -483,12 +508,17 @@ async exportStatCategory(
     status: 401,
     description: 'Non autorisé - Authentification requise',
   })
-  async getTree(@Query('root_uuid') rootUuid?: string) {
+  async getTree(@Req() req, @Query('root_uuid') rootUuid?: string) {
+    // Sans racine demandée, un non-admin part de SA racine plutôt que de l'arbre national.
+    const perimetre = this.buildPerimeter(req);
+    if (!rootUuid && !perimetre.isAdmin) rootUuid = perimetre.allowedRootUuids[0];
+    await this.assertDansPerimetre(req, rootUuid);
 
     return this.structureTreeService.getStructureTreeWithCounts(rootUuid);
   }
 
   @Get()
+  @RequirePermissions('structures_voir')
   @ApiOperation({
     summary: 'Liste de toutes les structures',
   })
@@ -506,6 +536,7 @@ async exportStatCategory(
   }
 
   @Post()
+  @RequirePermissions('structures_creer')
   @ApiOperation({
     summary: 'Ajouter une structure',
   })
@@ -526,6 +557,7 @@ async exportStatCategory(
   }
 
   @Get(':uuid')
+  @RequirePermissions('structures_voir')
   @ApiOperation({
     summary: 'Recupérer une structure',
   })
@@ -542,6 +574,7 @@ async exportStatCategory(
   }
 
   @Get('childrens/:uuid')
+  @RequirePermissions('structures_voir')
   @ApiOperation({
     summary: "Recupérer les enfants d'une structure",
   })
@@ -558,11 +591,13 @@ async exportStatCategory(
     description: 'UUID de la structure',
     required: false,
   })
-  public findChildrens(@Query('uuid') uuid: string | undefined) {
+  public async findChildrens(@Req() req, @Query('uuid') uuid: string | undefined) {
+    await this.assertDansPerimetre(req, uuid);
     return this.structureService.findChildrens(uuid);
   }
 
   @Get('by-childrens/:uuid')
+  @RequirePermissions('structures_voir')
   @ApiOperation({
     summary: "Recupérer les enfants d'une structure",
   })
@@ -579,12 +614,14 @@ async exportStatCategory(
     description: 'UUID de la structure',
     required: false,
   })
-  public findByChildrens(@Query('uuid') uuid: string | undefined) {
+  public async findByChildrens(@Req() req, @Query('uuid') uuid: string | undefined) {
+    await this.assertDansPerimetre(req, uuid);
     return this.structureService.findByChildrens(uuid);
   }
 
 
   @Get('by-all-childrens/:uuid')
+  @RequirePermissions('structures_voir')
   @ApiOperation({
     summary: "Recupérer les enfants d'une structure",
   })
@@ -601,11 +638,13 @@ async exportStatCategory(
     description: 'UUID de la structure',
     required: true,
   })
-  public findByAllChildrens(@Query('uuid') uuid: string) {
+  public async findByAllChildrens(@Req() req, @Query('uuid') uuid: string) {
+    await this.assertDansPerimetre(req, uuid);
     return this.structureService.findByAllChildrens(uuid);
   }
 
   @Get('find-by-level/:level_uuid')
+  @RequirePermissions('structures_voir')
   @ApiOperation({
     summary: "Recupérer les structures d'un niveau",
   })
@@ -622,6 +661,7 @@ async exportStatCategory(
   }
 
   @Put(':uuid')
+  @RequirePermissions('structures_modifier')
   @ApiOperation({
     summary: 'Modifier une structure',
   })
@@ -647,6 +687,7 @@ async exportStatCategory(
   }
 
   @Delete(':uuid')
+  @RequirePermissions('structures_supprimer')
   @ApiOperation({
     summary: 'Supprimer une structure',
   })
@@ -665,6 +706,7 @@ async exportStatCategory(
 
 
   @Get('members/:uuid')
+  @RequirePermissions('structures_voir')
   @ApiOperation({
     summary: 'Récupérer tous les membres d\'une structure avec statistiques et pagination',
   })
@@ -685,6 +727,7 @@ async exportStatCategory(
     description: 'Membres et statistiques de la structure',
   })
   async getStructureMembersWithStats(
+    @Req() req,
     @Param('uuid') uuid: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
@@ -694,7 +737,7 @@ async exportStatCategory(
     @Query('department_uuid') department_uuid?: string,
     @Query('division_uuid') division_uuid?: string,
   ) {
-    return this.structureTreeService.getStructureMembersWithStats(uuid, {
+    return this.structureTreeService.getStructureMembersWithStats(uuid, this.buildPerimeter(req), {
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
       search,

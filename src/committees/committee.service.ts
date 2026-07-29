@@ -14,6 +14,8 @@ import { User } from '../users/entities/user.entity';
 import { MemberEntity } from '../members/entities/member.entity';
 import { Role } from '../roles/entities/role.entity';
 import { LevelEntity } from '../level/entities/level.entity';
+import { allowedRootUuidsFromJwt } from 'src/access-scope/perimeter-from-jwt';
+import { AccessScopeService } from 'src/access-scope/access-scope.service';
 
 /** Forme légère d'un membre exposée par l'API comité. */
 export interface CommitteeMemberView {
@@ -57,6 +59,9 @@ export class CommitteeService {
     private readonly roleRepo: Repository<Role>,
     @InjectRepository(LevelEntity)
     private readonly levelRepo: Repository<LevelEntity>,
+
+    /** Sous-arbre autorisé (service @Global), pour filtrer les membres sur le périmètre. */
+    private readonly accessScopeService: AccessScopeService,
   ) {}
 
   private async getAdmin(admin_uuid: string) {
@@ -65,6 +70,25 @@ export class CommitteeService {
       throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
     return admin;
+  }
+
+  /**
+   * Coordonnées d'un membre, **masquées si le demandeur n'a pas ce membre dans son périmètre**.
+   *
+   * `GET /comite` et `GET /comite/:uuid` renvoient le responsable de chaque comité via cette
+   * fonction : sans filtre, la liste des comités livrait nationalement téléphone, WhatsApp et
+   * e-mail de chaque responsable, à qui détient `comites_voir`. On renvoie `null` plutôt que de
+   * refuser l'écran : la liste des comités reste consultable, seules les coordonnées hors
+   * périmètre disparaissent.
+   */
+  private mapMemberDansPerimetre(
+    member: MemberEntity | null | undefined,
+    autorisees: Set<string> | null,
+  ): CommitteeMemberView | null {
+    if (!member) return null;
+    if (autorisees === null) return this.mapMember(member);
+    if (!member.structure_uuid || !autorisees.has(member.structure_uuid)) return null;
+    return this.mapMember(member);
   }
 
   private mapMember(member?: MemberEntity | null): CommitteeMemberView | null {
@@ -96,7 +120,7 @@ export class CommitteeService {
   // ---- RÔLE & NIVEAU DE RÉFÉRENCE ----
   // Résolution par requêtes séparées et **batchées** (2 requêtes pour toute la liste) plutôt que
   // par relation ORM : c'est le « pattern B » du projet, et ça évite un N+1 sur `findAll`.
-  // (Les collations diffèrent — `committees`/`levels` en latin1, `roles` en utf8mb4 — mais ce
+  // (Les collations diffèrent - `committees`/`levels` en latin1, `roles` en utf8mb4 - mais ce
   // n'est PAS un obstacle : MySQL convertit latin1 vers utf8mb4. Cf. gotcha « Collations » de
   // CLAUDE.md ; le seul cas irréconciliable oppose deux collations d'un MÊME charset.)
 
@@ -235,14 +259,17 @@ export class CommitteeService {
 
     // Rôles + niveaux résolus en lot (2 requêtes pour toute la liste, pas une par comité).
     const refs = await this.loadRefs(committees);
+    const autorisees =
+      await this.accessScopeService.structuresAutorisees(admin_uuid);
 
     const enriched = await Promise.all(
       committees.map(async (c) => ({
         ...this.withRefs(c, refs),
-        responsible: this.mapMember(
+        responsible: this.mapMemberDansPerimetre(
           c.responsible_member_uuid
             ? responsibleByUuid.get(c.responsible_member_uuid)
             : null,
+          autorisees,
         ),
         members_count: await this.committeeMembersRepo.count({
           where: { committee_uuid: c.uuid },
@@ -315,10 +342,12 @@ export class CommitteeService {
     );
 
     const refs = await this.loadRefs([committee]);
+    const autorisees =
+      await this.accessScopeService.structuresAutorisees(admin_uuid);
 
     return {
       ...this.withRefs(committee, refs),
-      responsible: this.mapMember(responsible),
+      responsible: this.mapMemberDansPerimetre(responsible, autorisees),
     };
   }
 
@@ -431,8 +460,21 @@ export class CommitteeService {
 
   // ---- MEMBRES DU COMITÉ ----
 
-  async listMembers(committee_uuid: string, admin_uuid: string) {
-    await this.getAdmin(admin_uuid);
+  /**
+   * Membres d'un comité, **filtrés sur le périmètre de l'appelant**.
+   *
+   * La permission (`comites_voir`) accorde le droit d'ouvrir l'écran ; elle ne borne pas les
+   * données. Sans le filtre ci-dessous, un responsable de sous-groupe lirait les coordonnées
+   * (téléphone, WhatsApp, e-mail, matricule) de tous les membres d'un comité national.
+   *
+   * On **filtre** plutôt que de renvoyer 403 : un comité peut légitimement mélanger des membres
+   * de plusieurs branches, et refuser tout l'écran casserait l'onglet Comité de la fiche membre.
+   */
+  async listMembers(
+    committee_uuid: string,
+    user: { uuid: string; is_admin?: boolean; scope_structure_uuid?: string | null },
+  ) {
+    await this.getAdmin(user.uuid);
     const committee = await this.committeesRepo.findOne({
       where: { uuid: committee_uuid },
     });
@@ -446,8 +488,23 @@ export class CommitteeService {
       order: { created_at: 'ASC' },
     });
 
-    return rows
-      .map((row) => this.mapMember(row.member))
+    const membres = rows
+      .map((row) => row.member)
+      .filter((m): m is MemberEntity => !!m);
+
+    if (user?.is_admin === true) {
+      return membres
+        .map((m) => this.mapMember(m))
+        .filter((m): m is CommitteeMemberView => !!m);
+    }
+
+    // Sous-arbre autorisé, calculé une fois pour toute la liste.
+    const racine = allowedRootUuidsFromJwt(user)[0];
+    const autorisees = await this.accessScopeService.sousArbre(racine);
+
+    return membres
+      .filter((m) => !!m.structure_uuid && autorisees.has(m.structure_uuid))
+      .map((m) => this.mapMember(m))
       .filter((m): m is CommitteeMemberView => !!m);
   }
 

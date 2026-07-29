@@ -13,15 +13,18 @@ import { DonateService } from './donate.service';
 import { CreateDonateDto } from './dto/create-donate.dto';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 import { UpdateDonateDto } from './dto/update-donate.dto';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiTags('Don')
 @Controller('donate')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class DonateController {
   constructor(private readonly donateService: DonateService) {}
 
   @Get()
+  @RequirePermissions('dons_voir')
   @ApiOperation({ summary: 'Liste de toutes les dons' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   @ApiResponse({ status: 400, description: 'Liste non récupérée.' })
@@ -31,6 +34,7 @@ export class DonateController {
   }
 
   @Get('open-to-donate')
+  @RequirePermissions('dons_voir')
   @ApiOperation({
     summary:
       "Campagnes de dons ouvertes auxquelles l'utilisateur n'a pas encore contribué (action prioritaire)",
@@ -41,6 +45,7 @@ export class DonateController {
   }
 
   @Get('findOneByUuid:uuid')
+  @RequirePermissions('dons_voir')
   @ApiOperation({ summary: 'Récupérer une don par UUID' })
   @ApiResponse({ status: 200, description: 'Don trouvé.' })
   @ApiResponse({ status: 400, description: 'Don non trouvé.' })
@@ -51,6 +56,7 @@ export class DonateController {
 
 
   @Get(':uuid')
+  @RequirePermissions('dons_voir')
   @ApiOperation({ summary: 'Récupérer une don par UUID' })
   @ApiResponse({ status: 200, description: 'Don trouvé.' })
   @ApiResponse({ status: 400, description: 'Don non trouvé.' })
@@ -65,6 +71,7 @@ export class DonateController {
 
 
    @Put(':uuid')
+   @RequirePermissions('dons_modifier')
    @ApiOperation({ summary: 'Modifier un don' })
    @ApiResponse({ status: 200, description: 'Don modifié avec succès.' })
    @ApiResponse({ status: 400, description: 'Champs invalides ou manquants.' })
@@ -78,6 +85,7 @@ export class DonateController {
 
 
   @Post()
+  @RequirePermissions('dons_creer')
   @ApiOperation({ summary: 'Ajouter un don' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   @ApiResponse({ status: 400, description: 'Liste non récupérée.' })
@@ -88,6 +96,7 @@ export class DonateController {
   }
 
   @Put(':uuid/status')
+  @RequirePermissions('dons_modifier')
   @ApiOperation({ summary: 'Changer le statut d’un don' })
   @ApiParam({ name: 'uuid', description: 'UUID du don à modifier' })
   @ApiBody({
@@ -115,6 +124,7 @@ export class DonateController {
   }
 
   @Delete(':uuid')
+  @RequirePermissions('dons_supprimer')
   @ApiOperation({ summary: 'Supprimer un don' })
   @ApiResponse({ status: 200, description: 'Don supprimé avec succès.' })
   @ApiResponse({ status: 400, description: 'Don introuvable.' })

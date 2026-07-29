@@ -32,17 +32,20 @@ import { PaymentSource } from './dto/create-payment.dto';
 import { Response } from 'express';
 import path from 'path';
 import * as fs from 'fs';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
 @ApiTags('Paiements')
 @Controller('payments')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
 
 
 
   @Get()
+  @RequirePermissions('paiements_voir')
   @ApiOperation({ summary: 'Lister tous les paiements' })
   @ApiQuery({
     name: 'source',
@@ -57,6 +60,7 @@ export class PaymentController {
 
 
   @Post()
+  @RequirePermissions('paiements_creer')
   @ApiOperation({ summary: 'Créer un paiement (don, abonnement, boutique)' })
   @ApiResponse({ status: 201, description: 'Paiement enregistré avec succès.' })
   @ApiResponse({ status: 400, description: 'Champs invalides.' })
@@ -67,6 +71,7 @@ export class PaymentController {
 
 
   @Get(':uuid')
+  @RequirePermissions('paiements_voir')
   @ApiOperation({ summary: 'Récupérer un paiement par UUID' })
   @ApiResponse({ status: 200, description: 'Paiement trouvé.' })
   @ApiResponse({ status: 404, description: 'Paiement introuvable.' })
@@ -76,6 +81,7 @@ export class PaymentController {
 
 
 @Get('export/subgroups')
+@RequirePermissions('paiements_voir')
 @ApiOperation({ summary: 'Lancer l\'export des transactions en arrière-plan' })
 async queueTransactionsExport(
   @Query('source_uuid') source_uuid: string,
@@ -92,6 +98,7 @@ async queueTransactionsExport(
 }
 
 @Get('async-exports/download/:jobUuid')
+@RequirePermissions('paiements_voir')
 @ApiOperation({
   summary: 'Télécharger un export de transactions terminé',
   description: `Télécharge le fichier Excel d'un export de transactions terminé.
@@ -187,6 +194,7 @@ async downloadTransactionsExport(
 }
 
 @Get('async-export/status/:jobId')
+@RequirePermissions('paiements_voir')
 @ApiOperation({ summary: 'Vérifier le statut d\'un export' })
 async getExportStatus(@Param('jobId') jobId: string) {
   return this.paymentService.getExportJobStatus(jobId);
@@ -194,6 +202,7 @@ async getExportStatus(@Param('jobId') jobId: string) {
 
 
 @Get('async-exports/my-exports')
+@RequirePermissions('paiements_voir')
 @ApiOperation({ summary: 'Liste paginée et filtrée de mes exports' })
 async getMyExports(
   @Request() req,
@@ -249,6 +258,7 @@ async getMyExports(
 }
 
   @Put(':uuid')
+  @RequirePermissions('paiements_modifier')
   @ApiOperation({ summary: 'Modifier un paiement' })
   @ApiResponse({ status: 200, description: 'Paiement modifié avec succès.' })
   @ApiResponse({ status: 400, description: 'Champs invalides.' })
@@ -262,6 +272,7 @@ async getMyExports(
 
 
   @Put(':uuid/status')
+  @RequirePermissions('paiements_modifier')
   @ApiOperation({ summary: 'Modifier le statut d’un paiement' })
   @ApiParam({ name: 'uuid', description: 'UUID du paiement' })
   @ApiBody({
@@ -285,6 +296,7 @@ async getMyExports(
   }
 
   @Get('member/:member_uuid')
+  @RequirePermissions('paiements_voir')
   @ApiOperation({ summary: 'Lister les paiements effectués pour un membre' })
   @ApiParam({ name: 'member_uuid', description: 'UUID du membre' })
   getByMember(@Param('member_uuid') member_uuid: string, @Request() req) {
@@ -292,6 +304,7 @@ async getMyExports(
   }
 
   @Get('stats/global')
+  @RequirePermissions('paiements_voir')
   @ApiOperation({ summary: 'Statistiques globales des paiements' })
   getStats(@Request() req) {
     return this.paymentService.getStats(req.user.uuid);
@@ -299,6 +312,7 @@ async getMyExports(
 
 
   @Get('subgroups/:root_structure_uuid')
+  @RequirePermissions('paiements_voir')
   @ApiQuery({
     name: 'source_uuid',
     required: true,

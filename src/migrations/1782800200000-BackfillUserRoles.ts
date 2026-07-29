@@ -9,7 +9,7 @@ import { randomUUID } from 'crypto';
  *
  * Pourquoi une migration et pas seulement `scripts/seed-user-roles.js` : ce script n'a été joué
  * que sur la base **locale**. `migrationsRun: true` exécute celle-ci au démarrage de l'API, donc
- * **la prod converge sans intervention manuelle** — sans quoi la fusion des droits au login
+ * **la prod converge sans intervention manuelle** - sans quoi la fusion des droits au login
  * n'aurait aucune source pour les comptes non semés, et tout le monde se retrouverait sans droits.
  *
  * Précédence du rôle attribué (identique à `scripts/seed-user-roles.js`) :
@@ -102,7 +102,7 @@ export class BackfillUserRoles1782800200000 implements MigrationInterface {
   public async down(): Promise<void> {
     // Volontairement **sans effet**. Les lignes créées ici sont indiscernables de celles semées
     // par `scripts/seed-user-roles.js` : les supprimer priverait des comptes légitimes de tout
-    // rôle — donc de tout droit — pour annuler un simple rattrapage de données.
+    // rôle - donc de tout droit - pour annuler un simple rattrapage de données.
     // Pour défaire ce backfill, cibler explicitement les comptes concernés en SQL.
   }
 }

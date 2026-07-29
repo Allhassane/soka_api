@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { SubscriptionPaymentEntity } from './entities/subscription-payment.entity';
 import { InjectRepository } from '@nestjs/typeorm';
+import { AccessScopeService } from 'src/access-scope/access-scope.service';
 import { ILike, Repository } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
 import { LogActivitiesService } from 'src/log-activities/log-activities.service';
@@ -37,6 +38,9 @@ export class SubscriptionPaymentService {
 
     private readonly paymentService: PaymentService,
 
+
+    /** Périmètre hiérarchique du demandeur (service @Global). */
+    private readonly accessScopeService: AccessScopeService,
   ) { }
 
   // ============================================================
@@ -340,12 +344,43 @@ export class SubscriptionPaymentService {
       ]
       : {};
 
-    const [items, total] = await this.subscriptionPaymentRepo.findAndCount({
-      where,
-      order: { created_at: 'DESC' },
-      skip,
-      take,
-    });
+    /**
+     * ⚠️ Périmètre. Cette liste expose `beneficiary_uuid` / `beneficiary_name` et
+     * `actor_uuid` / `actor_name` : sans filtre, tout détenteur de
+     * `abonnements_paiements_voir` lisait qui paie quoi dans l'organisation entière.
+     * La permission autorise l'écran, ce filtre borne les lignes.
+     */
+    const autorisees =
+      await this.accessScopeService.structuresAutorisees(admin_uuid);
+
+    if (autorisees !== null && autorisees.size === 0) {
+      return { total: 0, page: Number(page), limit: take, data: [], search: search || null };
+    }
+
+    const qb = this.subscriptionPaymentRepo
+      .createQueryBuilder('sp')
+      .orderBy('sp.created_at', 'DESC')
+      .skip(skip)
+      .take(take);
+
+    if (search && search.trim() !== '') {
+      qb.andWhere(
+        '(sp.actor_name LIKE :recherche OR sp.beneficiary_name LIKE :recherche)',
+        { recherche: `%${search.trim()}%` },
+      );
+    }
+
+    if (autorisees !== null) {
+      // Le bénéficiaire doit résider dans le sous-arbre autorisé. Sous-requête plutôt que
+      // jointure : `SubscriptionPaymentEntity` n'a aucune relation ORM vers `members`
+      // (« pattern B » du projet, liaison par uuid).
+      qb.andWhere(
+        'sp.beneficiary_uuid IN (SELECT m.uuid FROM members m WHERE m.structure_uuid IN (:...structures))',
+        { structures: [...autorisees] },
+      );
+    }
+
+    const [items, total] = await qb.getManyAndCount();
 
     return {
       total,

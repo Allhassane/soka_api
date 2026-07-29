@@ -136,10 +136,34 @@ export class RoleService {
   }
 
   /**
+   * Forme légère des rôles (uuid / nom / slug) pour un lot d'uuid - telle que la consomme le
+   * front dans `user.roles`. Une requête, ordre stable sur le nom.
+   */
+  async findRoleRefsByUuids(
+    roleUuids: string[],
+  ): Promise<Array<{ role_uuid: string; role_name: string; role_slug: string }>> {
+    const uniques = Array.from(
+      new Set((roleUuids ?? []).filter((uuid): uuid is string => !!uuid)),
+    );
+    if (uniques.length === 0) return [];
+
+    return this.roleRepository
+      .createQueryBuilder('role')
+      .select([
+        'role.uuid AS role_uuid',
+        'role.name AS role_name',
+        'role.slug AS role_slug',
+      ])
+      .where('role.uuid IN (:...uuids)', { uuids: uniques })
+      .orderBy('role.name', 'ASC')
+      .getRawMany();
+  }
+
+  /**
    * Permissions **actives** portées par un lot de rôles, dédoublonnées par slug.
    *
    * C'est la brique de la fusion des droits au login : un utilisateur tient ses rôles de
-   * `user_roles` ET des comités auxquels il appartient — une permission lui est accordée dès
+   * `user_roles` ET des comités auxquels il appartient - une permission lui est accordée dès
    * qu'**au moins un** de ces rôles la porte (union, jamais d'intersection).
    *
    * Une seule requête, quel que soit le nombre de rôles (à opposer à `findGlobalPermissions`,

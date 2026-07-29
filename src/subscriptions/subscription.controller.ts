@@ -6,15 +6,18 @@ import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 import { SubscriptionPaginationQueryDto } from './dto/subscription-pagination-query.dto';
+import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
 @ApiTags('Abonnement')
 @Controller('subscriptions')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class SubscriptionController {
   constructor(private readonly subscriptionService: SubscriptionService) {}
 
   @Get()
+  @RequirePermissions('abonnements_voir')
   @ApiOperation({ summary: 'Liste toutes les abonnements ' })
   @ApiResponse({ status: 200, description: 'Retour paginé' })
   findAll(@Request() req, @Query() query: SubscriptionPaginationQueryDto) {
@@ -24,6 +27,7 @@ export class SubscriptionController {
   }
 
   @Post()
+  @RequirePermissions('abonnements_creer')
   @ApiOperation({ summary: 'Créer un abonnement ' })
   @ApiResponse({ status: 200, description: 'Métier créé avec succès.' })
   @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
@@ -32,6 +36,7 @@ export class SubscriptionController {
   }
 
   @Get('open-to-subscribe')
+  @RequirePermissions('abonnements_voir')
   @ApiOperation({
     summary:
       "Campagnes ouvertes que l'utilisateur n'a pas encore souscrites (action prioritaire)",
@@ -42,6 +47,7 @@ export class SubscriptionController {
   }
 
   @Get('findOneByUuid:uuid')
+  @RequirePermissions('abonnements_voir')
   @ApiOperation({ summary: 'Récupérer une abonnement par UUID' })
   @ApiResponse({ status: 200, description: 'Abonnement trouvé.' })
   @ApiResponse({ status: 400, description: 'Abonnement non trouvé.' })
@@ -51,6 +57,7 @@ export class SubscriptionController {
   }
 
   @Get(':uuid')
+  @RequirePermissions('abonnements_voir')
   @ApiOperation({ summary: 'Récupérer une abonnement par UUID' })
   @ApiResponse({ status: 200, description: 'Abonnement trouvé.' })
   @ApiResponse({ status: 400, description: 'Abonnement non trouvé.' })
@@ -62,6 +69,7 @@ export class SubscriptionController {
   }
 
  @Put(':uuid')
+ @RequirePermissions('abonnements_modifier')
  @ApiOperation({ summary: 'Modifier un abonnement' })
  @ApiResponse({ status: 200, description: 'Abonnement modifié avec succès.' })
  @ApiResponse({ status: 400, description: 'Champs invalides ou manquants.' })
@@ -75,6 +83,7 @@ export class SubscriptionController {
 
 
 @Put(':uuid/status')
+@RequirePermissions('abonnements_modifier')
 @ApiOperation({ summary: 'Changer le statut d’un abonnement' })
 @ApiParam({ name: 'uuid', description: 'UUID de l’abonnement à modifier' })
 @ApiBody({
@@ -102,6 +111,7 @@ async changeStatus(
 }
 
   @Delete(':uuid')
+  @RequirePermissions('abonnements_supprimer')
   @ApiOperation({ summary: 'Supprimer un abonnement' })
   @ApiResponse({ status: 200, description: 'Abonnement supprimé avec succès.' })
   @ApiResponse({ status: 400, description: 'Abonnement introuvable.' })
