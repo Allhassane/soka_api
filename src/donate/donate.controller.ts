@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Request } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Request } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -15,6 +15,7 @@ import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 import { UpdateDonateDto } from './dto/update-donate.dto';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
+import { DonatePaginationQueryDto } from './dto/donate-pagination-query.dto';
 
 @ApiTags('Don')
 @Controller('donate')
@@ -26,11 +27,12 @@ export class DonateController {
   @Get()
   @RequirePermissions('dons_voir')
   @ApiOperation({ summary: 'Liste de toutes les dons' })
-  @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
+  @ApiResponse({ status: 200, description: 'Retour paginé' })
   @ApiResponse({ status: 400, description: 'Liste non récupérée.' })
-  findAll(@Request() req) {
+  findAll(@Request() req, @Query() query: DonatePaginationQueryDto) {
     const admin_uuid = req.user.uuid as string;
-    return this.donateService.findAll(admin_uuid);
+    const { page, limit, search } = query;
+    return this.donateService.findAll(admin_uuid, page, limit, search);
   }
 
   @Get('open-to-donate')

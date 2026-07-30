@@ -11,6 +11,7 @@ import { SubscriptionEntity } from 'src/subscriptions/entities/subscription.enti
 import { DonateEntity } from 'src/donate/entities/donate.entity';
 import { CinetPayService } from './cinetpay.service';
 import { HubService } from './hub.service';
+import { HubPaymentSyncCronService } from './hub-payment-sync.cron';
 import { DonatePaymentEntity } from 'src/donate-payment/entities/donate-payment.entity';
 import { SubscriptionPaymentEntity } from 'src/subscription-payment/entities/subscription-payment.entity';
 import { StructureModule } from 'src/structure/structure.module';
@@ -32,6 +33,7 @@ import { ExportJobModule } from '../export-async/export-job.module';
     PaymentService,
     CinetPayService,
     HubService,
+    HubPaymentSyncCronService,
   ],
   exports: [PaymentService, HubService],
 })
