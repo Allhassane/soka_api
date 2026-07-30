@@ -11,6 +11,8 @@ import { PaymentService } from 'src/payments/payment.service';
 import { MemberEntity } from 'src/members/entities/member.entity';
 import { StructureService } from 'src/structure/structure.service';
 import { DonatePaymentEntity } from 'src/donate-payment/entities/donate-payment.entity';
+import { buildPaginationMeta } from 'src/shared/helpers/pagination-meta.helper';
+import { PaginateMeta } from 'src/shared/interfaces/paginate-meta.interface';
 
 @Injectable()
 export class DonateService {
@@ -100,19 +102,42 @@ export class DonateService {
     return { campaigns, total: campaigns.length };
   }
 
-  async findAll(admin_uuid: string) {
+  async findAll(
+    admin_uuid: string,
+    page = 1,
+    limit = 10,
+    search?: string,
+  ): Promise<{ data: DonateEntity[]; meta: Omit<PaginateMeta, 'page'> }> {
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
     if (!admin) {
       throw new NotFoundException("Identifiant de l'auteur introuvable");
     }
 
+    const qb = this.donateRepo
+      .createQueryBuilder('donate')
+      .orderBy('donate.created_at', 'DESC');
+
+    if (search?.trim()) {
+      qb.andWhere('donate.name LIKE :search', {
+        search: `%${search.trim()}%`,
+      });
+    }
+
+    const [data, total] = await qb
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
     await this.logService.logAction(
       'donate-findAll',
       admin.id,
-      'recupération de la liste de tous les dons'
+      'recupération de la liste de tous les dons',
     );
 
-    return this.donateRepo.find();
+    return {
+      data,
+      meta: buildPaginationMeta({ total, page, perPage: limit }),
+    };
   }
 
   async findOneByUuid(uuid: string, admin_uuid: string) {
@@ -309,6 +334,16 @@ export class DonateService {
     const donate = await this.donateRepo.findOne({ where: { uuid } });
     if (!donate) {
       throw new NotFoundException("Don introuvable");
+    }
+
+    const paymentCount = await this.donatePaymentRepo.count({
+      where: { donate_uuid: donate.uuid },
+    });
+
+    if (paymentCount > 0) {
+      throw new BadRequestException(
+        'Impossible de modifier ce zaimu : au moins un paiement existe déjà pour cette campagne.',
+      );
     }
 
     Object.assign(donate, {

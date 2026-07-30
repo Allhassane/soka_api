@@ -28,6 +28,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ExportJobStatus } from 'src/export-async/entities/export-job.entity';
 import { filter } from 'rxjs';
+import {
+  HubPaymentSyncBatchResult,
+  HubPaymentSyncResult,
+} from './types/hub-payment-sync-result.type';
 
 @Injectable()
 export class PaymentService {
@@ -392,6 +396,144 @@ export class PaymentService {
     return await this.paymentRepo.save(payment);
   }
 
+  async syncHubPaymentByTransactionId(
+    transaction_id: string,
+  ): Promise<HubPaymentSyncResult> {
+    if (!transaction_id?.trim()) {
+      return { status: 'not_found', transaction_id: transaction_id ?? '' };
+    }
+
+    const payment = await this.paymentRepo.findOne({
+      where: { transaction_id },
+    });
+
+    if (!payment) {
+      return { status: 'not_found', transaction_id };
+    }
+
+    if (payment.payment_status === PaymentStatus.PAID) {
+      return this.buildHubPaymentSyncResult('paid', payment);
+    }
+
+    if (
+      payment.payment_status === PaymentStatus.FAILED
+      || payment.payment_status === PaymentStatus.CANCELLED
+    ) {
+      return this.buildHubPaymentSyncResult('failed', payment);
+    }
+
+    const hubStatus = await this.hubService.checkPaymentStatus(transaction_id);
+
+    if (hubStatus.paid === true) {
+      await this.updatePayment(payment.uuid, {
+        status: GlobalStatus.SUCCESS,
+        payment_status: PaymentStatus.PAID,
+      });
+      await this.updateLinkedEntities(payment, GlobalStatus.SUCCESS);
+
+      return this.buildHubPaymentSyncResult(
+        'paid',
+        payment,
+        hubStatus.payment ?? null,
+      );
+    }
+
+    const hubPaymentStatus = hubStatus.payment?.status?.toLowerCase();
+    const isFailed =
+      hubPaymentStatus === 'failed'
+      || hubPaymentStatus === 'cancelled'
+      || hubPaymentStatus === 'canceled';
+
+    if (isFailed) {
+      await this.updatePayment(payment.uuid, {
+        status: GlobalStatus.FAILED,
+        payment_status: PaymentStatus.FAILED,
+      });
+      await this.updateLinkedEntities(payment, GlobalStatus.FAILED);
+
+      return this.buildHubPaymentSyncResult(
+        'failed',
+        payment,
+        hubStatus.payment ?? null,
+      );
+    }
+
+    return this.buildHubPaymentSyncResult(
+      'pending',
+      payment,
+      hubStatus.payment ?? null,
+    );
+  }
+
+  async syncAllPendingHubPayments(
+    limit = 200,
+  ): Promise<HubPaymentSyncBatchResult> {
+    const pendingPayments = await this.paymentRepo
+      .createQueryBuilder('p')
+      .where('p.payment_status = :payment_status', {
+        payment_status: PaymentStatus.PENDING,
+      })
+      .andWhere('p.status IN (:...statuses)', {
+        statuses: [GlobalStatus.INIT, GlobalStatus.PENDING],
+      })
+      .andWhere('p.transaction_id IS NOT NULL')
+      .andWhere('p.transaction_id LIKE :prefix', { prefix: 'plink_%' })
+      .orderBy('p.created_at', 'ASC')
+      .take(limit)
+      .getMany();
+
+    const result: HubPaymentSyncBatchResult = {
+      processed: 0,
+      paid: 0,
+      failed: 0,
+      pending: 0,
+      errors: 0,
+    };
+
+    for (const payment of pendingPayments) {
+      result.processed += 1;
+
+      try {
+        const syncResult = await this.syncHubPaymentByTransactionId(
+          payment.transaction_id,
+        );
+
+        if (syncResult.status === 'not_found') {
+          result.errors += 1;
+          continue;
+        }
+
+        result[syncResult.status] += 1;
+      } catch {
+        result.errors += 1;
+      }
+    }
+
+    return result;
+  }
+
+  private async buildHubPaymentSyncResult(
+    status: HubPaymentSyncResult['status'],
+    payment: PaymentEntity,
+    hub_payment: unknown = null,
+  ): Promise<HubPaymentSyncResult> {
+    const donation = await this.donatePaymentRepo.findOne({
+      where: { payment_uuid: payment.uuid },
+    });
+    const subscriptionPayment = await this.subscriptionPaymentRepo.findOne({
+      where: { payment_uuid: payment.uuid },
+    });
+
+    return {
+      status,
+      transaction_id: payment.transaction_id,
+      payment_uuid: payment.uuid,
+      donation_uuid: donation?.uuid ?? null,
+      subscription_payment_uuid: subscriptionPayment?.uuid ?? null,
+      hub_payment,
+    };
+  }
+
 /*
 
       async findTransactionsForSubGroups_old(
@@ -583,6 +725,7 @@ async findTransactionsForSubGroups(
   page = 1,
   limit = 50,
   search?: string | undefined,
+  payment_status?: PaymentStatus,
 ) {
 
   const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
@@ -632,6 +775,10 @@ async findTransactionsForSubGroups(
       )`,
       { search: `%${search.trim()}%` }
     );
+  }
+
+  if (payment_status) {
+    qb.andWhere('p.payment_status = :payment_status', { payment_status });
   }
 
   qb.orderBy('p.created_at', 'DESC')
@@ -826,6 +973,10 @@ async findTransactionsForSubGroups(
     root_structure_uuid: member.structure_uuid,
     sous_groups: sousGroups,
     source_uuid,
+    filters: {
+      search: search?.trim() || null,
+      payment_status: payment_status ?? null,
+    },
     data: result,
   };
 }
