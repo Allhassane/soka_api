@@ -53,24 +53,34 @@ export class DonateService {
       .orderBy('d.stops_at', 'ASC')
       .getMany();
 
-    // Nombre de paiements réussis du membre par campagne (donateur).
+    // Unités déjà réglées par le membre sur chaque campagne.
+    // ⚠️ Deux corrections pour que cette liste dise vrai :
+    //  - on filtre sur `beneficiary_uuid` et non `actor_uuid`. Le quota s'applique au
+    //    BÉNÉFICIAIRE (`donate-payment.service.makeDonation`) ; compter les paiements dont le
+    //    membre est l'auteur retirait la campagne de sa liste quand il avait payé POUR UN AUTRE,
+    //    alors que son propre quota était intact. Sur l'écran de zaimu les deux coïncident (on
+    //    ne donne que pour soi), pas sur un paiement fait via l'API.
+    //  - on somme `quantity` au lieu de compter les lignes, comme l'enforcement.
     const paidCount = new Map<string, number>();
     if (memberUuid && open.length) {
       const paid = await this.donatePaymentRepo.find({
         where: {
-          actor_uuid: memberUuid,
+          beneficiary_uuid: memberUuid,
           status: GlobalStatus.SUCCESS,
         },
-        select: ['donate_uuid'],
+        select: ['donate_uuid', 'quantity'],
       });
       for (const p of paid) {
-        paidCount.set(p.donate_uuid, (paidCount.get(p.donate_uuid) ?? 0) + 1);
+        paidCount.set(
+          p.donate_uuid,
+          (paidCount.get(p.donate_uuid) ?? 0) + (p.quantity ?? 1),
+        );
       }
     }
 
     // On garde la campagne tant que le membre n'a pas atteint sa limite de
     // paiements. max null ou <= 0  ⇒  illimité (toujours proposé). Aligné sur
-    // l'enforcement au paiement (donate-payment.service : count >= max).
+    // l'enforcement au paiement (donate-payment.service : unités >= max).
     const campaigns = open
       .filter((d) => {
         const max = d.max_payments_per_beneficiary;

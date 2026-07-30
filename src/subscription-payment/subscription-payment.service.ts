@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -72,29 +73,6 @@ export class SubscriptionPaymentService {
       );
     }
 
-    let totalPaid: number = 0;
-
-    // -----------------------------------------
-    // Vérifier quota de paiements
-    // -----------------------------------------
-    if (
-      subscription.max_payments_per_beneficiary &&
-      subscription.max_payments_per_beneficiary > 0
-    ) {
-      totalPaid = await this.subscriptionPaymentRepo.count({
-        where: {
-          subscription_uuid: subscription.uuid,
-          status: GlobalStatus.SUCCESS,
-        },
-      });
-
-      if (totalPaid >= subscription.max_payments_per_beneficiary) {
-        throw new BadRequestException(
-          `Limite de paiements atteinte pour cette campagne d'abonnement.`,
-        );
-      }
-    }
-
     // -----------------------------------------
     // Quantité
     // -----------------------------------------
@@ -106,16 +84,46 @@ export class SubscriptionPaymentService {
       );
     }
 
-    let restToPay: number = (subscription.max_payments_per_beneficiary ?? 0) - totalPaid;
+    /**
+     * ── Quota : « nombre maximum de paiements PAR BÉNÉFICIAIRE » ──
+     *
+     * ⚠️ Le compteur ne portait **aucun filtre sur `beneficiary_uuid`** : il comptait les
+     * paiements réussis de TOUTE la campagne. Sur une campagne plafonnée à 50, les 50 premiers
+     * paiements de l'organisation fermaient donc la campagne pour les ~7 950 membres, y compris
+     * ceux qui n'avaient jamais payé - et le message « Limite de paiements atteinte » ne disait
+     * pas pourquoi. Deux endroits du code disaient déjà l'inverse : le libellé de l'écran de
+     * création (« Nombre maximum de paiements par bénéficiaire ») et la liste « à souscrire »
+     * (`subscription.service.getOpenToSubscribe`), qui compte bien par bénéficiaire.
+     *
+     * On compte des **unités** (`SUM(quantity)`) et non des lignes : une ligne peut porter
+     * `quantity = 10`, et c'est bien à la quantité que le plafond est comparé juste en dessous.
+     * Compter les lignes rendrait le plafond contournable en un seul paiement.
+     *
+     * Seuls les paiements **réussis** comptent : la table est pleine de `pending` (guichet
+     * abandonné avant paiement) qui n'ont jamais été encaissés - les compter bloquerait un
+     * membre pour une tentative qu'il n'a jamais menée à bout.
+     */
+    const maxPerBeneficiary = subscription.max_payments_per_beneficiary;
+    const beneficiaryName = `${beneficiary.firstname} ${beneficiary.lastname}`;
 
-    if (
-      subscription.max_payments_per_beneficiary 
-      && subscription.max_payments_per_beneficiary > 0 && 
-      quantity > restToPay
-    ) {
-      throw new BadRequestException(
-        `Le nombre de paiements restant pour cette campagne d'abonnement est de ${restToPay}.`,
+    if (maxPerBeneficiary && maxPerBeneficiary > 0) {
+      const alreadyPaid = await this.sumPaidQuantity(
+        subscription.uuid,
+        beneficiary.uuid,
       );
+      const remaining = maxPerBeneficiary - alreadyPaid;
+
+      if (remaining <= 0) {
+        throw new BadRequestException(
+          `${beneficiaryName} a déjà réglé le maximum de ${maxPerBeneficiary} paiement(s) autorisé(s) pour cette campagne.`,
+        );
+      }
+
+      if (quantity > remaining) {
+        throw new BadRequestException(
+          `Il ne reste que ${remaining} paiement(s) possible(s) pour ${beneficiaryName} sur cette campagne (maximum ${maxPerBeneficiary}, déjà réglé ${alreadyPaid}).`,
+        );
+      }
     }
 
     // -----------------------------------------
@@ -394,6 +402,66 @@ export class SubscriptionPaymentService {
   // ============================================================
   // HELPERS
   // ============================================================
+
+  /**
+   * Unités déjà réglées par un bénéficiaire sur une campagne (paiements réussis).
+   * `SUM(quantity)` et non `COUNT(*)` - cf. le commentaire du quota dans `makeSubscription`.
+   * `COALESCE` : sans paiement, MySQL renvoie `NULL`, pas 0.
+   */
+  private async sumPaidQuantity(
+    subscriptionUuid: string,
+    beneficiaryUuid: string,
+  ): Promise<number> {
+    const row = await this.subscriptionPaymentRepo
+      .createQueryBuilder('sp')
+      .select('COALESCE(SUM(sp.quantity), 0)', 'total')
+      .where('sp.subscription_uuid = :subscriptionUuid', { subscriptionUuid })
+      .andWhere('sp.beneficiary_uuid = :beneficiaryUuid', { beneficiaryUuid })
+      .andWhere('sp.status = :status', { status: GlobalStatus.SUCCESS })
+      .getRawOne<{ total: string | number | null }>();
+
+    return Number(row?.total ?? 0);
+  }
+
+  /**
+   * Quota restant d'un bénéficiaire sur une campagne, pour que l'écran de paiement dise la
+   * vérité **avant** le clic plutôt que de renvoyer un refus après.
+   * `max = null` ⇒ illimité (`remaining = null`), même convention que l'enforcement.
+   *
+   * Borné au périmètre du demandeur, comme la liste des paiements : sans ce contrôle, l'uuid
+   * d'un membre suffirait à savoir combien il a versé, hors de toute responsabilité.
+   */
+  async getBeneficiaryQuota(
+    subscriptionUuid: string,
+    beneficiaryUuid: string,
+    admin_uuid: string,
+  ) {
+    await this.checkAdmin(admin_uuid);
+    const subscription = await this.findSubscription(subscriptionUuid);
+    const beneficiary = await this.findMember(beneficiaryUuid);
+
+    const autorisees =
+      await this.accessScopeService.structuresAutorisees(admin_uuid);
+    if (
+      autorisees !== null &&
+      (!beneficiary.structure_uuid || !autorisees.has(beneficiary.structure_uuid))
+    ) {
+      throw new ForbiddenException(
+        "Ce membre n'est pas dans votre périmètre.",
+      );
+    }
+
+    const max = subscription.max_payments_per_beneficiary;
+    const paid = await this.sumPaidQuantity(subscriptionUuid, beneficiaryUuid);
+
+    return {
+      subscription_uuid: subscriptionUuid,
+      beneficiary_uuid: beneficiaryUuid,
+      max_payments_per_beneficiary: max && max > 0 ? max : null,
+      paid,
+      remaining: max && max > 0 ? Math.max(0, max - paid) : null,
+    };
+  }
 
   private async checkAdmin(uuid: string) {
     const admin = await this.userRepo.findOne({ where: { uuid } });

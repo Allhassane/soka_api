@@ -49,7 +49,11 @@ export class SubscriptionService {
       .orderBy('s.stops_at', 'ASC')
       .getMany();
 
-    // Nombre de paiements réussis du membre par campagne (bénéficiaire).
+    // Unités déjà réglées par le membre (bénéficiaire) sur chaque campagne.
+    // ⚠️ On somme `quantity`, on ne compte pas les lignes : un paiement peut porter
+    // plusieurs unités, et c'est la quantité que l'enforcement compare au plafond
+    // (`subscription-payment.service.makeSubscription`). Compter les lignes rouvrait
+    // la campagne à un membre ayant déjà consommé tout son quota en une fois.
     const paidCount = new Map<string, number>();
     if (memberUuid && open.length) {
       const paid = await this.subscriptionPaymentRepo.find({
@@ -57,19 +61,19 @@ export class SubscriptionService {
           beneficiary_uuid: memberUuid,
           status: GlobalStatus.SUCCESS,
         },
-        select: ['subscription_uuid'],
+        select: ['subscription_uuid', 'quantity'],
       });
       for (const p of paid) {
         paidCount.set(
           p.subscription_uuid,
-          (paidCount.get(p.subscription_uuid) ?? 0) + 1,
+          (paidCount.get(p.subscription_uuid) ?? 0) + (p.quantity ?? 1),
         );
       }
     }
 
     // On garde la campagne tant que le membre n'a pas atteint sa limite de
     // paiements. max null ou <= 0  ⇒  illimité (toujours proposé). Aligné sur
-    // l'enforcement au paiement (subscription-payment.service : count >= max).
+    // l'enforcement au paiement (subscription-payment.service : unités >= max).
     const campaigns = open
       .filter((s) => {
         const max = s.max_payments_per_beneficiary;

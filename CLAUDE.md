@@ -233,6 +233,22 @@ services) : abonnements et dons.
 - **Abonnements/dons = pas de relation ORM.** Pour retrouver les paiements d'un membre, filtrer
   `SubscriptionPaymentEntity` / `DonatePaymentEntity` sur `beneficiary_uuid` (ou `actor_uuid`) -
   il n'y a pas de `@OneToMany` à charger via `relations:`.
+
+- **💳 `max_payments_per_beneficiary` = plafond CUMULÉ **par bénéficiaire**, compté en **unités**.
+  Un paiement porte une `quantity` : le quota se calcule en `SUM(quantity)` sur les paiements
+  **`SUCCESS`** de ce bénéficiaire pour cette campagne, jamais en `COUNT(*)` (contournable en un
+  seul paiement) ni sur la campagne entière (2026-07-30 : le compteur sans `beneficiary_uuid`
+  **fermait la campagne à toute l'organisation** dès le plafond atteint). Les `pending` ne comptent
+  pas - ce sont des guichets abandonnés. Quatre endroits doivent rester d'accord :
+  `subscription-payment.service` / `donate-payment.service` (enforcement), `subscription.service.
+  getOpenToSubscribe` / `donate.service.getOpenToDonate` (listes « à souscrire »), et les routes
+  `GET …/quota` qui alimentent l'écran.
+
+- **👥 Bénéficiaires payables = `AccessScopeService`, pas `responsibilities[0]`.**
+  `structure-tree.service.getBeneficiaryByConnectedUser` borne la liste au périmètre réel (admin =
+  non contraint) et **inclut toujours le demandeur**. Elle est **tronquée à 100 lignes** (7 950
+  membres en base) : la recherche serveur est le moyen d'atteindre un membre, pas le défilement -
+  hors recherche, le demandeur est trié en tête pour que l'écran garde sa valeur par défaut.
 - **⚠️ Un responsable n'habite PAS la structure qu'il dirige.** Un responsable de district vit dans
   un sous-groupe *du* district. Sa responsabilité porte le **niveau** (`responsibilities.level_uuid`),
   jamais une structure : le rattachement est **calculé** en remontant les ancêtres du membre jusqu'au
@@ -374,6 +390,25 @@ services) : abonnements et dons.
   hiérarchique** - la réutiliser plutôt que réinventer un contrôle. Le grisage côté front n'est
   qu'un confort.
 
+- **📱 Fournisseur SMS actif : TROIS niveaux de décision, la base gagne.** Du plus fort au plus
+  faible : (1) `app_settings.sms.active_provider` — bascule **à chaud**, relue à chaque envoi ;
+  (2) `.env` **`SMS_ACTIVE_PROVIDER`** (`smspro` | `letexto`) — défaut de **déploiement**, lu
+  seulement si la ligne (1) est absente ; (3) `SMS_DEFAULT_ACTIVE_PROVIDER` dans
+  `sms/sms.constants.ts`. Comme `CreateAppSettings` **sème** la ligne (1), sur toute base déjà
+  migrée **changer le `.env` seul ne produit aucun effet** — c'est le piège n°1 ici. Passer par
+  l'écran Paramètres SMS, ou par une migration (modèle : `SetSmsproAsDefaultProvider`).
+  Le défaut est **SMSPro Africa** ; LeTexto reste activé comme cible de repli.
+  ⚠️ Un seul point de résolution du défaut : **`AppConfigService.smsDefaultProvider`**. Le
+  `SmsDispatcher` (qui envoie) et le `SmsSettingsService` (qui affiche) doivent tous deux passer
+  par lui, sinon l'écran désigne un fournisseur et un autre envoie.
+- **📱 Transport SMSPro = `/api/v3` + `Authorization: Bearer`.** Le compte accepte aussi
+  l'ancien `/api/http` avec `api_token` dans le corps ou en query (vérifié : les deux répondent
+  200 sur `/balance`), mais c'est le Bearer qui est validé **envoi compris**, et un token en
+  query finit dans les journaux d'accès du proxy. `SMSPRO_SENDER_ID` : **11 caractères max** et
+  **doit être approuvé** côté SMSPro (`SGBNDCI` aujourd'hui) — un sender non approuvé donne un
+  `422`. Un HTTP **200 peut porter `{status:'error'}`** : toujours relire l'enveloppe.
+  Normalisation : `225` + les 10 chiffres locaux **en conservant le `0`** (`0749326623` →
+  `2250749326623`) — retirer le `0` fait rejeter le SMS.
 - **Login = phone_number + password**, pas email. Le guard local attend ces champs.
 - **Migrations manuelles.** `synchronize` doit rester **off** ; passer par
   `migration:generate` / `migration:run`. Ne jamais laisser TypeORM modifier `soka_db` en auto.

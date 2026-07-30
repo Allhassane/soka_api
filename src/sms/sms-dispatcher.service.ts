@@ -10,7 +10,6 @@ import {
   SETTING_SMS_ACTIVE_PROVIDER,
   SETTING_SMS_FAILOVER_ENABLED,
   settingProviderEnabledKey,
-  SMS_DEFAULT_ACTIVE_PROVIDER,
   SMS_PROVIDER_NAMES,
 } from './sms.constants';
 
@@ -44,9 +43,10 @@ export class SmsDispatcher {
   }
 
   async send(input: SendMessageInput): Promise<SendMessageResult> {
+    // Défaut de déploiement (`.env`), utilisé seulement si la base ne dit rien.
     const activeName = await this.settings.get(
       SETTING_SMS_ACTIVE_PROVIDER,
-      SMS_DEFAULT_ACTIVE_PROVIDER,
+      this.appConfig.smsDefaultProvider,
     );
     const failoverEnabled = await this.settings.getBool(
       SETTING_SMS_FAILOVER_ENABLED,

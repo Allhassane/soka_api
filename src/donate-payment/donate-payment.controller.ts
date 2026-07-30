@@ -61,6 +61,25 @@ export class DonatePaymentController {
     );
   }
 
+  /**
+   * ⚠️ Déclarée AVANT `@Get(':uuid')` : sinon le segment statique « quota » serait avalé par la
+   * route dynamique, qui chercherait un paiement d'uuid « quota ».
+   *
+   * Permission `..._creer` : c'est l'écran de paiement qui l'appelle, donc exactement la
+   * population autorisée à donner. Le bénéficiaire est toujours le membre connecté.
+   */
+  @Get('quota')
+  @RequirePermissions('dons_paiements_creer')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @ApiOperation({
+    summary: 'Quota de zaimu restant pour le membre connecté sur une campagne',
+  })
+  @ApiQuery({ name: 'donate_uuid', required: true })
+  async getMyQuota(@Query('donate_uuid') donateUuid: string, @Request() req) {
+    return this.donatePaymentService.getMyQuota(donateUuid, req.user.uuid);
+  }
+
   @Get(':uuid')
   @RequirePermissions('dons_paiements_voir')
   @ApiBearerAuth()

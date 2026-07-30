@@ -281,11 +281,12 @@ async downloadMembersExport(
       @Query('division_uuid') division_uuid?: string,
     ) {
       const user = req.user;
+      // Le périmètre est calculé côté service à partir de l'uuid de l'utilisateur
+      // (`AccessScopeService`). On ne transmet plus `responsibilities[0]` : l'ordre du tableau
+      // est indéterminé, il ignore les comités, et il était absent pour un administrateur.
       return this.structureTreeService.getBeneficiaryByConnectedUser(
+        user.uuid,
         user.member_uuid,
-        user.responsibilities?.[0]?.structure?.uuid,
-        user.responsibilities?.[0]?.level_uuid,
-
         {
           search,
           gender,

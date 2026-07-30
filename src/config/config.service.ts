@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppEnv } from 'src/shared/enums/app-env.enum';
+import {
+  isSmsProviderName,
+  SMS_DEFAULT_ACTIVE_PROVIDER,
+  type SmsProviderName,
+} from 'src/sms/sms.constants';
 
 @Injectable()
 export class AppConfigService {
@@ -77,5 +82,27 @@ export class AppConfigService {
     const explicit = this.config.get<string>('SOKA_PAY_CALLBACK_URL');
     if (explicit && explicit.trim()) return explicit.trim();
     return `${this.appUrl}api/webhooks/soka-pay`;
+  }
+
+  // --- SMS transactionnel ---
+
+  /**
+   * Fournisseur SMS par défaut, lu dans `.env` (`SMS_ACTIVE_PROVIDER`).
+   *
+   * **Point de résolution UNIQUE** : `SmsDispatcher` et `SmsSettingsService`
+   * doivent tous deux passer par ici, sinon l'aiguilleur et l'écran de
+   * paramètres peuvent afficher/utiliser deux fournisseurs différents.
+   *
+   * Une valeur inconnue retombe sur `SMS_DEFAULT_ACTIVE_PROVIDER` plutôt que de
+   * bloquer le démarrage : un envoi de mot de passe ne doit jamais dépendre
+   * d'une faute de frappe dans le `.env`. (Le schéma Joi refuse déjà les
+   * valeurs hors liste ; cette garde couvre le cas où la validation est
+   * contournée, par exemple en test.)
+   */
+  get smsDefaultProvider(): SmsProviderName {
+    const raw = (this.config.get<string>('SMS_ACTIVE_PROVIDER') ?? '')
+      .trim()
+      .toLowerCase();
+    return isSmsProviderName(raw) ? raw : SMS_DEFAULT_ACTIVE_PROVIDER;
   }
 }

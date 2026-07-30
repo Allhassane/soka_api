@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { AppConfigService } from 'src/config/config.service';
 import { SettingsService } from 'src/settings/settings.service';
 import { SmsProviderRegistry } from './sms-provider.registry';
 import { SmsDispatcher } from './sms-dispatcher.service';
@@ -14,7 +15,6 @@ import {
   SETTING_SMS_ACTIVE_PROVIDER,
   SETTING_SMS_FAILOVER_ENABLED,
   settingProviderEnabledKey,
-  SMS_DEFAULT_ACTIVE_PROVIDER,
   SMS_PROVIDER_LABELS,
   SMS_PROVIDER_NAMES,
   SmsProviderName,
@@ -63,6 +63,9 @@ export class SmsSettingsService {
     private readonly settings: SettingsService,
     private readonly registry: SmsProviderRegistry,
     private readonly dispatcher: SmsDispatcher,
+    // Même source de défaut que le `SmsDispatcher` : sans ça, l'écran pourrait
+    // désigner un fournisseur actif différent de celui qui envoie réellement.
+    private readonly appConfig: AppConfigService,
   ) {}
 
   private assertKnownProvider(name: string): SmsProviderName {
@@ -90,7 +93,7 @@ export class SmsSettingsService {
   async getState(includeBalance = true): Promise<SmsSettingsState> {
     const active = await this.settings.get(
       SETTING_SMS_ACTIVE_PROVIDER,
-      SMS_DEFAULT_ACTIVE_PROVIDER,
+      this.appConfig.smsDefaultProvider,
     );
     const failover = await this.settings.getBool(
       SETTING_SMS_FAILOVER_ENABLED,
@@ -140,7 +143,7 @@ export class SmsSettingsService {
       // ni le fournisseur ACTIF (sinon plus aucun envoi réel possible).
       const active = await this.settings.get(
         SETTING_SMS_ACTIVE_PROVIDER,
-        SMS_DEFAULT_ACTIVE_PROVIDER,
+        this.appConfig.smsDefaultProvider,
       );
       if (provider === active) {
         throw new BadRequestException(

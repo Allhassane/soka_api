@@ -535,24 +535,46 @@ export class CommitteeService {
       throw new NotFoundException('Membre introuvable');
     }
 
+    // ⚠️ `withDeleted` est INDISPENSABLE ici. `removeMember` fait un `softRemove`,
+    // donc la ligne retirée RESTE en base - et l'index unique
+    // `uq_committee_member (committee_uuid, member_uuid)` ne connaît pas
+    // `deleted_at`. Sans `withDeleted`, la recherche ne voit pas le lien retiré,
+    // l'INSERT part quand même et MySQL le refuse : le retrait d'un membre
+    // rendait tout ré-ajout impossible, avec un 500 « Internal server error »
+    // pour seule explication (constaté en base : lien créé puis retiré 5 s plus
+    // tard, suivi de 3 inserts échoués).
     const existing = await this.committeeMembersRepo.findOne({
       where: { committee_uuid, member_uuid },
+      withDeleted: true,
     });
-    if (existing) {
+
+    if (existing && !existing.deleted_at) {
       throw new ConflictException('Ce membre est déjà dans ce comité');
     }
 
-    const link = this.committeeMembersRepo.create({
-      committee_uuid,
-      member_uuid,
-      admin_uuid: user.uuid,
-    });
-    await this.committeeMembersRepo.save(link);
+    if (existing) {
+      // Lien déjà présent mais retiré : on le RÉACTIVE plutôt que d'en insérer un
+      // second (impossible), et on réattribue l'auteur à celui qui ré-ajoute.
+      // `restore()` remet `deleted_at` à NULL - inverse exact de `softRemove()`,
+      // et évite d'élargir le type de `deleted_at` dans l'entité partagée.
+      await this.committeeMembersRepo.restore({ id: existing.id });
+      await this.committeeMembersRepo.update(
+        { id: existing.id },
+        { admin_uuid: user.uuid },
+      );
+    } else {
+      const link = this.committeeMembersRepo.create({
+        committee_uuid,
+        member_uuid,
+        admin_uuid: user.uuid,
+      });
+      await this.committeeMembersRepo.save(link);
+    }
 
     await this.logService.logAction(
       'committee-member-add',
       admin.id,
-      `Membre ${member.firstname} ${member.lastname} ajouté au comité "${committee.name}"`,
+      `Membre ${member.firstname} ${member.lastname} ${existing ? 'ré-ajouté' : 'ajouté'} au comité "${committee.name}"`,
     );
 
     return this.mapMember(member);

@@ -14,6 +14,7 @@ import { Response } from 'express';
 import { ExportJobStatus } from 'src/export-async/entities/export-job.entity';
 import { ExportJobService } from 'src/export-async/export-job.service';
 import { ExportProcessorService } from 'src/export-async/export-processor.service';
+import { AccessScopeService } from 'src/access-scope/access-scope.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -104,6 +105,9 @@ export class StructureTreeService {
     // Dépendance circulaire ExportProcessorService <-> StructureTreeService → forwardRef.
     @Inject(forwardRef(() => ExportProcessorService))
     private exportProcessorService: ExportProcessorService,
+
+    /** Périmètre hiérarchique du demandeur (service `@Global`, aucun import de module requis). */
+    private readonly accessScopeService: AccessScopeService,
 
   ) { }
 
@@ -1268,10 +1272,31 @@ export class StructureTreeService {
     };
   }
 
+  /**
+   * Membres pour lesquels l'utilisateur connecté peut payer (abonnement, zaimu).
+   *
+   * ⚠️ Réécrit le 2026-07-30. La version précédente empêchait littéralement la plupart des
+   * membres de s'abonner :
+   *  - le périmètre venait de `responsibilities[0]` (ordre indéterminé, comités ignorés) et un
+   *    utilisateur **sans** responsabilité recevait un **404** ; un administrateur sans
+   *    responsabilité voyait donc une liste vide et ne pouvait abonner personne, pas même lui ;
+   *  - une responsabilité **sans niveau** (104 en base) provoquait « niveau du membre non
+   *    trouvée » ;
+   *  - surtout, pour un niveau d'ordre ≤ 3 (NATIONAL, RÉGION, CENTRE_RÉGIONAL, CENTRE) la
+   *    fonction ne renvoyait **que le membre connecté**. Les 163 responsables de ces paliers
+   *    (14 NATIONAL + 14 RÉGION + 135 CENTRE, relevé en base) - dont les **deux** comptes
+   *    administrateurs, l'un NATIONAL, l'autre RÉGION - ne pouvaient abonner personne d'autre
+   *    qu'eux-mêmes. Le plus haut placé était le plus contraint.
+   *
+   * Désormais : périmètre calculé par `AccessScopeService` (le point de vérité du projet ;
+   * `null` = administrateur non contraint), aucun palier n'est traité à part, et le demandeur
+   * est **toujours** dans sa propre liste. Le volume est tenu par la recherche serveur + une
+   * borne dure (`MAX_BENEFICIAIRES`) : sur 7 950 membres, on ne déverse pas la base dans un
+   * `<select>` - l'écran filtre par nom.
+   */
   async getBeneficiaryByConnectedUser(
+    userUuid: string,
     memberUuid: string | null,
-    structureUuid: string | null,
-    levelUuid: string | null,
     filterParams?: {
       search?: string;
       gender?: 'homme' | 'femme';
@@ -1280,6 +1305,9 @@ export class StructureTreeService {
       division_uuid?: string;
     }
   ): Promise<any[]> {
+
+    /** Borne dure du nombre de bénéficiaires renvoyés (payload + rendu de la liste). */
+    const MAX_BENEFICIAIRES = 100;
 
     // Vérifier que l'utilisateur a un member_uuid
     if (!memberUuid) {
@@ -1291,57 +1319,14 @@ export class StructureTreeService {
       where: { uuid: memberUuid },
     });
 
-    if (!member || !structureUuid) {
-      throw new NotFoundException('Structure du membre non trouvée');
+    if (!member) {
+      throw new NotFoundException('Membre non trouvé');
     }
 
-    if (!levelUuid) {
-      throw new NotFoundException('niveau du membre non trouvée')
-    }
-
-    const check_level = await this.levelRepository.findOne({ where: { uuid: levelUuid } });
-
-
-    // Pour les niveaux <= 3, retourner uniquement les infos du membre connecté
-    if (check_level && check_level.order <= 3) {
-      // Récupérer les informations complètes du membre avec les jointures
-      const memberInfo = await this.memberRepository
-        .createQueryBuilder('m')
-        .leftJoin('structures', 's', 's.uuid = m.structure_uuid')
-        .leftJoin('departments', 'd', 'd.uuid = m.department_uuid')
-        .leftJoin('divisions', 'div', 'div.uuid = m.division_uuid')
-        .select([
-          'm.uuid AS uuid',
-          'm.matricule AS matricule',
-          'm.firstname AS firstname',
-          'm.lastname AS lastname',
-          'm.gender AS gender',
-          'm.birth_date AS birth_date',
-          'm.phone AS phone',
-          'm.email AS email',
-          'm.structure_uuid AS structure_uuid',
-          's.name AS structure_name',
-          'm.department_uuid AS department_uuid',
-          'd.name AS department_name',
-          'm.division_uuid AS division_uuid',
-          'div.name AS division_name',
-          'm.has_gohonzon AS has_gohonzon',
-          'm.membership_date AS membership_date',
-        ])
-        .where('m.uuid = :memberUuid', { memberUuid })
-        .andWhere('m.deleted_at IS NULL')
-        .getRawOne();
-
-      if (!memberInfo) {
-        throw new NotFoundException('Membre non trouvé');
-      }
-
-      // Retourner dans un tableau pour respecter le type de retour
-      return [memberInfo];
-    }
-
-    // Récupérer toutes les sous-structures accessibles
-    const allStructureUuids = await this.getAllSubStructureUuids(structureUuid);
+    // Périmètre réel du demandeur. `null` ⇒ administrateur, aucune contrainte de structure.
+    // Ensemble vide ⇒ aucun périmètre : il ne reste que lui-même, jamais « tout le monde ».
+    const autorisees =
+      await this.accessScopeService.structuresAutorisees(userUuid);
 
     // Construire la requête de base pour les membres
     let membersQuery = this.memberRepository
@@ -1367,8 +1352,22 @@ export class StructureTreeService {
         'm.has_gohonzon AS has_gohonzon',
         'm.membership_date AS membership_date',
       ])
-      .where('m.structure_uuid IN (:...uuids)', { uuids: allStructureUuids })
-      .andWhere('m.deleted_at IS NULL');
+      .where('m.deleted_at IS NULL');
+
+    if (autorisees !== null) {
+      // Le demandeur est ajouté explicitement : il doit toujours pouvoir payer pour lui-même,
+      // y compris sans périmètre (ensemble vide) ou si sa propre structure en sortait.
+      if (autorisees.size === 0) {
+        membersQuery = membersQuery.andWhere('m.uuid = :selfUuid', {
+          selfUuid: memberUuid,
+        });
+      } else {
+        membersQuery = membersQuery.andWhere(
+          '(m.structure_uuid IN (:...uuids) OR m.uuid = :selfUuid)',
+          { uuids: [...autorisees], selfUuid: memberUuid },
+        );
+      }
+    }
 
     // Appliquer les filtres optionnels
     if (filterParams?.search) {
@@ -1402,10 +1401,33 @@ export class StructureTreeService {
       });
     }
 
-    // Récupérer tous les membres (sans pagination)
+    /**
+     * Borne dure. Sans elle, un administrateur (périmètre national) recevrait les 7 950 membres
+     * avec leurs coordonnées à chaque ouverture de l'écran de paiement : plusieurs Mo, une liste
+     * inutilisable au téléphone, et un annuaire complet déversé pour choisir UNE personne.
+     * L'écran envoie `search` : c'est la recherche qui sert à atteindre un membre précis, pas le
+     * défilement. Le tri alphabétique rend la troncature stable et prévisible.
+     *
+     * ⚠️ **Hors recherche, le demandeur est trié en tête** - sinon la troncature peut l'exclure
+     * de sa propre liste (7 950 membres, 100 lignes renvoyées) et l'écran de paiement perd sa
+     * valeur par défaut : plus de bénéficiaire présélectionné, plus de numéro pré-rempli. Le
+     * `OR m.uuid = :selfUuid` du périmètre ne suffisait pas : il le rend éligible, pas visible.
+     * Avec une recherche en revanche, on n'impose rien : l'utilisateur cherche quelqu'un d'autre.
+     */
+    if (!filterParams?.search?.trim()) {
+      membersQuery = membersQuery.orderBy(
+        'CASE WHEN m.uuid = :selfOrder THEN 0 ELSE 1 END',
+        'ASC',
+      );
+      membersQuery = membersQuery.setParameter('selfOrder', memberUuid);
+      membersQuery = membersQuery.addOrderBy('m.firstname', 'ASC');
+    } else {
+      membersQuery = membersQuery.orderBy('m.firstname', 'ASC');
+    }
+
     const members = await membersQuery
-      .orderBy('m.firstname', 'ASC')
       .addOrderBy('m.lastname', 'ASC')
+      .limit(MAX_BENEFICIAIRES)
       .getRawMany();
 
     // Récupérer les responsabilités des membres
