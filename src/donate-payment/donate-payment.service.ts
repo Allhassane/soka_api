@@ -80,29 +80,6 @@ export class DonatePaymentService {
       );
     }
 
-    // -------------------------------
-    //  Vérifier le quota de paiements
-    // -------------------------------
-    // On suppose un champ : donate.max_payments_per_beneficiary (number | null)
-    if (
-      donate.max_payments_per_beneficiary &&
-      donate.max_payments_per_beneficiary > 0
-    ) {
-      const existingCount = await this.donateRepo.count({
-        where: {
-          donate_uuid: donate.uuid,
-          beneficiary_uuid: beneficiary.uuid,
-          status: GlobalStatus.SUCCESS,
-        },
-      });
-
-      if (existingCount >= donate.max_payments_per_beneficiary) {
-        throw new BadRequestException(
-          `Ce bénéficiaire a déjà atteint le nombre maximum de paiements autorisés pour cette campagne.`,
-        );
-      }
-    }
-
     let unitAmount: number;
     let quantity: number;
 
@@ -114,6 +91,42 @@ export class DonatePaymentService {
       );
     }
     quantity = rawQuantity;
+
+    /**
+     * ── Quota : « nombre maximum de paiements par bénéficiaire » ──
+     *
+     * Le filtre par bénéficiaire était bon ici (contrairement aux abonnements), mais deux trous
+     * rendaient le plafond inopérant :
+     *  - on comptait des **lignes** (`count`) et non des **unités** : avec un plafond à 1, un
+     *    bénéficiaire pouvait régler `quantity = 50` en une seule fois ;
+     *  - la quantité demandée n'était jamais comparée au reste disponible, donc le dernier
+     *    paiement pouvait dépasser le plafond d'autant que voulu.
+     * Même règle et même formulation que les abonnements, pour que les deux modules se
+     * comportent pareil. Seuls les paiements **réussis** comptent (les `pending` sont des
+     * guichets abandonnés).
+     */
+    const maxPerBeneficiary = donate.max_payments_per_beneficiary;
+    const beneficiaryLabel = `${beneficiary.firstname} ${beneficiary.lastname}`;
+
+    if (maxPerBeneficiary && maxPerBeneficiary > 0) {
+      const alreadyPaid = await this.sumPaidQuantity(
+        donate.uuid,
+        beneficiary.uuid,
+      );
+      const remaining = maxPerBeneficiary - alreadyPaid;
+
+      if (remaining <= 0) {
+        throw new BadRequestException(
+          `${beneficiaryLabel} a déjà réglé le maximum de ${maxPerBeneficiary} paiement(s) autorisé(s) pour cette campagne.`,
+        );
+      }
+
+      if (quantity > remaining) {
+        throw new BadRequestException(
+          `Il ne reste que ${remaining} paiement(s) possible(s) pour ${beneficiaryLabel} sur cette campagne (maximum ${maxPerBeneficiary}, déjà réglé ${alreadyPaid}).`,
+        );
+      }
+    }
 
     if (donate.category === DonateCategory.FIXIED_AMOUNT) {
       // Montant imposé par la campagne
@@ -492,6 +505,52 @@ export class DonatePaymentService {
   // ============================================================
   //  PRIVATE HELPERS
   // ============================================================
+
+  /**
+   * Unités déjà réglées par un bénéficiaire sur une campagne de zaimu (paiements réussis).
+   * `SUM(quantity)` et non `COUNT(*)` - cf. le commentaire du quota dans `makeDonation`.
+   * `COALESCE` : sans paiement, MySQL renvoie `NULL`, pas 0.
+   */
+  private async sumPaidQuantity(
+    donateUuid: string,
+    beneficiaryUuid: string,
+  ): Promise<number> {
+    const row = await this.donateRepo
+      .createQueryBuilder('dp')
+      .select('COALESCE(SUM(dp.quantity), 0)', 'total')
+      .where('dp.donate_uuid = :donateUuid', { donateUuid })
+      .andWhere('dp.beneficiary_uuid = :beneficiaryUuid', { beneficiaryUuid })
+      .andWhere('dp.status = :status', { status: GlobalStatus.SUCCESS })
+      .getRawOne<{ total: string | number | null }>();
+
+    return Number(row?.total ?? 0);
+  }
+
+  /**
+   * Quota restant d'un bénéficiaire sur une campagne de zaimu, pour que l'écran de paiement
+   * dise la vérité avant le clic. `max = null` ⇒ illimité (`remaining = null`).
+   *
+   * Pas de contrôle de périmètre ici, contrairement aux abonnements : l'écran de zaimu ne
+   * permet de payer que **pour soi-même** (le bénéficiaire est le membre connecté, cf.
+   * `app/(dashboard)/dons/[donateId]/page.tsx`). On borne donc au demandeur lui-même.
+   */
+  async getMyQuota(donateUuid: string, admin_uuid: string) {
+    const admin = await this.checkAdmin(admin_uuid);
+    const campaign = await this.findCampaign(donateUuid);
+    const beneficiary = await this.findMember(admin.member_uuid);
+
+    const max = campaign.max_payments_per_beneficiary;
+    const paid = await this.sumPaidQuantity(donateUuid, beneficiary.uuid);
+
+    return {
+      donate_uuid: donateUuid,
+      beneficiary_uuid: beneficiary.uuid,
+      max_payments_per_beneficiary: max && max > 0 ? max : null,
+      paid,
+      remaining: max && max > 0 ? Math.max(0, max - paid) : null,
+    };
+  }
+
   private async checkAdmin(uuid: string) {
     const admin = await this.userRepo.findOne({ where: { uuid } });
     if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");

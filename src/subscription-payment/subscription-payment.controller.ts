@@ -81,6 +81,34 @@ export class SubscriptionPaymentController {
 
 
 
+  /**
+   * ⚠️ Déclarée AVANT `@Get(':uuid')` : sinon le segment statique « quota » serait avalé par
+   * la route dynamique, qui chercherait un paiement d'uuid « quota ».
+   *
+   * Permission `..._creer` et non `..._voir` : c'est l'écran de paiement qui l'appelle, donc
+   * exactement la population autorisée à payer - un membre qui règle son abonnement n'a pas
+   * forcément le droit de consulter la liste des paiements.
+   */
+  @Get('quota')
+  @RequirePermissions('abonnements_paiements_creer')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "Quota restant d'un bénéficiaire sur une campagne d'abonnement",
+  })
+  @ApiQuery({ name: 'subscription_uuid', required: true })
+  @ApiQuery({ name: 'beneficiary_uuid', required: true })
+  async getBeneficiaryQuota(
+    @Query('subscription_uuid') subscriptionUuid: string,
+    @Query('beneficiary_uuid') beneficiaryUuid: string,
+    @Request() req,
+  ) {
+    return this.subscriptionPaymentService.getBeneficiaryQuota(
+      subscriptionUuid,
+      beneficiaryUuid,
+      req.user.uuid,
+    );
+  }
+
   @Get(':uuid')
   @RequirePermissions('abonnements_paiements_voir')
   @ApiBearerAuth()

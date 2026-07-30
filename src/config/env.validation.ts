@@ -1,5 +1,9 @@
 import * as Joi from 'joi';
 import { AppEnv } from '../shared/enums/app-env.enum';
+import {
+  SMS_DEFAULT_ACTIVE_PROVIDER,
+  SMS_PROVIDER_NAMES,
+} from '../sms/sms.constants';
 
 export const envValidationSchema = Joi.object({
   APP_ENV: Joi.string()
@@ -34,10 +38,20 @@ export const envValidationSchema = Joi.object({
   LETEXTO_ENABLED: Joi.string().valid('true', 'false').default('false'),
   LETEXTO_TIMEOUT_MS: Joi.number().default(8000),
 
-  // --- SMS transactionnel : SMSPro Africa (2e fournisseur, failover) ---
+  // --- SMS transactionnel : SMSPro Africa (fournisseur par DÉFAUT) ---
+  // Transport validé en direct sur le compte réel : base `/api/v3` + en-tête
+  // `Authorization: Bearer <token>` (cf. providers/smspro-sms.provider.ts).
   SMSPRO_API_TOKEN: Joi.string().allow('').default(''),
-  SMSPRO_BASE_URL: Joi.string().uri().default('https://app.smspro.africa/api/http'),
-  SMSPRO_SENDER_ID: Joi.string().default('SG-CI'),
+  SMSPRO_BASE_URL: Joi.string().uri().default('https://app.smspro.africa/api/v3'),
+  // Expéditeur : 11 caractères max, et il DOIT être approuvé côté SMSPro.
+  SMSPRO_SENDER_ID: Joi.string().max(11).default('SGBNDCI'),
   SMSPRO_ENABLED: Joi.string().valid('true', 'false').default('false'),
   SMSPRO_TIMEOUT_MS: Joi.number().default(8000),
+
+  // --- Fournisseur SMS actif ---
+  // Défaut de DÉPLOIEMENT. Une ligne `app_settings.sms.active_provider` le
+  // surcharge (bascule à chaud) : voir la hiérarchie dans sms/sms.constants.ts.
+  SMS_ACTIVE_PROVIDER: Joi.string()
+    .valid(...SMS_PROVIDER_NAMES)
+    .default(SMS_DEFAULT_ACTIVE_PROVIDER),
 });

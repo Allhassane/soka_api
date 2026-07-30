@@ -12,15 +12,23 @@ import type {
 import { SMS_PROVIDER_SMSPRO } from '../sms.constants';
 
 /**
- * Adaptateur SMSPro Africa - HTTP API (app.smspro.africa/api/http) - transport pur.
+ * Adaptateur SMSPro Africa - API v3 (app.smspro.africa/api/v3) - transport pur.
  *
- * Spec : auth par paramètre `api_token` dans le BODY (pas de Bearer) ; envoi via
- * POST /sms/send { api_token, recipient, sender_id, type:'plain', message } ;
- * enveloppe de réponse { status:'success'|'error', message, data }.
+ * Spec (doc officielle : https://app.smspro.africa/developers/docs) :
+ *   - auth par en-tête `Authorization: Bearer <api_token>` ;
+ *   - envoi via POST /sms/send { recipient, sender_id, type:'plain', message } ;
+ *   - enveloppe de réponse { status:'success'|'error', message, data } - un HTTP 200
+ *     peut porter status:'error', donc l'enveloppe est TOUJOURS relue.
  *
- * `.env` : SMSPRO_API_TOKEN, SMSPRO_BASE_URL (défaut .../api/http),
- * SMSPRO_SENDER_ID (défaut SG-CI, DOIT être approuvé côté SMSPro), SMSPRO_ENABLED
- * ('true' = envoi réel autorisé), SMSPRO_TIMEOUT_MS.
+ * ⚠️ Le compte accepte aussi l'ancien schéma (`/api/http` + `api_token` dans le
+ * corps ou en query), vérifié en direct sur `/balance` : les deux renvoient 200.
+ * On retient le Bearer parce que c'est le schéma **validé de bout en bout, envoi
+ * compris** (mini-projet `sendsms/`), et parce qu'un token en query string finit
+ * dans les journaux d'accès du proxy - ce que faisait encore `getBalance()`.
+ *
+ * `.env` : SMSPRO_API_TOKEN, SMSPRO_BASE_URL (défaut .../api/v3),
+ * SMSPRO_SENDER_ID (défaut SGBNDCI, 11 caractères max, DOIT être approuvé côté
+ * SMSPro), SMSPRO_ENABLED ('true' = envoi réel autorisé), SMSPRO_TIMEOUT_MS.
  */
 @Injectable()
 export class SmspproSmsProvider implements ManagedSmsProvider {
@@ -33,19 +41,22 @@ export class SmspproSmsProvider implements ManagedSmsProvider {
 
   constructor(private readonly config: ConfigService) {
     this.token = (this.config.get<string>('SMSPRO_API_TOKEN') ?? '').trim();
-    this.senderId = this.config.get<string>('SMSPRO_SENDER_ID') ?? 'SG-CI';
+    this.senderId = this.config.get<string>('SMSPRO_SENDER_ID') ?? 'SGBNDCI';
     this.enabled =
       (this.config.get<string>('SMSPRO_ENABLED') ?? 'false').toLowerCase() ===
       'true';
     this.http = axios.create({
       baseURL: (
         this.config.get<string>('SMSPRO_BASE_URL') ??
-        'https://app.smspro.africa/api/http'
+        'https://app.smspro.africa/api/v3'
       ).replace(/\/+$/, ''),
       timeout: Number(this.config.get<string>('SMSPRO_TIMEOUT_MS') ?? 8000),
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
+        // Le token voyage dans l'en-tête : jamais en query string (journaux
+        // d'accès), jamais dans le corps (traces d'erreur des clients HTTP).
+        ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
       },
     });
   }
@@ -75,10 +86,10 @@ export class SmspproSmsProvider implements ManagedSmsProvider {
       };
     }
     try {
-      // api_token DANS LE BODY (jamais en query string : le message = mot de passe
-      // et le token ne doivent pas finir dans les access logs du proxy).
+      // Auth par en-tête (posé dans le constructeur) : le corps ne porte que
+      // les données d'envoi. `recipient` accepte plusieurs numéros séparés par
+      // une virgule ; ici l'interface n'en transmet qu'un.
       const { data } = await this.http.post('/sms/send', {
-        api_token: this.token,
         recipient: dest,
         sender_id: this.senderId,
         type: 'plain',
@@ -126,9 +137,8 @@ export class SmspproSmsProvider implements ManagedSmsProvider {
       return { provider: this.name, available: false, display: null };
     }
     try {
-      const { data } = await this.http.get('/balance', {
-        params: { api_token: this.token },
-      });
+      // Auth par en-tête : plus de `api_token` en query string.
+      const { data } = await this.http.get('/balance');
       const display = data?.data?.remaining_balance ?? null;
       return {
         provider: this.name,
