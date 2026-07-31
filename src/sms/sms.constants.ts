@@ -31,6 +31,12 @@ export const SMS_PROVIDER_LABELS: Record<SmsProviderName, string> = {
 // --- Clés de réglage runtime (table `app_settings`) ------------------------
 export const SETTING_SMS_ACTIVE_PROVIDER = 'sms.active_provider';
 export const SETTING_SMS_FAILOVER_ENABLED = 'sms.failover.enabled';
+/**
+ * Mode DIFFUSION : envoyer chaque SMS transactionnel via **TOUS** les
+ * fournisseurs activés à la fois (le destinataire reçoit donc 2 SMS), au lieu
+ * d'un seul fournisseur avec repli.
+ */
+export const SETTING_SMS_BROADCAST_ENABLED = 'sms.broadcast.enabled';
 /** Toggle « activé » par fournisseur : `sms.provider.<name>.enabled`. */
 export const settingProviderEnabledKey = (name: string): string =>
   `sms.provider.${name}.enabled`;
@@ -50,6 +56,24 @@ export const settingProviderEnabledKey = (name: string): string =>
  * `SetSmsproAsDefaultProvider`.
  */
 export const SMS_DEFAULT_ACTIVE_PROVIDER: SmsProviderName = SMS_PROVIDER_SMSPRO;
+
+/**
+ * Mode DIFFUSION par défaut **quand rien d'autre ne le dit** (ni la base, ni
+ * `.env SMS_BROADCAST_ENABLED`). Même hiérarchie à trois niveaux que le
+ * fournisseur actif : `app_settings.sms.broadcast.enabled` gagne toujours.
+ *
+ * `true` depuis le 2026-07-31 : les deux fournisseurs envoient SIMULTANÉMENT le
+ * mot de passe (1re connexion / mot de passe oublié). Raison : LeTexto comme
+ * SMSPro acceptent parfois un envoi qu'ils ne livrent jamais, et le failover est
+ * aveugle à la non-livraison (il ne bascule que sur une *erreur*). Doubler
+ * l'envoi est le seul moyen simple de couvrir ce cas ; le coût est un SMS de
+ * plus par demande, et un doublon reçu côté membre.
+ *
+ * ⚠️ Le mode diffusion IGNORE `sms.failover.enabled` : il n'y a plus de « repli »
+ * quand tout le monde envoie. Le fournisseur actif ne sert alors qu'à l'ordre
+ * d'envoi et à l'affichage de l'écran de paramètres.
+ */
+export const SMS_DEFAULT_BROADCAST_ENABLED = true;
 
 /** Garde de type : l'entrée est-elle un nom de fournisseur connu ? */
 export const isSmsProviderName = (

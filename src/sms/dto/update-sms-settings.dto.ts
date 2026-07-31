@@ -22,6 +22,16 @@ export class SetFailoverDto {
   enabled: boolean;
 }
 
+export class SetBroadcastDto {
+  @ApiProperty({
+    example: true,
+    description:
+      'true = chaque SMS part par TOUS les fournisseurs activés (le membre reçoit 2 SMS).',
+  })
+  @IsBoolean()
+  enabled: boolean;
+}
+
 export class TestSmsDto {
   @ApiProperty({ enum: SMS_PROVIDER_NAMES, example: 'smspro' })
   @IsIn(SMS_PROVIDER_NAMES)

@@ -408,17 +408,37 @@ services) : abonnements et dons.
   hiérarchique** - la réutiliser plutôt que réinventer un contrôle. Le grisage côté front n'est
   qu'un confort.
 
-- **📱 Fournisseur SMS actif : TROIS niveaux de décision, la base gagne.** Du plus fort au plus
-  faible : (1) `app_settings.sms.active_provider` - bascule **à chaud**, relue à chaque envoi ;
+- **📱 SMS transactionnel : mode DIFFUSION par défaut (les 2 fournisseurs envoient).** Depuis le
+  2026-07-31, `sms.broadcast.enabled = true` : chaque SMS d'auth (1re connexion / mot de passe
+  oublié) part **par LeTexto ET SMSPro en parallèle** → le membre reçoit **2 SMS** portant le même
+  mot de passe. Raison : un fournisseur peut *accepter* un envoi puis ne jamais le livrer, et le
+  failover est aveugle à ça (il ne bascule que sur une **erreur**). Conséquences à connaître :
+  - **Le failover et le fournisseur actif n'ont plus d'effet sur l'envoi** tant que la diffusion
+    est ON ; `sms.active_provider` ne sert plus qu'à l'ordre d'envoi et à l'écran de paramètres.
+  - **Succès = au moins UN fournisseur accepte.** Un envoi partiel est un **succès** (le membre a
+    son mot de passe) tracé en `WARN [SMS][BROADCAST][PARTIEL]` ; exiger les deux transformerait
+    la panne d'un fournisseur en blocage de connexion. `SmsDispatchResult.attempts` porte le détail
+    par fournisseur, `providers` la liste de ceux qui ont accepté.
+  - **Envoi en parallèle obligatoire** (`Promise.all`) : on est sur le chemin **synchrone** du
+    login, deux appels en série cumuleraient les timeouts (2 × 8 s).
+  - Un fournisseur dont le toggle `sms.provider.<name>.enabled` est `false` (ou dont `canSend()`
+    est faux) est **écarté sans échec** : la diffusion retombe silencieusement à 1 SMS. C'est
+    pourquoi la migration `EnableSmsBroadcast` remet les **deux** toggles à `true`.
+  - Coût : **2 SMS facturés par demande**. Repasser à un seul fournisseur = `PATCH
+    /admin/settings/sms/broadcast {enabled:false}` (bascule à chaud), pas un redéploiement.
+- **📱 Fournisseur SMS actif : TROIS niveaux de décision, la base gagne.** Même hiérarchie pour la
+  diffusion (`sms.broadcast.enabled` > `.env SMS_BROADCAST_ENABLED` > `SMS_DEFAULT_BROADCAST_ENABLED`).
+  Du plus fort au plus faible : (1) `app_settings.sms.active_provider` - bascule **à chaud**, relue à chaque envoi ;
   (2) `.env` **`SMS_ACTIVE_PROVIDER`** (`smspro` | `letexto`) - défaut de **déploiement**, lu
   seulement si la ligne (1) est absente ; (3) `SMS_DEFAULT_ACTIVE_PROVIDER` dans
   `sms/sms.constants.ts`. Comme `CreateAppSettings` **sème** la ligne (1), sur toute base déjà
   migrée **changer le `.env` seul ne produit aucun effet** - c'est le piège n°1 ici. Passer par
   l'écran Paramètres SMS, ou par une migration (modèle : `SetSmsproAsDefaultProvider`).
   Le défaut est **SMSPro Africa** ; LeTexto reste activé comme cible de repli.
-  ⚠️ Un seul point de résolution du défaut : **`AppConfigService.smsDefaultProvider`**. Le
-  `SmsDispatcher` (qui envoie) et le `SmsSettingsService` (qui affiche) doivent tous deux passer
-  par lui, sinon l'écran désigne un fournisseur et un autre envoie.
+  ⚠️ Un seul point de résolution du défaut : **`AppConfigService.smsDefaultProvider`** (et
+  `.smsBroadcastEnabled` pour la diffusion). Le `SmsDispatcher` (qui envoie) et le
+  `SmsSettingsService` (qui affiche) doivent tous deux passer par lui, sinon l'écran désigne un
+  fournisseur / un mode et un autre s'applique.
 - **📱 Transport SMSPro = `/api/v3` + `Authorization: Bearer`.** Le compte accepte aussi
   l'ancien `/api/http` avec `api_token` dans le corps ou en query (vérifié : les deux répondent
   200 sur `/balance`), mais c'est le Bearer qui est validé **envoi compris**, et un token en
