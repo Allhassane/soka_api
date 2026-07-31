@@ -107,6 +107,8 @@ export class DonateService {
     page = 1,
     limit = 10,
     search?: string,
+    /** Statut déjà résolu par le contrôleur (`null` = tous). */
+    statut?: string | null,
   ): Promise<{ data: DonateEntity[]; meta: Omit<PaginateMeta, 'page'> }> {
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
     if (!admin) {
@@ -121,6 +123,13 @@ export class DonateService {
       qb.andWhere('donate.name LIKE :search', {
         search: `%${search.trim()}%`,
       });
+    }
+
+    // Filtre de statut. `undefined` ne devrait pas arriver (le contrôleur résout toujours), mais
+    // on retombe alors sur le défaut « en cours » plutôt que d'ouvrir la liste entière.
+    const statutApplique = statut === undefined ? 'started' : statut;
+    if (statutApplique !== null) {
+      qb.andWhere('donate.status = :statut', { statut: statutApplique });
     }
 
     const [data, total] = await qb

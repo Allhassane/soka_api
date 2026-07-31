@@ -6,13 +6,20 @@ import { CreateFormationDto } from './dto/create-formation.dto';
 import { UpdateFormationDto } from './dto/update-formation.dto';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
+import {
+  ReferentialMergeService,
+  REFERENTIAL_FORMATIONS,
+} from 'src/shared/services/referential-merge.service';
+import { MergeReferentialDto } from 'src/shared/dtos/merge-referential.dto';
 
 @ApiBearerAuth()
 @ApiTags('Formations')
 @Controller('formations')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class FormationController {
-  constructor(private readonly formationService: FormationService) {}
+  constructor(private readonly formationService: FormationService,
+    private readonly referentialMergeService: ReferentialMergeService,
+  ) {}
 
   @Get()
   @RequirePermissions('formations_voir')
@@ -30,6 +37,36 @@ export class FormationController {
   @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
   store(@Body() payload: CreateFormationDto, @Request() req) {
     return this.formationService.store(payload, req.user.uuid as string);
+  }
+
+  /**
+   * ⚠️ Déclarées AVANT `@Get(':uuid')` : sinon « merge » serait pris pour un uuid par la route
+   * dynamique. Même piège que les routes `/quota` des paiements.
+   */
+  @Get('merge/usage/:uuid')
+  @RequirePermissions('formations_voir')
+  @ApiOperation({
+    summary: "Nombre de porteurs d'un élément, avant reversement",
+  })
+  usageAvantFusion(@Param('uuid') uuid: string) {
+    return this.referentialMergeService.usage(REFERENTIAL_FORMATIONS, uuid);
+  }
+
+  @Post('merge')
+  @RequirePermissions('formations_modifier')
+  @ApiOperation({
+    summary: "Reverser tous les membres d'une formation vers une autre",
+  })
+  @ApiResponse({ status: 200, description: 'Reversement effectué.' })
+  @ApiResponse({ status: 400, description: 'Éléments identiques ou invalides.' })
+  merge(@Body() payload: MergeReferentialDto, @Request() req) {
+    return this.referentialMergeService.merge(
+      REFERENTIAL_FORMATIONS,
+      payload.source_uuid,
+      payload.target_uuid,
+      payload.delete_source === true,
+      req.user.uuid as string,
+    );
   }
 
   @Get(':uuid')

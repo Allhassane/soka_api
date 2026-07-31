@@ -76,6 +76,23 @@ export class StructureController {
     );
   }
 
+  /**
+   * Variante **navigation**, pour les seules routes qui renvoient des listes d'enfants (noms de
+   * structures). Elle accepte en plus les **ancêtres** du périmètre : une cascade
+   * Région → … → Sous-groupe part de la racine, et sans cela elle casse dès la deuxième étape
+   * pour un non-administrateur (anomalie F2 de la recette du 2026-07-31).
+   *
+   * ⚠️ Ne pas l'utiliser sur une route exposant des membres, des coordonnées ou des compteurs :
+   * `assertDansPerimetre` reste la règle pour celles-là.
+   */
+  private async assertNavigable(req, structureUuid?: string): Promise<void> {
+    if (!structureUuid) return;
+    await this.structureTreeService.assertStructureNavigable(
+      structureUuid,
+      this.buildPerimeter(req),
+    );
+  }
+
     @Get('my-members')
     @RequirePermissions('structures_voir')
     @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -593,7 +610,7 @@ async exportStatCategory(
     required: false,
   })
   public async findChildrens(@Req() req, @Query('uuid') uuid: string | undefined) {
-    await this.assertDansPerimetre(req, uuid);
+    await this.assertNavigable(req, uuid);
     return this.structureService.findChildrens(uuid);
   }
 
@@ -616,7 +633,7 @@ async exportStatCategory(
     required: false,
   })
   public async findByChildrens(@Req() req, @Query('uuid') uuid: string | undefined) {
-    await this.assertDansPerimetre(req, uuid);
+    await this.assertNavigable(req, uuid);
     return this.structureService.findByChildrens(uuid);
   }
 
@@ -640,7 +657,7 @@ async exportStatCategory(
     required: true,
   })
   public async findByAllChildrens(@Req() req, @Query('uuid') uuid: string) {
-    await this.assertDansPerimetre(req, uuid);
+    await this.assertNavigable(req, uuid);
     return this.structureService.findByAllChildrens(uuid);
   }
 

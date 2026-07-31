@@ -6,7 +6,7 @@ import {
 import { DonatePaymentEntity } from './entities/donate-payment.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { AccessScopeService } from 'src/access-scope/access-scope.service';
-import { ILike, In, Repository } from 'typeorm';
+import { ILike, Repository } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
 import { LogActivitiesService } from 'src/log-activities/log-activities.service';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
@@ -80,49 +80,6 @@ export class DonatePaymentService {
       );
     }
 
-    let totalPaidQuantity = 0;
-
-    // Bloquer si un paiement est déjà en cours pour ce bénéficiaire
-    const inProgressPayment = await this.donateRepo.count({
-      where: {
-        donate_uuid: donate.uuid,
-        beneficiary_uuid: beneficiary.uuid,
-        status: In([GlobalStatus.INIT, GlobalStatus.PENDING]),
-      },
-    });
-
-    if (inProgressPayment > 0) {
-      throw new BadRequestException(
-        'Un paiement est déjà en cours pour ce bénéficiaire sur cette campagne.',
-      );
-    }
-
-    // -------------------------------
-    //  Vérifier le quota de paiements (somme des quantités réussies)
-    // -------------------------------
-    if (
-      donate.max_payments_per_beneficiary &&
-      donate.max_payments_per_beneficiary > 0
-    ) {
-      const paidQuantityResult = await this.donateRepo
-        .createQueryBuilder('d')
-        .select('COALESCE(SUM(d.quantity), 0)', 'total')
-        .where('d.donate_uuid = :donate_uuid', { donate_uuid: donate.uuid })
-        .andWhere('d.beneficiary_uuid = :beneficiary_uuid', {
-          beneficiary_uuid: beneficiary.uuid,
-        })
-        .andWhere('d.status = :status', { status: GlobalStatus.SUCCESS })
-        .getRawOne();
-
-      totalPaidQuantity = Number(paidQuantityResult?.total ?? 0);
-
-      if (totalPaidQuantity >= donate.max_payments_per_beneficiary) {
-        throw new BadRequestException(
-          `Ce bénéficiaire a déjà atteint le nombre maximum de paiements autorisés pour cette campagne.`,
-        );
-      }
-    }
-
     let unitAmount: number;
     let quantity: number;
 
@@ -135,17 +92,41 @@ export class DonatePaymentService {
     }
     quantity = rawQuantity;
 
-    let restToPay: number =
-      (donate.max_payments_per_beneficiary ?? 0) - totalPaidQuantity;
+    /**
+     * ── Quota : « nombre maximum de paiements par bénéficiaire » ──
+     *
+     * Le filtre par bénéficiaire était bon ici (contrairement aux abonnements), mais deux trous
+     * rendaient le plafond inopérant :
+     *  - on comptait des **lignes** (`count`) et non des **unités** : avec un plafond à 1, un
+     *    bénéficiaire pouvait régler `quantity = 50` en une seule fois ;
+     *  - la quantité demandée n'était jamais comparée au reste disponible, donc le dernier
+     *    paiement pouvait dépasser le plafond d'autant que voulu.
+     * Même règle et même formulation que les abonnements, pour que les deux modules se
+     * comportent pareil. Seuls les paiements **réussis** comptent (les `pending` sont des
+     * guichets abandonnés). Le calcul passe par `sumPaidQuantity`, partagé avec la route
+     * `GET /donate-payments/quota` : deux copies de la règle finissent toujours par diverger.
+     */
+    const maxPerBeneficiary = donate.max_payments_per_beneficiary;
+    const beneficiaryLabel = `${beneficiary.firstname} ${beneficiary.lastname}`;
 
-    if (
-      donate.max_payments_per_beneficiary
-      && donate.max_payments_per_beneficiary > 0
-      && quantity > restToPay
-    ) {
-      throw new BadRequestException(
-        `Le nombre de paiements restant pour cette campagne de zaimu est de ${restToPay}.`,
+    if (maxPerBeneficiary && maxPerBeneficiary > 0) {
+      const alreadyPaid = await this.sumPaidQuantity(
+        donate.uuid,
+        beneficiary.uuid,
       );
+      const remaining = maxPerBeneficiary - alreadyPaid;
+
+      if (remaining <= 0) {
+        throw new BadRequestException(
+          `${beneficiaryLabel} a déjà réglé le maximum de ${maxPerBeneficiary} paiement(s) autorisé(s) pour cette campagne.`,
+        );
+      }
+
+      if (quantity > remaining) {
+        throw new BadRequestException(
+          `Il ne reste que ${remaining} paiement(s) possible(s) pour ${beneficiaryLabel} sur cette campagne (maximum ${maxPerBeneficiary}, déjà réglé ${alreadyPaid}).`,
+        );
+      }
     }
 
     if (donate.category === DonateCategory.FIXIED_AMOUNT) {

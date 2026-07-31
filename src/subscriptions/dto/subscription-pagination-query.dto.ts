@@ -7,4 +7,17 @@ export class SubscriptionPaginationQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  /**
+   * Statut des campagnes à afficher. **Absent = seules les campagnes en cours** (`started`).
+   * `all` renvoie tous les statuts. Toute valeur autre que l'absence exige le droit de filtrer
+   * (cf. `resoudreStatutCampagne`).
+   */
+  @ApiPropertyOptional({
+    description: "Statut à afficher (absent = en cours uniquement, 'all' = tous)",
+    example: 'started',
+  })
+  @IsOptional()
+  @IsString()
+  status?: string;
 }

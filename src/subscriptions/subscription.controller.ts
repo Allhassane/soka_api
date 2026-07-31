@@ -8,22 +8,43 @@ import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 import { SubscriptionPaginationQueryDto } from './dto/subscription-pagination-query.dto';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
+import { EffectivePermissionsService } from 'src/access-scope/effective-permissions.service';
+import { resoudreStatutCampagne } from 'src/shared/services/campaign-status-filter';
 
 @ApiBearerAuth()
 @ApiTags('Abonnement')
 @Controller('subscriptions')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class SubscriptionController {
-  constructor(private readonly subscriptionService: SubscriptionService) {}
+  constructor(
+    private readonly effectivePermissions: EffectivePermissionsService,
+    private readonly subscriptionService: SubscriptionService) {}
 
   @Get()
   @RequirePermissions('abonnements_voir')
   @ApiOperation({ summary: 'Liste toutes les abonnements ' })
   @ApiResponse({ status: 200, description: 'Retour paginé' })
-  findAll(@Request() req, @Query() query: SubscriptionPaginationQueryDto) {
+  /**
+   * ⚠️ Le statut est résolu **ici**, avant le service : par défaut seules les campagnes en cours
+   * sont renvoyées, et demander un autre statut exige `abonnements_filtrer_par_statut`.
+   * Masquer le sélecteur côté écran ne suffirait pas - `?status=archived` reste tapable.
+   */
+  async findAll(@Request() req, @Query() query: SubscriptionPaginationQueryDto) {
     const admin_uuid = req.user.uuid as string;
-    const { page, limit, search } = query;
-    return this.subscriptionService.findAll(admin_uuid, page, limit, search);
+    const { page, limit, search, status } = query;
+
+    const peutFiltrer =
+      req.user?.is_admin === true ||
+      (
+        await this.effectivePermissions.slugsFor({
+          uuid: req.user?.uuid,
+          member_uuid: req.user?.member_uuid,
+        })
+      ).has('abonnements_filtrer_par_statut');
+
+    const { statut } = resoudreStatutCampagne(status, peutFiltrer);
+
+    return this.subscriptionService.findAll(admin_uuid, page, limit, search, statut);
   }
 
   @Post()

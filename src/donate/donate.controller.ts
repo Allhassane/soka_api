@@ -15,6 +15,8 @@ import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 import { UpdateDonateDto } from './dto/update-donate.dto';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
+import { EffectivePermissionsService } from 'src/access-scope/effective-permissions.service';
+import { resoudreStatutCampagne } from 'src/shared/services/campaign-status-filter';
 import { DonatePaginationQueryDto } from './dto/donate-pagination-query.dto';
 
 @ApiTags('Don')
@@ -22,17 +24,36 @@ import { DonatePaginationQueryDto } from './dto/donate-pagination-query.dto';
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class DonateController {
-  constructor(private readonly donateService: DonateService) {}
+  constructor(
+    private readonly effectivePermissions: EffectivePermissionsService,
+    private readonly donateService: DonateService) {}
 
   @Get()
   @RequirePermissions('dons_voir')
   @ApiOperation({ summary: 'Liste de toutes les dons' })
   @ApiResponse({ status: 200, description: 'Retour paginé' })
   @ApiResponse({ status: 400, description: 'Liste non récupérée.' })
-  findAll(@Request() req, @Query() query: DonatePaginationQueryDto) {
+  /**
+   * ⚠️ Le statut est résolu **ici**, avant le service : par défaut seules les campagnes en cours
+   * sont renvoyées, et demander un autre statut exige `dons_filtrer_par_statut`.
+   * Masquer le sélecteur côté écran ne suffirait pas - `?status=archived` reste tapable.
+   */
+  async findAll(@Request() req, @Query() query: DonatePaginationQueryDto) {
     const admin_uuid = req.user.uuid as string;
-    const { page, limit, search } = query;
-    return this.donateService.findAll(admin_uuid, page, limit, search);
+    const { page, limit, search, status } = query;
+
+    const peutFiltrer =
+      req.user?.is_admin === true ||
+      (
+        await this.effectivePermissions.slugsFor({
+          uuid: req.user?.uuid,
+          member_uuid: req.user?.member_uuid,
+        })
+      ).has('dons_filtrer_par_statut');
+
+    const { statut } = resoudreStatutCampagne(status, peutFiltrer);
+
+    return this.donateService.findAll(admin_uuid, page, limit, search, statut);
   }
 
   @Get('open-to-donate')

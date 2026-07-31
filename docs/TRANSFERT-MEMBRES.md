@@ -90,8 +90,14 @@ interne de son district.
 
 ### Lot
 
-**1 demande = 1 district cible = 1..N membres**, décision **globale** (all-or-nothing) en v1.
-Couvre le cas réel « une famille déménage » sans complexifier l'écran d'approbation.
+**Côté API : 1 demande = 1 district cible = 1..N membres**, décision **globale**
+(all-or-nothing). `CreateMemberTransferDto.member_uuids` est un tableau `@ArrayNotEmpty`.
+
+⚠️ **Côté écran, depuis le 2026-07-25 : 1 demande = 1 seul membre.** Restriction **produit**,
+posée uniquement dans `CreateTransferModal` (le sélecteur ne retient qu'un membre et envoie un
+tableau à un élément). Le contrat serveur est inchangé et accepte toujours N membres — un appel
+API direct ou un futur écran « lot » n'a rien à remigrer. Le cas « une famille déménage » se
+traite donc en autant de demandes que de personnes.
 
 ## 4. Règles de gestion
 
@@ -138,8 +144,10 @@ particuliers.
 
 **Traitement d'une responsabilité perdue :**
 
-- **Aperçu à la demande** : « ⚠️ Ce transfert fera perdre à Jean K. sa responsabilité
-  *Responsable de district CENTRE* — elle deviendra vacante. »
+- **Aperçu à la demande** : le calcul est fait dans tous les cas ; l'écran de confirmation
+  n'en affiche que le total (« ⚠️ 1 responsabilité devient vacante si le district d'accueil
+  approuve »). Le détail nominatif (« Jean K. perd *Responsable de district CENTRE* ») est
+  affiché à l'**approbation**, pas à la demande — cf. §7.
 - **À l'application** : soft-delete de la ligne `member_responsibilities` ; l'uuid de la
   responsabilité perdue est figé dans `member_transfer_items.lost_responsibility_uuids`
   → auditable et réversible.
@@ -334,12 +342,19 @@ jusqu'au district via **`useStructureFilterCascade`** (déjà écrit, gère les 
 `CENTRE_REGIONAL`).
 
 > **La vérification d'impact est sur le chemin obligatoire de l'envoi** (depuis le 2026-07-25).
-> « Envoyer la demande » appelle `/impact-preview`, puis ouvre **`ConfirmTransferModal`** :
-> récapitulatif (membres, district de destination, motif, précision) + responsabilités
-> perdues/conservées via `ImpactPreviewPanel`. C'est le bouton « Confirmer et envoyer » de cette
-> seconde modale qui crée réellement la demande. Si `/impact-preview` échoue, **rien n'est
-> envoyé**. Avant, l'aperçu était un bouton facultatif à côté du formulaire, donc contournable :
-> on pouvait soumettre sans jamais voir qu'une responsabilité allait devenir vacante.
+> « Envoyer la demande » appelle `/impact-preview`, puis ouvre **`ConfirmTransferModal`**. C'est le
+> bouton « Confirmer et envoyer » de cette seconde modale qui crée réellement la demande. Si
+> `/impact-preview` échoue, **rien n'est envoyé**. Avant, l'aperçu était un bouton facultatif à côté
+> du formulaire, donc contournable : on pouvait soumettre sans jamais voir qu'une responsabilité
+> allait devenir vacante.
+>
+> ⚠️ **Ce que `ConfirmTransferModal` affiche a été réduit le 2026-07-25** (demande de recette) :
+> récapitulatif (membre, district, motif, précision) + **avertissement agrégé** « N responsabilités
+> deviennent vacantes », affiché seulement s'il y a perte. Le **détail** par responsabilité
+> (`ImpactPreviewPanel`) n'y est plus. L'appel `/impact-preview` et le blocage en cas d'échec sont
+> **inchangés** : c'est l'affichage du détail qui a été retiré, pas la vérification. Le détail
+> complet reste sur `ApproveTransferModal`, côté approbateur — celui dont la décision applique
+> réellement le transfert.
 > ⚠️ `ConfirmTransferModal` s'empile au-dessus de `CreateTransferModal` : ses `z-index` sont
 > forcés au-dessus de ceux de `DialogContent` (contenu `z-[9999]`, overlay `z-[999]`).
 

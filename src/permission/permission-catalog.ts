@@ -314,6 +314,10 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
       },
       { name: 'Filtrer les paiements par bénéficiaire', slug: 'abonnements_filtrer_paiements_beneficiaire' },
       {
+        name: 'Filtrer les campagnes d\'abonnement par statut',
+        slug: 'abonnements_filtrer_par_statut',
+      },
+      {
         name: 'Souscrire à un abonnement',
         slug: 'abonnements_paiements_creer',
         aliases: [
@@ -377,6 +381,10 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
       { name: 'Consulter les statistiques d\'une campagne', slug: 'zaimu_consulter_statistiques_campagne' },
       { name: 'Consulter la liste des paiements d\'une campagne de zaimu', slug: 'dons_paiements_voir' },
       { name: 'Filtrer les paiements par bénéficiaire', slug: 'zaimu_filtrer_paiements_beneficiaire' },
+      {
+        name: 'Filtrer les campagnes de zaimu par statut',
+        slug: 'dons_filtrer_par_statut',
+      },
       {
         name: 'Faire un zaimu',
         slug: 'dons_paiements_creer',

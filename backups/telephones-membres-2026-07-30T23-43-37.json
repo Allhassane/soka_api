@@ -1,0 +1,166 @@
+{
+ "alignements": [
+  {
+   "member_uuid": "914f6d7c-060a-4a89-b46d-8f0f1282ae19",
+   "ancien_tel": "0704962780",
+   "nouveau_tel": "0704962788",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "db51caac-a500-4a3c-b50b-6c6004822066",
+   "ancien_tel": "0171001284",
+   "nouveau_tel": "0102858397",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "deef9f84-f5ca-4685-baad-3b4ee52f4d58",
+   "ancien_tel": "0704368287",
+   "nouveau_tel": "0142223974",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "91b665fe-0a5b-4d48-9fb1-300c924c992f",
+   "ancien_tel": "0100680093",
+   "nouveau_tel": "0102367526",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "011a9196-81b5-41f3-9760-b9180204a937",
+   "ancien_tel": "0748205777",
+   "nouveau_tel": "0505815009",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "11386a78-ba76-4e5b-a2a6-4fce24be1873",
+   "ancien_tel": "0151903206",
+   "nouveau_tel": "0141463349",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "82a8b7d9-41ee-4eb5-8412-846f5ff9a15e",
+   "ancien_tel": "0142795088",
+   "nouveau_tel": "0788002119",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "3c36673a-f3b7-4419-97c4-df116699bab7",
+   "ancien_tel": "0554869761",
+   "nouveau_tel": "0789786512",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "643248f8-f1e1-4b7e-a1bf-4d75a9d63eb2",
+   "ancien_tel": "0789453654",
+   "nouveau_tel": "0789453659",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "edf7c936-3f53-4fce-9ee9-c8e7cb7494b0",
+   "ancien_tel": "0170787982",
+   "nouveau_tel": "0170787182",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "ef0d07cb-cb42-41b3-b9ac-08e5dbe26b52",
+   "ancien_tel": "0759597035",
+   "nouveau_tel": "0759597072",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "90b96ec7-079a-4809-a163-5c3fbcefd735",
+   "ancien_tel": "0545530078",
+   "nouveau_tel": "0707883113",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "81dfa365-71dc-45db-b34c-2645d54e6d48",
+   "ancien_tel": "0758717827",
+   "nouveau_tel": "0756717827",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "fbd62b49-9b02-4fed-abbf-ccb193660f8f",
+   "ancien_tel": "0153166289",
+   "nouveau_tel": "0153166089",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "70ab6f8e-6723-48f3-8a0b-29f31c07577b",
+   "ancien_tel": "0152972699",
+   "nouveau_tel": "0152972599",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "2e1455c8-4a18-49ea-a916-27313a8a846f",
+   "ancien_tel": "0749738168",
+   "nouveau_tel": "0504458719",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "3a688ebd-c0b6-4c1a-9f97-ac8d701a963d",
+   "ancien_tel": "0565449696",
+   "nouveau_tel": "0500835677",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "eba27976-5e97-4730-82c4-19a26781f0cd",
+   "ancien_tel": "0584496394",
+   "nouveau_tel": "0546032380",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "42af28ea-1962-4810-beb7-f671b43e98e2",
+   "ancien_tel": "0749720285",
+   "nouveau_tel": "0749120285",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "31d412e8-aea6-494e-a9a9-c9e6732c199d",
+   "ancien_tel": "0584977674",
+   "nouveau_tel": "0584977670",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "3ef53d73-aa8d-4495-b1d5-7323fb31883f",
+   "ancien_tel": "0709103622",
+   "nouveau_tel": "0709103628",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "0e10612a-024d-4d15-85af-474c17b93f1e",
+   "ancien_tel": "0505974414",
+   "nouveau_tel": "0505974415",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "28b268f7-1ef6-475e-a967-18cafaa9ad25",
+   "ancien_tel": "0565717776",
+   "nouveau_tel": "0143858717",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "fc7e1aca-e98d-42c4-ace6-1742c4e9d840",
+   "ancien_tel": "0797877865",
+   "nouveau_tel": "0797877565",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "24e783c9-75c9-4232-ad19-0288857a974e",
+   "ancien_tel": "0748291340",
+   "nouveau_tel": "0787011574",
+   "meme_personne": false
+  },
+  {
+   "member_uuid": "40f3b559-b583-49ef-bfad-912691d7f402",
+   "ancien_tel": "0717111546",
+   "nouveau_tel": "0555241214",
+   "meme_personne": true
+  },
+  {
+   "member_uuid": "417a86a3-649e-4940-8b48-4b232bf2d68e",
+   "ancien_tel": "0150498414",
+   "nouveau_tel": "0150498314",
+   "meme_personne": true
+  }
+ ]
+}

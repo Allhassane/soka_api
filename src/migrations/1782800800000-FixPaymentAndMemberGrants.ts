@@ -9,7 +9,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * rôles sauf ADMINISTRATEUR. Or ces routes ne sont pas des actes d'administration : c'est
  * l'utilisateur lui-même qui règle sa cotisation depuis l'écran Abonnements/Dons. Avant la
  * protection, elles n'exigeaient **rien**. On accorde donc le droit de payer à tout rôle qui
- * voit déjà l'écran correspondant — même raisonnement que `AlignMenuAndRoutePermissions` :
+ * voit déjà l'écran correspondant - même raisonnement que `AlignMenuAndRoutePermissions` :
  * la configuration existante fait foi.
  *
  * **② Le rôle MEMBRE portait des permissions d'ÉCRITURE sur les membres et les transferts**

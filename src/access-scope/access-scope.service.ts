@@ -187,7 +187,7 @@ export class AccessScopeService {
    *
    * Raccourci pour les services qui ne connaissent que l'uuid du demandeur et doivent borner
    * une liste : `const autorisees = await …structuresAutorisees(uuid); if (autorisees) filtrer`.
-   * Un utilisateur sans structure renvoie un ensemble **vide** — donc « ne voit rien », jamais
+   * Un utilisateur sans structure renvoie un ensemble **vide** - donc « ne voit rien », jamais
    * « voit tout » : le refus est la valeur par défaut.
    */
   async structuresAutorisees(userUuid: string): Promise<Set<string> | null> {

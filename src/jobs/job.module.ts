@@ -4,11 +4,17 @@ import { JobService } from './job.service';
 import { JobController } from './job.controller';
 import { JobEntity } from './entities/job.entity';
 import { LogActivitiesModule } from 'src/log-activities/log-activities.module';
+import { ReferentialMergeModule } from 'src/shared/services/referential-merge.module';
 import { User } from 'src/users/entities/user.entity';
 import { UserModule } from 'src/users/user.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([JobEntity,User]),LogActivitiesModule,UserModule],
+  imports: [
+    TypeOrmModule.forFeature([JobEntity, User]),
+    LogActivitiesModule,
+    UserModule,
+    ReferentialMergeModule,
+  ],
   controllers: [JobController],
   providers: [JobService],
   exports: [JobService],
