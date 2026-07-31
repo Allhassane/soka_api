@@ -1881,6 +1881,71 @@ export class StructureTreeService {
     );
   }
 
+  /**
+   * Barrière **de navigation** : même règle que ci-dessus, plus les **ancêtres** du périmètre.
+   *
+   * ⚠️ À réserver aux routes qui ne renvoient que des **noms de structures** (les listes d'enfants
+   * qui alimentent les cascades Région → … → Sous-groupe). Ne JAMAIS l'employer sur une route qui
+   * expose des membres, des coordonnées ou des compteurs : pour celles-là,
+   * `assertStructureWithinPerimeter` reste la règle.
+   *
+   * Pourquoi il le faut (recette du 2026-07-31, anomalie F2) : une cascade part de la racine et
+   * descend. Un responsable de district se voyait refuser les enfants de SA région - un ancêtre,
+   * donc hors périmètre au sens strict - et la cascade cassait dès la deuxième étape. Résultat :
+   * sur la fiche de ses propres membres, les 7 champs de structure restaient vides et grisés, et
+   * la création d'un membre était impossible. Défaut invisible en test administrateur, `is_admin`
+   * n'étant pas contraint.
+   *
+   * Ce que cela expose en plus : les **noms** des structures sœurs de sa chaîne (les autres centres
+   * de sa région, par exemple). Aucune donnée de membre - les listes de membres gardent leur propre
+   * filtre de périmètre.
+   */
+  public async assertStructureNavigable(
+    targetStructureUuid: string,
+    perimetre: { isAdmin?: boolean; allowedRootUuids?: (string | null | undefined)[] },
+  ): Promise<void> {
+    if (perimetre?.isAdmin === true) return;
+
+    const allowed = (perimetre?.allowedRootUuids ?? []).filter(
+      (u): u is string => !!u,
+    );
+    if (allowed.length === 0) {
+      throw new ForbiddenException('Structure hors de votre périmètre');
+    }
+
+    // 1. La cible est-elle DANS le sous-arbre autorisé ? (règle habituelle)
+    for (const racine of allowed) {
+      if (await this.estAncetreOuEgal(racine, targetStructureUuid)) return;
+    }
+
+    // 2. Sinon, la cible est-elle un ANCÊTRE d'une racine autorisée ? C'est le cas de la
+    //    cascade : on demande les enfants de sa région pour redescendre vers son district.
+    for (const racine of allowed) {
+      if (await this.estAncetreOuEgal(targetStructureUuid, racine)) return;
+    }
+
+    throw new ForbiddenException('Structure hors de votre périmètre');
+  }
+
+  /** `ancetre` est-il la structure `descendant` elle-même, ou l'un de ses parents ? */
+  private async estAncetreOuEgal(
+    ancetre: string,
+    descendant: string,
+  ): Promise<boolean> {
+    let courant: string | null = descendant;
+    const vus = new Set<string>(); // garde anti-cycle (données héritées)
+    while (courant && !vus.has(courant)) {
+      if (courant === ancetre) return true;
+      vus.add(courant);
+      const parent = await this.structureRepository.findOne({
+        where: { uuid: courant },
+        select: ['uuid', 'parent_uuid'],
+      });
+      courant = parent?.parent_uuid ?? null;
+    }
+    return false;
+  }
+
   private async assertTargetWithinPerimeter(
     targetStructureUuid: string,
     allowedRootUuids: (string | null | undefined)[],

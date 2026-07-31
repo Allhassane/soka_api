@@ -6,13 +6,20 @@ import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
+import {
+  ReferentialMergeService,
+  REFERENTIAL_METIERS,
+} from 'src/shared/services/referential-merge.service';
+import { MergeReferentialDto } from 'src/shared/dtos/merge-referential.dto';
 
 @ApiBearerAuth()
 @ApiTags('Métiers')
 @Controller('jobs')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class JobController {
-  constructor(private readonly jobService: JobService) {}
+  constructor(private readonly jobService: JobService,
+    private readonly referentialMergeService: ReferentialMergeService,
+  ) {}
 
   @Get()
   @RequirePermissions('metiers_voir')
@@ -30,6 +37,36 @@ export class JobController {
   @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
   store(@Body() payload: CreateJobDto, @Request() req) {
     return this.jobService.store(payload, req.user.uuid as string);
+  }
+
+  /**
+   * ⚠️ Déclarées AVANT `@Get(':uuid')` : sinon « merge » serait pris pour un uuid par la route
+   * dynamique. Même piège que les routes `/quota` des paiements.
+   */
+  @Get('merge/usage/:uuid')
+  @RequirePermissions('metiers_voir')
+  @ApiOperation({
+    summary: "Nombre de porteurs d'un élément, avant reversement",
+  })
+  usageAvantFusion(@Param('uuid') uuid: string) {
+    return this.referentialMergeService.usage(REFERENTIAL_METIERS, uuid);
+  }
+
+  @Post('merge')
+  @RequirePermissions('metiers_modifier')
+  @ApiOperation({
+    summary: "Reverser tous les membres d'une métier vers une autre",
+  })
+  @ApiResponse({ status: 200, description: 'Reversement effectué.' })
+  @ApiResponse({ status: 400, description: 'Éléments identiques ou invalides.' })
+  merge(@Body() payload: MergeReferentialDto, @Request() req) {
+    return this.referentialMergeService.merge(
+      REFERENTIAL_METIERS,
+      payload.source_uuid,
+      payload.target_uuid,
+      payload.delete_source === true,
+      req.user.uuid as string,
+    );
   }
 
   @Get(':uuid')

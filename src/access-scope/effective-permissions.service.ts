@@ -103,7 +103,7 @@ export class EffectivePermissionsService {
         : await this.slugsDesRoles(roleUuids);
 
     /**
-     * Repli MEMBRE — **doit rester aligné sur `auth.service.ts`**, qui applique le même repli au
+     * Repli MEMBRE - **doit rester aligné sur `auth.service.ts`**, qui applique le même repli au
      * `global_permissions` renvoyé au front. Sans lui, un compte sans aucune source de rôle
      * voyait ses permissions dans l'interface (via le repli du login) et se faisait refuser par
      * l'API (via ce service) : des boutons visibles menant à des 403.

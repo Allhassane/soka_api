@@ -6,13 +6,20 @@ import { CreateCityDto } from './dto/create-city.dto';
 import { UpdateCityDto } from './dto/update-city.dto';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
+import {
+  ReferentialMergeService,
+  REFERENTIAL_LOCALITES,
+} from 'src/shared/services/referential-merge.service';
+import { MergeReferentialDto } from 'src/shared/dtos/merge-referential.dto';
 
 @ApiBearerAuth()
 @ApiTags('Cities')
 @Controller('cities')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class CityController {
-  constructor(private readonly cityService: CityService) {}
+  constructor(private readonly cityService: CityService,
+    private readonly referentialMergeService: ReferentialMergeService,
+  ) {}
 
   @Get()
   @RequirePermissions('villes_voir')
@@ -30,6 +37,36 @@ export class CityController {
   @ApiResponse({ status: 400, description: 'Champs requis manquants.' })
   store(@Body() payload: CreateCityDto, @Request() req) {
     return this.cityService.store(payload, req.user.uuid as string);
+  }
+
+  /**
+   * ⚠️ Déclarées AVANT `@Get(':uuid')` : sinon « merge » serait pris pour un uuid par la route
+   * dynamique. Même piège que les routes `/quota` des paiements.
+   */
+  @Get('merge/usage/:uuid')
+  @RequirePermissions('villes_voir')
+  @ApiOperation({
+    summary: "Nombre de porteurs d'un élément, avant reversement",
+  })
+  usageAvantFusion(@Param('uuid') uuid: string) {
+    return this.referentialMergeService.usage(REFERENTIAL_LOCALITES, uuid);
+  }
+
+  @Post('merge')
+  @RequirePermissions('villes_modifier')
+  @ApiOperation({
+    summary: "Reverser tous les membres d'une localité de résidence vers une autre",
+  })
+  @ApiResponse({ status: 200, description: 'Reversement effectué.' })
+  @ApiResponse({ status: 400, description: 'Éléments identiques ou invalides.' })
+  merge(@Body() payload: MergeReferentialDto, @Request() req) {
+    return this.referentialMergeService.merge(
+      REFERENTIAL_LOCALITES,
+      payload.source_uuid,
+      payload.target_uuid,
+      payload.delete_source === true,
+      req.user.uuid as string,
+    );
   }
 
   @Get(':uuid')

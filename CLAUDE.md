@@ -234,6 +234,21 @@ services) : abonnements et dons.
   `SubscriptionPaymentEntity` / `DonatePaymentEntity` sur `beneficiary_uuid` (ou `actor_uuid`) -
   il n'y a pas de `@OneToMany` à charger via `relations:`.
 
+- **🔎 Listes de campagnes : filtrées sur `started` PAR DÉFAUT** (depuis le 2026-07-31).
+  `GET /subscriptions` et `GET /donate` **sans paramètre `status` ne renvoient que les campagnes
+  en cours** - c'est vrai pour tout le monde, `is_admin` compris. Une campagne archivée absente
+  d'une liste n'est donc pas un bug de périmètre. Point unique de résolution :
+  `shared/services/campaign-status-filter.ts` → `resoudreStatutCampagne(status, peutFiltrer)`,
+  appelé **dans le contrôleur** avant le service.
+  Demander un autre statut (ou `all`) exige `abonnements_filtrer_par_statut` /
+  `dons_filtrer_par_statut` et lève **403** sinon - le refus est côté API, masquer le sélecteur
+  ne suffirait pas. Seule exception : demander explicitement `started` passe sans droit (le front
+  envoie toujours le paramètre, sélecteur affiché ou non).
+  ⚠️ **Tout appelant qui a besoin d'un autre statut doit l'envoyer**, sinon il reçoit une liste
+  vide sans erreur. Cas réel : `JournalEditionModal` (web) ne propose que les campagnes
+  `completed` - il demande `status=completed`, et ce droit doit rester ouvert aux rôles qui
+  portent `journal_editions_creer`.
+
 - **💳 `max_payments_per_beneficiary` = plafond CUMULÉ **par bénéficiaire**, compté en **unités**.
   Un paiement porte une `quantity` : le quota se calcule en `SUM(quantity)` sur les paiements
   **`SUCCESS`** de ce bénéficiaire pour cette campagne, jamais en `COUNT(*)` (contournable en un
@@ -268,6 +283,9 @@ services) : abonnements et dons.
   soft-delete les responsabilités dont l'ancre a changé. Seule exception, volontaire : un membre
   rattaché **au-dessus** du district (anomalie des 104 membres sur un CHAPITRE) n'a pas de
   district source - il n'est bloqué ni ici ni par le workflow, sinon il serait immobile à vie.
+  ⚠️ Relevé le 2026-07-30 : ils sont 108, et **101 d'entre eux sont des lignes sans nom ni
+  prénom** (lot d'import de mai 2025, aucune référence en base). `npm run seed:purge-nameless-members`
+  les supprime ; l'anomalie retomberait alors à **7 cas réels**.
 
 - **🧭 `AccessScopeService` (`src/access-scope/`) = LE point de calcul des droits et du périmètre.**
   Une passe, 3 requêtes : rôles (responsabilités ∪ comités ∪ `user_roles`), paliers accessibles,
@@ -283,7 +301,7 @@ services) : abonnements et dons.
 - **🗂️ Catalogue des permissions : `src/permission/permission-catalog.ts`** (depuis le 2026-07-28).
   Transcription du document fonctionnel **`permissions/permissions-soka-digital.md`** (racine du
   monorepo), qui est la source de vérité métier : une section « ## Module … » = un module, une puce
-  = une permission. **28 modules / 342 slugs** (257 puces + 85 alias).
+  = une permission. **28 modules / 344 slugs** (259 puces + 85 alias).
   Rechargement : `npm run seed:permissions` (purge + insertion + **un lien `roles_permissions` par
   rôle**, tout coché pour ADMINISTRATEUR et RESPONSABLE, à 0 pour les autres) ; `--dry-run` joue
   tout puis annule. `npm run seed:reset-permissions` ne fait que vider (sauvegarde JSON dans
@@ -391,11 +409,11 @@ services) : abonnements et dons.
   qu'un confort.
 
 - **📱 Fournisseur SMS actif : TROIS niveaux de décision, la base gagne.** Du plus fort au plus
-  faible : (1) `app_settings.sms.active_provider` — bascule **à chaud**, relue à chaque envoi ;
-  (2) `.env` **`SMS_ACTIVE_PROVIDER`** (`smspro` | `letexto`) — défaut de **déploiement**, lu
+  faible : (1) `app_settings.sms.active_provider` - bascule **à chaud**, relue à chaque envoi ;
+  (2) `.env` **`SMS_ACTIVE_PROVIDER`** (`smspro` | `letexto`) - défaut de **déploiement**, lu
   seulement si la ligne (1) est absente ; (3) `SMS_DEFAULT_ACTIVE_PROVIDER` dans
   `sms/sms.constants.ts`. Comme `CreateAppSettings` **sème** la ligne (1), sur toute base déjà
-  migrée **changer le `.env` seul ne produit aucun effet** — c'est le piège n°1 ici. Passer par
+  migrée **changer le `.env` seul ne produit aucun effet** - c'est le piège n°1 ici. Passer par
   l'écran Paramètres SMS, ou par une migration (modèle : `SetSmsproAsDefaultProvider`).
   Le défaut est **SMSPro Africa** ; LeTexto reste activé comme cible de repli.
   ⚠️ Un seul point de résolution du défaut : **`AppConfigService.smsDefaultProvider`**. Le
@@ -405,10 +423,10 @@ services) : abonnements et dons.
   l'ancien `/api/http` avec `api_token` dans le corps ou en query (vérifié : les deux répondent
   200 sur `/balance`), mais c'est le Bearer qui est validé **envoi compris**, et un token en
   query finit dans les journaux d'accès du proxy. `SMSPRO_SENDER_ID` : **11 caractères max** et
-  **doit être approuvé** côté SMSPro (`SGBNDCI` aujourd'hui) — un sender non approuvé donne un
+  **doit être approuvé** côté SMSPro (`SGBNDCI` aujourd'hui) - un sender non approuvé donne un
   `422`. Un HTTP **200 peut porter `{status:'error'}`** : toujours relire l'enveloppe.
   Normalisation : `225` + les 10 chiffres locaux **en conservant le `0`** (`0749326623` →
-  `2250749326623`) — retirer le `0` fait rejeter le SMS.
+  `2250749326623`) - retirer le `0` fait rejeter le SMS.
 - **Login = phone_number + password**, pas email. Le guard local attend ces champs.
 - **Migrations manuelles.** `synchronize` doit rester **off** ; passer par
   `migration:generate` / `migration:run`. Ne jamais laisser TypeORM modifier `soka_db` en auto.

@@ -1,0 +1,410 @@
+{
+ "corrections": [
+  {
+   "table": "users",
+   "colonne": "phone_number",
+   "cle": "6357e0fb-5251-41f7-be85-76de7c70d567",
+   "valeur": "0708980578",
+   "avant": "07O8980578"
+  },
+  {
+   "table": "users",
+   "colonne": "phone_number",
+   "cle": "b46195af-cb88-473f-a9e2-57ade64bf9b2",
+   "valeur": "0707661190",
+   "avant": "O7O7661190"
+  },
+  {
+   "table": "users",
+   "colonne": "phone_number",
+   "cle": "139771eb-c6dd-4c22-b977-df41d0eb62ac",
+   "valeur": "0708090074",
+   "avant": "O708090074"
+  },
+  {
+   "table": "users",
+   "colonne": "phone_number",
+   "cle": "85684288-384e-4b49-82dd-f3a31d10aaee",
+   "valeur": "0554630571",
+   "avant": "O554630571"
+  },
+  {
+   "table": "users",
+   "colonne": "phone_number",
+   "cle": "6429589a-d7cd-4e44-b022-4709c7c1d7e2",
+   "valeur": "0140329612",
+   "avant": "+2250140329612"
+  },
+  {
+   "table": "users",
+   "colonne": "phone_number",
+   "cle": "8bb19e8c-9f61-464b-bc4e-488ec92b9c3a",
+   "valeur": "0504095686",
+   "avant": "+2250504095686"
+  },
+  {
+   "table": "users",
+   "colonne": "phone_number",
+   "cle": "1cdb6b0f-966d-45b2-8ee2-9f05678405fe",
+   "valeur": "0503037458",
+   "avant": "+2250503037458"
+  },
+  {
+   "table": "users",
+   "colonne": "phone_number",
+   "cle": "c6ecdc5b-d6ca-4658-b8f3-d79b0084681a",
+   "valeur": "0506215961",
+   "avant": "+2250506215961"
+  },
+  {
+   "table": "users",
+   "colonne": "phone_number",
+   "cle": "4d7f5450-ca93-494f-9dd4-4e9e3f08e2fb",
+   "valeur": "0101220127",
+   "avant": "+2250101220127"
+  },
+  {
+   "table": "users",
+   "colonne": "phone_number",
+   "cle": "afc62c49-c631-4584-bf79-d67a1be090a4",
+   "valeur": "0700631049",
+   "avant": "+2250700631049"
+  },
+  {
+   "table": "users",
+   "colonne": "phone_number",
+   "cle": "fc060b21-f63c-41b5-9d39-5b429eb0809d",
+   "valeur": "0749242784",
+   "avant": "+2250749242784"
+  },
+  {
+   "table": "users",
+   "colonne": "phone_number",
+   "cle": "607e7714-d4e1-4a34-98fa-69922846d9ce",
+   "valeur": "0504168692",
+   "avant": "+2250504168692"
+  },
+  {
+   "table": "users",
+   "colonne": "phone_number",
+   "cle": "e010f63d-54aa-46df-9f8f-e12447487cf2",
+   "valeur": "0711664956",
+   "avant": "+2250711664956"
+  },
+  {
+   "table": "users",
+   "colonne": "phone_number",
+   "cle": "c97d0c35-ed3e-498a-9c5c-01adb2c8ce39",
+   "valeur": "0102030405",
+   "avant": "+2250102030405"
+  },
+  {
+   "table": "members",
+   "colonne": "phone",
+   "cle": "390b4791-9fc5-4362-a38e-999909a51b6e",
+   "valeur": "0708980578",
+   "avant": "07O8980578"
+  },
+  {
+   "table": "members",
+   "colonne": "phone",
+   "cle": "603ee1af-a0bc-4126-bde9-1f13209dadb5",
+   "valeur": "0707661190",
+   "avant": "O7O7661190"
+  },
+  {
+   "table": "members",
+   "colonne": "phone",
+   "cle": "685ca420-04f7-4b81-9bc6-ccc1a640d237",
+   "valeur": "0554630571",
+   "avant": "O554630571"
+  },
+  {
+   "table": "members",
+   "colonne": "phone",
+   "cle": "f5fcb040-2c0e-4200-9b9a-a3307aaffc1a",
+   "valeur": "0140329612",
+   "avant": "+2250140329612"
+  },
+  {
+   "table": "members",
+   "colonne": "phone",
+   "cle": "98c05cf6-0924-405e-87ff-809df363f729",
+   "valeur": "0504095686",
+   "avant": "+2250504095686"
+  },
+  {
+   "table": "members",
+   "colonne": "phone",
+   "cle": "dd806137-393f-4017-873e-f6fae847d33b",
+   "valeur": "0503037458",
+   "avant": "+2250503037458"
+  },
+  {
+   "table": "members",
+   "colonne": "phone",
+   "cle": "0fa244d0-1ece-4f33-b813-cb64023cc235",
+   "valeur": "0506215961",
+   "avant": "+2250506215961"
+  },
+  {
+   "table": "members",
+   "colonne": "phone",
+   "cle": "1599729b-ae1d-4207-8526-e3931181bf1c",
+   "valeur": "0700631049",
+   "avant": "+2250700631049"
+  },
+  {
+   "table": "members",
+   "colonne": "phone",
+   "cle": "81494b27-1974-4935-bd67-eeb17cbb6e23",
+   "valeur": "0749242784",
+   "avant": "+2250749242784"
+  },
+  {
+   "table": "members",
+   "colonne": "phone",
+   "cle": "2d7ca8b6-fbb6-4c46-abf6-97f556ad4c54",
+   "valeur": "0504168692",
+   "avant": "+2250504168692"
+  },
+  {
+   "table": "members",
+   "colonne": "phone",
+   "cle": "3f60ec1d-fa27-42c9-b778-382188dd516a",
+   "valeur": "0711664956",
+   "avant": "+2250711664956"
+  },
+  {
+   "table": "members",
+   "colonne": "phone",
+   "cle": "3fa76f45-1194-4a17-84a6-4ee9807b7ca2",
+   "valeur": "0102030405",
+   "avant": "+2250102030405"
+  },
+  {
+   "table": "members",
+   "colonne": "phone_whatsapp",
+   "cle": "603ee1af-a0bc-4126-bde9-1f13209dadb5",
+   "valeur": "0707661190",
+   "avant": "O7O7661190"
+  },
+  {
+   "table": "members",
+   "colonne": "phone_whatsapp",
+   "cle": "685ca420-04f7-4b81-9bc6-ccc1a640d237",
+   "valeur": "0554630571",
+   "avant": "O554630571"
+  },
+  {
+   "table": "members",
+   "colonne": "phone_whatsapp",
+   "cle": "6b1e623c-22c3-490b-a20e-78a97fce7cfa",
+   "valeur": "0788538807",
+   "avant": ".0788538807"
+  },
+  {
+   "table": "members",
+   "colonne": "phone_whatsapp",
+   "cle": "added665-194f-4911-b2fd-08f59ee434d3",
+   "valeur": "0700773990",
+   "avant": "O700773990"
+  },
+  {
+   "table": "members",
+   "colonne": "phone_whatsapp",
+   "cle": "f5fcb040-2c0e-4200-9b9a-a3307aaffc1a",
+   "valeur": "0140329612",
+   "avant": "+2250140329612"
+  },
+  {
+   "table": "members",
+   "colonne": "phone_whatsapp",
+   "cle": "98c05cf6-0924-405e-87ff-809df363f729",
+   "valeur": "0504095686",
+   "avant": "+2250504095686"
+  },
+  {
+   "table": "members",
+   "colonne": "phone_whatsapp",
+   "cle": "dd806137-393f-4017-873e-f6fae847d33b",
+   "valeur": "0503037458",
+   "avant": "+2250503037458"
+  },
+  {
+   "table": "members",
+   "colonne": "phone_whatsapp",
+   "cle": "1599729b-ae1d-4207-8526-e3931181bf1c",
+   "valeur": "0759620838",
+   "avant": "+2250759620838"
+  },
+  {
+   "table": "members",
+   "colonne": "phone_whatsapp",
+   "cle": "81494b27-1974-4935-bd67-eeb17cbb6e23",
+   "valeur": "0749242784",
+   "avant": "+2250749242784"
+  },
+  {
+   "table": "members",
+   "colonne": "phone_whatsapp",
+   "cle": "2d7ca8b6-fbb6-4c46-abf6-97f556ad4c54",
+   "valeur": "0504168692",
+   "avant": "+2250504168692"
+  },
+  {
+   "table": "members",
+   "colonne": "phone_whatsapp",
+   "cle": "3f60ec1d-fa27-42c9-b778-382188dd516a",
+   "valeur": "0595146533",
+   "avant": "+2250595146533"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "00e65f35-8641-41bd-8d5e-f793634f766d",
+   "valeur": "0707694470",
+   "avant": "0707 694470"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "07ddd489-fec9-4168-94d2-773fc443edb6",
+   "valeur": "0757401543",
+   "avant": "07 57 40 15 43"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "268d8f17-2df5-42f6-ab30-545ba20f622e",
+   "valeur": "0749240540",
+   "avant": "O749240540"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "2a15e802-3527-4940-a0d7-e362b53bcacf",
+   "valeur": "0747781560",
+   "avant": "O747781560"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "7c7b097a-0ec4-4781-9e6b-304d807089ca",
+   "valeur": "0555910264",
+   "avant": "05 55 91 02 64"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "83e74e9e-8e70-4250-950f-b0b4465edd7f",
+   "valeur": "0779514643",
+   "avant": "O779514643"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "83651929-4289-478f-9c57-ad925291fa07",
+   "valeur": "0757855540",
+   "avant": "O757855540"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "906d164e-2c1f-4419-b67d-3d9c1036ddd2",
+   "valeur": "0758553316",
+   "avant": "O758553316"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "b304cef3-a9b6-401d-b76b-873797d9c2de",
+   "valeur": "0708140422",
+   "avant": "07O8140422"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "b7658d35-3b2d-46de-8186-b681bf5e2122",
+   "valeur": "0545177336",
+   "avant": "O545177336"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "f57b6e90-1b3c-44d0-9eac-30f38b4677ae",
+   "valeur": "0708492750",
+   "avant": "07 08 49 27 50"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "f5fcb040-2c0e-4200-9b9a-a3307aaffc1a",
+   "valeur": "0153305286",
+   "avant": "+2250153305286"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "98c05cf6-0924-405e-87ff-809df363f729",
+   "valeur": "0749363124",
+   "avant": "+2250749363124"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "dd806137-393f-4017-873e-f6fae847d33b",
+   "valeur": "0710335639",
+   "avant": "+2250710335639"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "0fa244d0-1ece-4f33-b813-cb64023cc235",
+   "valeur": "0505484972",
+   "avant": "+2250505484972"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "1599729b-ae1d-4207-8526-e3931181bf1c",
+   "valeur": "0101656410",
+   "avant": "+2250101656410"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "225b7470-924c-4f84-a712-f360fa507818",
+   "valeur": "0140984362",
+   "avant": "+2250140984362"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "81494b27-1974-4935-bd67-eeb17cbb6e23",
+   "valeur": "0779516478",
+   "avant": "+2250779516478"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "2d7ca8b6-fbb6-4c46-abf6-97f556ad4c54",
+   "valeur": "0545422173",
+   "avant": "+2250545422173"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "3f60ec1d-fa27-42c9-b778-382188dd516a",
+   "valeur": "0758257936",
+   "avant": "+2250758257936"
+  },
+  {
+   "table": "members",
+   "colonne": "tutor_phone",
+   "cle": "3fa76f45-1194-4a17-84a6-4ee9807b7ca2",
+   "valeur": "0102030405",
+   "avant": "+2250102030405"
+  }
+ ]
+}

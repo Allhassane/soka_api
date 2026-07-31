@@ -776,7 +776,20 @@ async findAll(
     return member;
   }
 
-  /** Suppression logique d’un membre */
+  /**
+   * Suppression logique d’un membre, **et désactivation de son compte de connexion**.
+   *
+   * ⚠️ Sans la seconde partie, supprimer un membre ne coupait pas son accès : le compte `users`
+   * restait `is_active = 1` avec son numéro, donc la personne pouvait encore demander son mot de
+   * passe par SMS et se connecter alors que sa fiche n'existait plus (recette du 2026-07-31,
+   * anomalie F1). C'est `is_active` qui referme les deux portes : `validateUser` refuse la
+   * connexion (« Compte désactivé ») et `requestPasswordReset` n'envoie aucun SMS.
+   *
+   * On **désactive** plutôt que de supprimer le compte : la suppression du membre est elle-même
+   * logique (`softRemove`), le compte doit pouvoir suivre le même chemin si la fiche est
+   * restaurée. Les deux écritures sont dans une transaction - un membre supprimé dont le compte
+   * resterait actif est précisément le défaut qu'on corrige.
+   */
   async delete(uuid: string, admin_uuid: string): Promise<void> {
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
     if (!admin) throw new NotFoundException("Identifiant de l'auteur introuvable");
@@ -786,12 +799,27 @@ async findAll(
 
     await this.assertStructureInScope(member.structure_uuid, admin_uuid);
 
-    await this.memberRepo.softRemove(member);
+    let comptesDesactives = 0;
+    // `memberRepo.manager.transaction` : le même accès que la création de membre plus haut,
+    // pour ne pas injecter une `DataSource` de plus dans un constructeur déjà chargé.
+    await this.memberRepo.manager.transaction(async (manager) => {
+      await manager.softRemove(member);
+
+      const res = await manager.update(
+        User,
+        { member_uuid: member.uuid, is_active: true },
+        { is_active: false },
+      );
+      comptesDesactives = res.affected ?? 0;
+    });
 
     await this.logService.logAction(
       'members-delete',
       admin.id,
-      `Suppression logique du membre ${member.firstname} ${member.lastname}`,
+      `Suppression logique du membre ${member.firstname} ${member.lastname}` +
+        (comptesDesactives > 0
+          ? ` - compte de connexion désactivé`
+          : ` - aucun compte de connexion rattaché`),
     );
   }
 
