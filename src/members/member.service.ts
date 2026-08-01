@@ -1,4 +1,5 @@
 import { AccessScopeService } from 'src/access-scope/access-scope.service';
+import { EffectivePermissionsService } from 'src/access-scope/effective-permissions.service';
 import {
   Injectable,
   NotFoundException,
@@ -113,6 +114,9 @@ export class MemberService {
 
     /** Règle unique du compte de connexion (création + réalignement), partagée avec l'import. */
     private readonly memberAccounts: MemberAccountService,
+
+    /** Droits effectifs du demandeur (service @Global, cache 30 s). */
+    private readonly effectivePermissions: EffectivePermissionsService,
 
   ) {}
 
@@ -359,6 +363,51 @@ export class MemberService {
       dto.structure_uuid !== existingMember.structure_uuid
     ) {
       await this.assertStructureInScope(dto.structure_uuid, admin_uuid);
+    }
+
+    /**
+     * ── La « situation dans l'organisation » a son propre droit (audit §H13) ──
+     *
+     * `PUT /members/:uuid` écrit AUSSI la responsabilité et les accessoires - or attribuer ou
+     * retirer une responsabilité détermine le périmètre hiérarchique du membre visé : c'est un
+     * geste d'organisation, pas une retouche de fiche. Ce geste exige désormais le droit
+     * `membres_modifier_situation_membre_sein_organisation` (les routes dédiées
+     * `/member-responsibility` et `/member-accessories` exigent le même).
+     *
+     * ⚠️ Le contrôle compare aux VALEURS EXISTANTES, pas à la présence des clés : l'onglet
+     * Structure du web envoie toujours `responsibility_uuid` et `accessories` dans le même PUT -
+     * refuser sur la seule présence fermerait l'édition de fiche à tout rôle sans ce droit.
+     */
+    const clefResponsabilite = Object.prototype.hasOwnProperty.call(dto, 'responsibility_uuid');
+    const clefAccessoires = Array.isArray(dto.accessories);
+    if ((clefResponsabilite || clefAccessoires) && admin.is_admin !== true) {
+      const respActuelle = clefResponsabilite
+        ? await this.memberResponsibilityRepo.findOne({ where: { member_uuid: uuid } })
+        : null;
+      const responsabiliteChange =
+        clefResponsabilite &&
+        (dto.responsibility_uuid ?? null) !== (respActuelle?.responsibility_uuid ?? null);
+
+      let accessoiresChangent = false;
+      if (clefAccessoires) {
+        const actuels = await this.memberAccessoryRepo.find({ where: { member_uuid: uuid } });
+        const avant = [...new Set(actuels.map((a) => a.accessory_uuid))].sort();
+        const apres = [...new Set(dto.accessories as string[])].sort();
+        accessoiresChangent =
+          avant.length !== apres.length || avant.some((v, i) => v !== apres[i]);
+      }
+
+      if (responsabiliteChange || accessoiresChangent) {
+        const droits = await this.effectivePermissions.slugsFor({
+          uuid: admin.uuid,
+          member_uuid: admin.member_uuid,
+        });
+        if (!droits.has('membres_modifier_situation_membre_sein_organisation')) {
+          throw new ForbiddenException(
+            "Modifier la responsabilité ou les accessoires d'un membre exige le droit « Modifier la situation d'un membre dans l'organisation ».",
+          );
+        }
+      }
     }
 
     /**

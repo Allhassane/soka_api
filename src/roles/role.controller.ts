@@ -118,8 +118,10 @@ export class RoleController {
     return this.roleService.findLevelsByRoleUuid(uuid);
   }
 
+  // La matrice « qui a droit à quoi » a son propre droit (audit §M24) : consulter la liste des
+  // rôles n'implique plus de lire l'intégralité des permissions accordées.
   @Get(':uuid/permissions')
-  @RequirePermissions('roles_voir_le_module_role')
+  @RequirePermissions('roles_consulter_permissions_role')
   @ApiParam({ name: 'uuid', description: 'UUID du rôle' })
   @ApiResponse({ status: 200, description: 'Permissions récupérées avec succès' })
   async findAllPermissions(@Param('uuid') uuid: string) {
@@ -127,7 +129,7 @@ export class RoleController {
   }
 
   @Get(':uuid/global-permissions')
-  @RequirePermissions('roles_voir_le_module_role')
+  @RequirePermissions('roles_consulter_permissions_role')
   @ApiParam({ name: 'uuid', description: 'UUID du rôle' })
   @ApiOperation({ summary: 'Recupérer toutes les permissions du role' })
   @ApiResponse({ status: 200, description: 'Permissions récupérées avec succès' })
@@ -135,8 +137,11 @@ export class RoleController {
     return this.roleService.findGlobalPermissions(uuid);
   }
 
+  // ⚠️ Attribution des permissions = l'écran le plus sensible de l'application : sous le slug
+  // « Activer ou désactiver un rôle », un rôle porteur de ce seul droit pouvait s'accorder les
+  // permissions de tout le système (audit §H17). Le droit dédié est désormais exigé.
   @Put('permissions/:uuid/toggle')
-  @RequirePermissions('roles_activer_ou_desactiver_un_role')
+  @RequirePermissions('roles_attribuer_retirer_permission_role')
   @ApiParam({ name: 'uuid', description: 'UUID du rôle-permission ' })
     @ApiOperation({ summary: 'Changer le status de la permission' })
 
@@ -151,7 +156,7 @@ export class RoleController {
    * 4 segments : ne recouvre ni `PUT :uuid` (1) ni `PUT permissions/:uuid/toggle` (3).
    */
   @Put(':roleUuid/modules/:moduleUuid/permissions')
-  @RequirePermissions('roles_activer_ou_desactiver_un_role')
+  @RequirePermissions('roles_attribuer_retirer_permission_role')
   @SuccessMessage('Permissions du module mises à jour')
   @ApiParam({ name: 'roleUuid', description: 'UUID du rôle' })
   @ApiParam({ name: 'moduleUuid', description: 'UUID du module' })

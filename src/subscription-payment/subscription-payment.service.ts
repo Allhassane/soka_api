@@ -20,6 +20,7 @@ import { In } from 'typeorm';
 import { PaymentStatus } from 'src/payments/entities/payment.entity';
 import { SubscriptionEntity } from 'src/subscriptions/entities/subscription.entity';
 import { StructureService } from 'src/structure/structure.service';
+import { EffectivePermissionsService } from 'src/access-scope/effective-permissions.service';
 
 @Injectable()
 export class SubscriptionPaymentService {
@@ -43,6 +44,9 @@ export class SubscriptionPaymentService {
 
     /** Périmètre hiérarchique du demandeur (service @Global). */
     private readonly accessScopeService: AccessScopeService,
+
+    /** Droits effectifs du demandeur (service @Global, cache 30 s). */
+    private readonly effectivePermissions: EffectivePermissionsService,
   ) { }
 
   // ============================================================
@@ -54,6 +58,23 @@ export class SubscriptionPaymentService {
     const beneficiary = await this.findMember(dto.beneficiary_uuid);
     const actor = await this.findMember(admin.member_uuid);
     const subscription = await this.findSubscription(dto.subscription_uuid);
+
+    // ── Bénéficiaire tiers : barrière réelle (audit §M13) ─────────────────────────
+    // Souscrire POUR QUELQU'UN D'AUTRE exige le droit nommé « Souscrire pour un
+    // bénéficiaire tiers » ; souscrire pour soi-même reste libre. Avant, le champ
+    // bénéficiaire était un paramètre libre : n'importe quel payeur pouvait engager un
+    // paiement au nom d'un autre membre sans qu'aucun droit ne le dise.
+    if (beneficiary.uuid !== actor.uuid && admin.is_admin !== true) {
+      const droits = await this.effectivePermissions.slugsFor({
+        uuid: admin.uuid,
+        member_uuid: admin.member_uuid,
+      });
+      if (!droits.has('abonnements_souscrire_beneficiaire_tiers')) {
+        throw new ForbiddenException(
+          "Vous n'avez pas le droit de souscrire pour un autre membre.",
+        );
+      }
+    }
 
     // -----------------------------------------
     // Vérifier période valide

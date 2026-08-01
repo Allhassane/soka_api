@@ -123,8 +123,11 @@ export class JournalReceptionController {
     );
   }
 
+  // ⚠️ OU logique (audit §B10) : cette route sert AUSSI l'auto-déclaration d'un membre qui coche
+  // sa propre réception - `journals_cocher_reception_membre` est le droit nommé pour ce geste.
+  // Le service vérifie de son côté qui a le droit de valider quoi (responsable direct, national).
   @Put('editions/:uuid/members/:memberUuid/reception')
-  @RequirePermissions('journal_reception_modifier')
+  @RequirePermissions('journal_reception_modifier', 'journals_cocher_reception_membre')
   @ApiOperation({
     summary: "Valider la réception individuelle d'un membre",
   })

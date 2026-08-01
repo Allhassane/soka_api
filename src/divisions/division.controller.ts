@@ -5,6 +5,7 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateDivisionDto } from './dto/create-division.dto';
 import { UpdateDivisionDto } from './dto/update-division.dto';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { ReferentialRead } from 'src/auth/decorators/referential-read.decorator';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
@@ -15,7 +16,7 @@ export class DivisionController {
   constructor(private readonly divisionService: DivisionService) {}
 
   @Get()
-  @RequirePermissions('divisions_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Liste toutes les divisions' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
@@ -33,7 +34,7 @@ export class DivisionController {
   }
 
   @Get(':uuid')
-  @RequirePermissions('divisions_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Récupérer un division par UUID' })
   @ApiResponse({ status: 200, description: 'Division trouvé.' })
   @ApiResponse({ status: 400, description: 'Division non trouvé.' })
@@ -44,7 +45,7 @@ export class DivisionController {
 
 
   @Get('find-by/:department_uuid/gender/:gender')
-  @RequirePermissions('divisions_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Récupérer une division par uuid du niveau' })
   @ApiResponse({ status: 200, description: 'Division trouvé.' })
   @ApiResponse({ status: 400, description: 'Division non trouvé.' })

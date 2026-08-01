@@ -126,8 +126,10 @@ export class MemberTransferController {
     );
   }
 
+  // L'onglet Historique de la fiche a son droit propre (audit §H12) : la fiche complète
+  // n'emporte plus automatiquement la mobilité du membre. Déjà à 1 pour RESPONSABLE.
   @Get('member/:memberUuid/history')
-  @RequirePermissions('membres_acceder_alonglet_membre')
+  @RequirePermissions('membres_consulter_historique_transferts_membre')
   @ApiOperation({ summary: "Historique de mobilité d'un membre" })
   @ApiParam({ name: 'memberUuid', description: 'UUID du membre' })
   memberHistory(@Param('memberUuid') memberUuid: string) {
@@ -149,13 +151,10 @@ export class MemberTransferController {
     return this.transferService.findOne(uuid, this.perimeter(req));
   }
 
-  // ⚠️ OU logique (audit §M8) : `transferts_traiter_demande_transfert` est le droit nommé pour
-  // cette action, déjà à 1 pour RESPONSABLE.
+  // `membres_approuver_transfert` seul : le doublon `transferts_traiter_demande_transfert`
+  // (deux slugs pour la même action) a été absorbé par lui au catalogue (refonte 2026-08-01).
   @Post(':uuid/approve')
-  @RequirePermissions(
-    'transferts_traiter_demande_transfert',
-    'membres_approuver_transfert',
-  )
+  @RequirePermissions('membres_approuver_transfert')
   @ApiOperation({
     summary: "Approuver : fixe la structure d'accueil de chaque membre et applique le transfert",
   })

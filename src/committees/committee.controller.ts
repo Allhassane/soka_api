@@ -52,15 +52,20 @@ export class CommitteeController {
 
   // --- Routes statiques AVANT les routes paramétrées (:uuid) ---
 
+  // ⚠️ OU logique (audit §M22) : un responsable qui a le droit de GÉRER les membres de son
+  // comité doit pouvoir LIRE ses comités - `comites_voir` (menu Paramètres) restait à 0 pour lui.
   @Get('mine')
-  @RequirePermissions('comites_voir')
+  @RequirePermissions('comites_voir', MANAGE_COMMITTEE_MEMBERS)
   @ApiOperation({ summary: 'Comités dont je suis responsable' })
   findMine(@Request() req) {
     return this.committeeService.findMine(req.user);
   }
 
+  // ⚠️ OU logique : c'est la route de l'onglet « Comités » de la fiche membre, qui a son droit
+  // propre au catalogue (`membres_consulter_comites_auxquels_appartient_membre`, à 1 pour
+  // RESPONSABLE) - l'onglet était en erreur pour tout rôle sans le menu Paramètres → Comités.
   @Get('by-member/:memberUuid')
-  @RequirePermissions('comites_voir')
+  @RequirePermissions('comites_voir', 'membres_consulter_comites_auxquels_appartient_membre')
   @ApiOperation({ summary: "Comités auxquels un membre est rattaché" })
   findByMember(@Param('memberUuid') memberUuid: string, @Request() req) {
     return this.committeeService.findByMember(memberUuid, req.user.uuid as string);
@@ -119,14 +124,16 @@ export class CommitteeController {
   // --- Membres du comité ---
 
   @Get(':uuid/members')
-  @RequirePermissions('comites_voir')
+  @RequirePermissions('comites_voir', MANAGE_COMMITTEE_MEMBERS)
   @ApiOperation({ summary: 'Lister les membres d’un comité' })
   @ApiResponse({ status: 403, description: 'Permission manquante.' })
   listMembers(@Param('uuid') uuid: string, @Request() req) {
     // ⚠️ Cette route renvoie des données personnelles (téléphone, WhatsApp, e-mail, matricule).
     // Elle était la SEULE route `/comite` sans permission : un compte à zéro droit comité
     // lisait la composition de n'importe quel comité, y compris hors de son périmètre.
-    // Le service filtre en plus les membres sur le périmètre de l'appelant.
+    // Le service filtre en plus les membres sur le périmètre de l'appelant - c'est cette
+    // barrière qui rend acceptable le OU avec `membres_gerer_membres_comite` : sans lecture de
+    // la composition, le responsable qui gère son comité travaillerait à l'aveugle.
     return this.committeeService.listMembers(uuid, req.user);
   }
 

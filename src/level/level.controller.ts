@@ -23,6 +23,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { ReferentialRead } from 'src/auth/decorators/referential-read.decorator';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
@@ -33,7 +34,7 @@ export class LevelController {
   constructor(private readonly levelService: LevelService) {}
 
   @Get()
-  @RequirePermissions('niveaux_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Lister tous les niveaux' })
   @ApiResponse({ status: 200, description: 'Retour paginé' })
   findAllLevels(@Query() query: LevelPaginationQueryDto) {
@@ -51,7 +52,7 @@ export class LevelController {
   }
 
   @Get('find-by-category/:category')
-  @RequirePermissions('niveaux_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Lister les niveaux' })
   @ApiResponse({ status: 200, description: 'Liste des niveaux.' })
   @ApiParam({
@@ -65,7 +66,7 @@ export class LevelController {
   }
 
   @Get(':uuid')
-  @RequirePermissions('niveaux_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Afficher un niveau' })
   @ApiParam({ name: 'uuid', description: 'UUID du niveau' })
   @ApiResponse({ status: 200, description: 'Détails du niveau.' })

@@ -30,6 +30,7 @@ describe('DonatePaymentService.confirmHubPayment - libellés de statut (contrat 
     paymentService as never, // paymentService
     null as never, // hubService
     null as never, // accessScopeService
+    null as never, // effectivePermissions (jamais atteint : confirmHubPayment ne contrôle pas de tiers)
   );
 
   beforeEach(() => {

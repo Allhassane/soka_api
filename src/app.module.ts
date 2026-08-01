@@ -45,7 +45,8 @@ import { MemberTravelModule } from './member-travel/member-travel.module';
 import { MemberTransferModule } from './member-transfer/member-transfer.module';
 import { SubscriptionPaymentModule } from './subscription-payment/subscription-payment.module';
 import { CinetpayCallbackController } from './payments/cinetpay.controller';
-import { StatistiqueModule } from './statistique/statistique.module';
+// Module `statistique` supprimé le 2026-08-01 : 6 routes /stats/* sans aucun appelant web,
+// dupliquant /structure/tree et /structure/my-stats sous un slug plus faible (audit H15).
 
 import { ConfigModule } from '@nestjs/config';
 import { LocationModule } from './location/location.module';
@@ -133,7 +134,6 @@ import { SokaPayModule } from './sokapay/sokapay.module';
     MemberTravelModule,
     MemberTransferModule,
     SubscriptionPaymentModule,
-    StatistiqueModule,
     LocationModule
     ,JournalModule
     ,ActivityModule

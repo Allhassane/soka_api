@@ -5,6 +5,7 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { ReferentialRead } from 'src/auth/decorators/referential-read.decorator';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 import {
   ReferentialMergeService,
@@ -22,7 +23,7 @@ export class JobController {
   ) {}
 
   @Get()
-  @RequirePermissions('metiers_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Liste toutes les métiers ' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
@@ -44,7 +45,7 @@ export class JobController {
    * dynamique. Même piège que les routes `/quota` des paiements.
    */
   @Get('merge/usage/:uuid')
-  @RequirePermissions('metiers_voir')
+  @ReferentialRead()
   @ApiOperation({
     summary: "Nombre de porteurs d'un élément, avant reversement",
   })
@@ -70,7 +71,7 @@ export class JobController {
   }
 
   @Get(':uuid')
-  @RequirePermissions('metiers_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Récupérer une métier par UUID' })
   @ApiResponse({ status: 200, description: 'Métier trouvé.' })
   @ApiResponse({ status: 400, description: 'Metier non trouvé.' })

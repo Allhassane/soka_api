@@ -81,8 +81,14 @@ export class PaymentController {
   }
 
 
+// ⚠️ OU logique (audit §M12) : les deux droits d'export nommés au catalogue commandent enfin
+// l'export Excel des transactions ; `paiements_voir` reste en OU pour ne rien fermer.
 @Get('export/subgroups')
-@RequirePermissions('paiements_voir')
+@RequirePermissions(
+  'abonnements_exporter_transactions_campagne_abonnement',
+  'zaimu_exporter_transactions_campagne_zaimu',
+  'paiements_voir',
+)
 @ApiOperation({ summary: 'Lancer l\'export des transactions en arrière-plan' })
 async queueTransactionsExport(
   @Query('source_uuid') source_uuid: string,

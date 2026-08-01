@@ -230,8 +230,17 @@ export class JournalDistributionController {
     res.send(buffer);
   }
 
+  // ⚠️ Cette route expose l'ANNUAIRE (nom, matricule, téléphone, WhatsApp) via une recherche dans
+  // toute la table des membres. Elle ne sert qu'à choisir un correspondant dans les modales
+  // d'ÉCRITURE Zones / Destinations : elle exige donc ces droits-là, plus jamais un droit de
+  // lecture des distributions (audit §H10 - le slug qui la gardait ne disait rien de la donnée).
   @Get('members')
-  @RequirePermissions('journal_distribution_voir')
+  @RequirePermissions(
+    'journal_destinations_creer',
+    'journal_destinations_modifier',
+    'journal_zones_creer',
+    'journal_zones_modifier',
+  )
   @ApiOperation({
     summary: 'Recherche de membres pour le journal',
     description:

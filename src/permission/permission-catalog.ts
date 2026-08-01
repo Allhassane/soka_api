@@ -1,51 +1,68 @@
 /**
- * CATALOGUE DES PERMISSIONS - transcription du référentiel fonctionnel
- * `permissions/permissions-soka-digital.md` (racine du dépôt), qui est la SOURCE DE VÉRITÉ
- * métier : un module = une section « ## Module … », une permission = une puce.
+ * CATALOGUE DES PERMISSIONS - source de vérité du référentiel (refonte du 2026-08-01).
  *
- * Utilisé par les seeds :
- *   npm run seed:reset-permissions   -> vide modules / permissions / roles_permissions
- *   npm run seed:permissions         -> vide puis recharge tout depuis ce catalogue
+ * Un module = un écran/domaine de l'application, une permission = UNE capacité réelle :
+ * une entrée de menu, une action (bouton), un onglet, ou une information sensible.
+ * Chaque slug est UNIQUE et identique côté API (`@RequirePermissions('<slug>')`) et côté
+ * web (`<Protected permission="…">`, `hasPermission('…')`, `config/menus.ts`).
  *
- * ⚠️ **Slugs.** Le libellé vient du .md, le slug est l'identifiant technique stocké en base et
- * référencé par le code : `@RequirePermissions('<slug>')` côté API, `<Protected permission="…">`
- * et `config/menus.ts` côté web. Quand une entrée du .md correspond à un droit DÉJÀ contrôlé par
- * le code, on reprend le slug existant plutôt que d'en dériver un nouveau - sinon la
- * fonctionnalité se ferme pour tout le monde sauf `is_admin` (un slug absent de la table
- * `permissions` = refusé, cf. api/CLAUDE.md).
+ * Ce qui a changé à la refonte (audit `AUDIT-PERMISSIONS-2026-08-01.md`) :
+ *  - Les ~85 « alias techniques » (2 slugs pour 1 action : `formations_creer` côté API,
+ *    `formations_ajouter_formations` côté web) sont SUPPRIMÉS : le web teste désormais le
+ *    slug canonique. Le champ `absorbs` liste les anciens slugs : le seed fusionne (OU)
+ *    leurs droits accordés dans la permission canonique avant de les supprimer.
+ *  - Les permissions fantômes (cases qui n'ouvraient et ne fermaient rien : filtres purement
+ *    clients, écrans jamais livrés, doublons) sont retirées du catalogue - le seed les
+ *    supprime de la base.
+ *  - Les LECTURES de référentiels (civilités, pays, formations, métiers, niveaux, types
+ *    d'activité, cascade des structures…) ne sont PLUS des permissions : elles sont ouvertes
+ *    à tout utilisateur authentifié via `@ReferentialRead()`. Motif : ces listes alimentent
+ *    les formulaires des autres modules ; les garder sous permission fermait « Créer un
+ *    membre » à qui ne portait pas 13 droits de lecture épars (audit H1/H8/H9). Les
+ *    ÉCRITURES de référentiels restent sous permission.
+ *  - Les capacités qui n'avaient pas de nom (participants / présence / quotas / comités
+ *    d'une activité, statistiques financières d'une campagne, attribution des permissions
+ *    d'un rôle…) ont désormais leur permission propre, posée sur les routes concernées.
  *
- * ⚠️ **Alias.** Certaines routes déjà protégées n'ont aucune entrée dédiée dans le .md (ex. les
- * 3 verbes d'écriture des accessoires d'un membre, regroupés là-bas sous une seule ligne). Leur
- * slug est déclaré en `aliases` : le seed crée une permission supplémentaire, dans le même
- * module, accordée aux mêmes rôles. Les supprimer fermerait la route correspondante.
+ * Sémantique des champs de seed (lus par `permission-catalog-sync.ts`) :
+ *  - `absorbs`  : slugs SUPPRIMÉS de la base dont les droits accordés sont fusionnés (OU)
+ *                 dans cette permission. À la fusion, un rôle qui avait l'ancien slug coché
+ *                 garde la capacité - personne ne perd rien.
+ *  - `seedFrom` : slugs VIVANTS dont l'état actuel sert de valeur initiale (OU) quand la
+ *                 permission n'existe pas encore en base pour un rôle. Sert aux nouvelles
+ *                 permissions issues d'un découpage (ex. les nouvelles puces Activités
+ *                 héritent de l'état de `activites_creer`).
+ *  - `defaults` : état initial explicite par rôle quand la permission est nouvelle et
+ *                 qu'aucun `seedFrom` ne s'applique. ADMINISTRATEUR reçoit TOUJOURS tout.
  *
- * ⚠️ **Ne jamais renommer un slug existant** : il est référencé dans le code et stocké en base.
- * Ajouter une permission = ajouter la puce dans le .md, l'ajouter ici, rejouer le seed.
- *
- * Fichier généré une première fois depuis le .md puis maintenu à la main.
- * Remplace `permission-manifest.ts` (conservé uniquement pour la migration historique
- * `1782800300000-SeedPermissionCatalog`, qui ne doit plus être rejouée).
+ * ⚠️ Ne JAMAIS renommer un slug conservé : il est stocké en base et référencé des deux
+ * côtés. Les libellés (`name`), eux, sont libres - le seed les met à jour.
+ * ⚠️ Une permission NOUVELLE naît décochée pour les rôles non couverts par
+ * `seedFrom`/`defaults` : penser à l'ouvrir depuis Paramètres → Rôles.
  */
 
-/** Slug supplémentaire exigé par le code, sans entrée propre dans le référentiel .md. */
-export interface CatalogAlias {
-  slug: string;
-  /** Où ce slug est exigé - sert de description en base et de trace pour la revue. */
-  reason: string;
-}
-
 export interface CatalogPermission {
-  /** Libellé exact de la puce du .md (affiché dans l'écran d'attribution des rôles). */
+  /** Libellé affiché dans Paramètres → Rôles. */
   name: string;
-  /** Identifiant technique stable. */
+  /** Identifiant technique stable, commun API + web. */
   slug: string;
-  /** Sous-section « ### … » du .md, quand la puce en dépend. */
+  /** Sous-section d'affichage (onglet, groupe de la fiche…). */
   group?: string;
-  aliases?: CatalogAlias[];
+  /** Slugs supprimés de la base, droits fusionnés (OU) dans cette permission. */
+  absorbs?: string[];
+  /** Slugs vivants dont l'état initialise cette permission quand elle est nouvelle. */
+  seedFrom?: string[];
+  /** État initial par rôle (slug de rôle → coché) pour une permission nouvelle. */
+  defaults?: Record<string, boolean>;
+  /**
+   * Rôles pour lesquels la permission est FORCÉE à cochée à chaque synchronisation
+   * (élargissement seulement - jamais l'inverse). À réserver aux cas où l'interface
+   * offre le geste à un rôle qui n'a jamais reçu le droit correspondant.
+   */
+  grantTo?: string[];
 }
 
 export interface CatalogModule {
-  /** Nom de la section « ## Module … » - devient `modules.name`. */
   name: string;
   description: string;
   permissions: CatalogPermission[];
@@ -59,18 +76,11 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
       {
         name: 'Accéder au tableau de bord',
         slug: 'dashboard_voir_menu_dashboard',
-        aliases: [
-          { slug: 'statistiques_voir', reason: 'API statistique.controller : tree, global, demographics, compare, growth, dashboard' },
-        ],
+        absorbs: ['statistiques_voir'],
       },
       { name: 'Consulter les actions prioritaires', slug: 'dashboard_consulter_actions_prioritaires' },
       { name: 'Consulter le comité de sa structure', slug: 'dashboard_consulter_comite_structure' },
-      { name: 'Contacter un membre du comité', slug: 'dashboard_contacter_membre_comite' },
       { name: 'Filtrer les statistiques par périmètre', slug: 'dashboard_filtrer_statistiques_perimetre' },
-      {
-        name: 'Réinitialiser les filtres du tableau de bord',
-        slug: 'dashboard_reinitialiser_filtres_tableau_bord',
-      },
       {
         name: 'Consulter les statistiques des départements',
         slug: 'dashboard_consulter_statistiques_departements',
@@ -90,67 +100,42 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
     name: 'Membres',
     description: 'Liste des membres et fiche membre (profil, structure, voyages, comités, historique).',
     permissions: [
-      { name: 'Accéder à l\'onglet Membres', slug: 'membres_voir_menu_membres' },
-      { name: 'Consulter la liste des membres', slug: 'membres_voir_menu_liste_membres' },
-      { name: 'Rechercher un membre', slug: 'membres_rechercher_membre' },
-      { name: 'Filtrer les membres', slug: 'membres_filtrer_membres' },
-      { name: 'Consulter la fiche d\'un membre', slug: 'membres_acceder_alonglet_membre' },
+      { name: 'Accéder au menu Membres', slug: 'membres_voir_menu_membres' },
+      {
+        name: 'Consulter la liste des membres',
+        slug: 'membres_voir_menu_liste_membres',
+        absorbs: ['membres_rechercher_membre', 'membres_filtrer_membres', 'structures_consulter_membres_structure'],
+      },
+      {
+        name: 'Consulter la fiche complète d\'un membre',
+        slug: 'membres_acceder_alonglet_membre',
+        absorbs: [
+          // La fiche est servie d'un bloc par l'API : ces 8 « lectures fines » ne masquaient
+          // rien (audit H12) - on assume une fiche entière sous UN droit au libellé honnête.
+          'membres_consulter_etat_civil_situation_familiale_membre',
+          'membres_consulter_coordonnees_membre_mobile_e_mail',
+          'membres_consulter_profession_membre_formation_metier_exerce',
+          'membres_consulter_reperes_membre_anciennete_nombre_enfants',
+          'membres_consulter_objets_pratique_membre',
+          'membres_consulter_rattachement_pratique_membre',
+          'membres_responsabilites_voir',
+          'membres_accessoires_voir',
+          'membres_exporter_fiche_membre_pdf',
+        ],
+      },
       { name: 'Créer un membre', slug: 'membres_ajouter_un_membre' },
       { name: 'Modifier un membre', slug: 'membres_modifier_un_membre' },
       { name: 'Supprimer un membre', slug: 'membres_supprimer_un_membre' },
-      { name: 'Exporter la fiche d\'un membre en PDF', slug: 'membres_exporter_fiche_membre_pdf' },
-      // Fiche membre - onglet Profil
       {
-        name: 'Consulter l\'état civil et la situation familiale d\'un membre',
-        slug: 'membres_consulter_etat_civil_situation_familiale_membre',
-        group: 'Fiche membre - onglet Profil',
-      },
-      {
-        name: 'Consulter les coordonnées d\'un membre (mobile, e-mail)',
-        slug: 'membres_consulter_coordonnees_membre_mobile_e_mail',
-        group: 'Fiche membre - onglet Profil',
-      },
-      {
-        name: 'Consulter la profession d\'un membre (formation / métier exercé)',
-        slug: 'membres_consulter_profession_membre_formation_metier_exerce',
-        group: 'Fiche membre - onglet Profil',
-      },
-      {
-        name: 'Consulter les repères d\'un membre (ancienneté, nombre d\'enfants)',
-        slug: 'membres_consulter_reperes_membre_anciennete_nombre_enfants',
-        group: 'Fiche membre - onglet Profil',
-      },
-      // Fiche membre - onglet Structure
-      {
-        name: 'Consulter la responsabilité d\'un membre',
-        slug: 'membres_responsabilites_voir',
-        group: 'Fiche membre - onglet Structure',
-      },
-      {
-        name: 'Consulter les objets de pratique d\'un membre',
-        slug: 'membres_consulter_objets_pratique_membre',
-        group: 'Fiche membre - onglet Structure',
-      },
-      {
-        name: 'Consulter les accessoires de pratique d\'un membre',
-        slug: 'membres_accessoires_voir',
-        group: 'Fiche membre - onglet Structure',
-      },
-      {
-        name: 'Consulter le rattachement et la pratique d\'un membre',
-        slug: 'membres_consulter_rattachement_pratique_membre',
-        group: 'Fiche membre - onglet Structure',
-      },
-      {
-        name: 'Modifier la situation d\'un membre au sein de l\'organisation',
+        name: 'Modifier la situation d\'un membre dans l\'organisation (responsabilité, accessoires)',
         slug: 'membres_modifier_situation_membre_sein_organisation',
         group: 'Fiche membre - onglet Structure',
-        aliases: [
-          { slug: 'membres_responsabilites_creer', reason: 'API member-responsibility.controller : POST' },
-          { slug: 'membres_responsabilites_supprimer', reason: 'API member-responsibility.controller : DELETE' },
-          { slug: 'membres_accessoires_creer', reason: 'API member-accessories.controller : POST' },
-          { slug: 'membres_accessoires_modifier', reason: 'API member-accessories.controller : PUT' },
-          { slug: 'membres_accessoires_supprimer', reason: 'API member-accessories.controller : DELETE' },
+        absorbs: [
+          'membres_responsabilites_creer',
+          'membres_responsabilites_supprimer',
+          'membres_accessoires_creer',
+          'membres_accessoires_modifier',
+          'membres_accessoires_supprimer',
         ],
       },
       // Fiche membre - onglet Voyage
@@ -163,11 +148,7 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
         name: 'Ajouter un voyage d\'études à un membre',
         slug: 'membres_voyages_creer',
         group: 'Fiche membre - onglet Voyage',
-      },
-      {
-        name: 'Modifier un voyage d\'études d\'un membre',
-        slug: 'membres_modifier_voyage_etudes_membre',
-        group: 'Fiche membre - onglet Voyage',
+        absorbs: ['membres_modifier_voyage_etudes_membre'],
       },
       {
         name: 'Supprimer un voyage d\'études d\'un membre',
@@ -207,25 +188,21 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
         name: 'Consulter la liste des demandes de transfert',
         slug: 'transferts_consulter_liste_demandes_transfert',
       },
-      { name: 'Créer une demande de transfert', slug: 'membres_initier_transfert' },
       {
         name: 'Consulter le détail d\'une demande de transfert',
         slug: 'transferts_consulter_detail_demande_transfert',
+        absorbs: ['transferts_consulter_responsabilites_retirees_lors_transfert'],
       },
-      { name: 'Traiter une demande de transfert', slug: 'transferts_traiter_demande_transfert' },
+      { name: 'Créer une demande de transfert', slug: 'membres_initier_transfert' },
       {
-        name: 'Choisir la structure d\'accueil de chaque membre transféré',
-        slug: 'transferts_choisir_structure_accueil_chaque_membre_transfere',
+        name: 'Approuver et appliquer un transfert',
+        slug: 'membres_approuver_transfert',
+        absorbs: [
+          'transferts_traiter_demande_transfert',
+          'transferts_choisir_structure_accueil_chaque_membre_transfere',
+          'transferts_ajouter_commentaire_demande_transfert',
+        ],
       },
-      {
-        name: 'Consulter les responsabilités retirées lors d\'un transfert',
-        slug: 'transferts_consulter_responsabilites_retirees_lors_transfert',
-      },
-      {
-        name: 'Ajouter un commentaire à une demande de transfert',
-        slug: 'transferts_ajouter_commentaire_demande_transfert',
-      },
-      { name: 'Approuver et appliquer un transfert', slug: 'membres_approuver_transfert' },
       { name: 'Refuser un transfert', slug: 'transferts_refuser_transfert' },
       { name: 'Annuler une demande de transfert', slug: 'transferts_annuler_demande_transfert' },
     ],
@@ -234,28 +211,26 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
     name: 'Importation des membres',
     description: 'Import de membres par fichier Excel : analyse, confirmation, échecs.',
     permissions: [
-      { name: 'Accéder au module d\'importation', slug: 'importations_voir' },
       {
-        name: 'Charger un fichier d\'import (.xlsx, .xls)',
-        slug: 'importations_charger_fichier_import_xlsx_xls',
+        name: 'Accéder au module d\'importation',
+        slug: 'importations_voir',
+        absorbs: [
+          'importations_charger_fichier_import_xlsx_xls',
+          'importations_actualiser_liste_echecs_importation',
+        ],
       },
       {
         name: 'Analyser un fichier d\'import (simulation sans enregistrement)',
         slug: 'importations_analyser',
       },
       { name: 'Confirmer l\'écriture en base des lignes importées', slug: 'importations_confirmer' },
-      { name: 'Consulter les échecs d\'importation', slug: 'importations_consulter_echecs_importation' },
       {
-        name: 'Consulter le détail des erreurs d\'un fichier importé',
-        slug: 'importations_consulter_detail_erreurs_fichier_importe',
-      },
-      {
-        name: 'Exporter les erreurs d\'un fichier au format Excel',
-        slug: 'importations_exporter_erreurs_fichier_format_excel',
-      },
-      {
-        name: 'Actualiser la liste des échecs d\'importation',
-        slug: 'importations_actualiser_liste_echecs_importation',
+        name: 'Consulter et exporter les échecs d\'importation',
+        slug: 'importations_consulter_echecs_importation',
+        absorbs: [
+          'importations_consulter_detail_erreurs_fichier_importe',
+          'importations_exporter_erreurs_fichier_format_excel',
+        ],
       },
     ],
   },
@@ -263,82 +238,70 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
     name: 'Abonnements',
     description: 'Campagnes d’abonnement, souscriptions et paiements associés.',
     permissions: [
+      { name: 'Accéder au menu Abonnements', slug: 'abonnements_voir_menu_abonnements' },
       {
-        name: 'Accéder au menu Abonnements',
+        name: 'Consulter les campagnes d\'abonnement (liste et détail)',
         slug: 'abonnements_voir',
-        aliases: [
-          { slug: 'abonnements_voir_menu_abonnements', reason: 'web config/menus.ts : entrée « Abonnements »' },
+        absorbs: [
+          'abonnements_consulter_liste_campagnes_abonnement',
+          'abonnements_consulter_detail_campagne_abonnement',
         ],
-      },
-      {
-        name: 'Consulter la liste des campagnes d\'abonnement',
-        slug: 'abonnements_consulter_liste_campagnes_abonnement',
       },
       {
         name: 'Créer une campagne d\'abonnement',
         slug: 'abonnements_creer',
-        aliases: [
-          { slug: 'abonnements_ajouter_abonnements', reason: 'web SubscriptionModal.tsx : bouton d’enregistrement' },
-        ],
+        absorbs: ['abonnements_ajouter_abonnements'],
       },
       {
-        name: 'Modifier une campagne d\'abonnement',
+        name: 'Modifier une campagne d\'abonnement (dont terminer)',
         slug: 'abonnements_modifier',
-        aliases: [
-          { slug: 'abonnements_modifier_abonnements', reason: 'web SubscriptionGrid.tsx : bouton « Modifier »' },
-        ],
+        absorbs: ['abonnements_modifier_abonnements', 'abonnements_terminer_campagne_abonnement'],
       },
-      { name: 'Terminer une campagne d\'abonnement', slug: 'abonnements_terminer_campagne_abonnement' },
       {
         name: 'Archiver une campagne d\'abonnement',
-        slug: 'abonnements_archiver_campagne_abonnement',
-        aliases: [
-          { slug: 'abonnements_supprimer', reason: 'API subscription.controller : DELETE /subscriptions/:uuid' },
-          { slug: 'abonnements_archiver_abonnements', reason: 'web SubscriptionGrid.tsx : bouton « Archiver »' },
-        ],
+        slug: 'abonnements_supprimer',
+        absorbs: ['abonnements_archiver_campagne_abonnement', 'abonnements_archiver_abonnements'],
       },
-      {
-        name: 'Consulter le détail d\'une campagne d\'abonnement',
-        slug: 'abonnements_consulter_detail_campagne_abonnement',
-      },
-      {
-        name: 'Consulter les statistiques d\'une campagne',
-        slug: 'abonnements_consulter_statistiques_campagne',
-      },
-      {
-        name: 'Consulter la liste des paiements d\'une campagne',
-        slug: 'abonnements_paiements_voir',
-        aliases: [
-          { slug: 'paiements_voir', reason: 'API payment.controller : liste, stats et exports asynchrones des paiements' },
-        ],
-      },
-      { name: 'Filtrer les paiements par bénéficiaire', slug: 'abonnements_filtrer_paiements_beneficiaire' },
       {
         name: 'Filtrer les campagnes d\'abonnement par statut',
         slug: 'abonnements_filtrer_par_statut',
       },
       {
+        name: 'Consulter les statistiques financières d\'une campagne (montant récolté, paiements réussis)',
+        slug: 'abonnements_consulter_statistiques_campagne',
+      },
+      {
+        name: 'Consulter la liste des paiements d\'une campagne d\'abonnement',
+        slug: 'abonnements_paiements_voir',
+      },
+      {
         name: 'Souscrire à un abonnement',
         slug: 'abonnements_paiements_creer',
-        aliases: [
-          { slug: 'paiements_creer', reason: 'API payment.controller : POST /payments' },
-        ],
       },
       { name: 'Souscrire pour un bénéficiaire tiers', slug: 'abonnements_souscrire_beneficiaire_tiers' },
       {
-        name: 'Définir la quantité d\'exemplaires souscrits',
-        slug: 'abonnements_definir_quantite_exemplaires_souscrits',
-      },
-      {
-        name: 'Vérifier le statut d\'un paiement',
+        name: 'Vérifier le statut d\'un paiement d\'abonnement',
         slug: 'abonnements_paiements_modifier',
-        aliases: [
-          { slug: 'paiements_modifier', reason: 'API payment.controller : PUT /payments/:uuid et /:uuid/status' },
-        ],
       },
       {
+        // ⚠️ N'absorbe RIEN : les fantômes « filtrer par bénéficiaire » et « définir la
+        // quantité » étaient cochés pour MEMBRE - les fusionner ici lui aurait donné le droit
+        // d'EXPORT des transactions (constaté au premier seed local, refermé aussitôt).
+        // Ces deux slugs sont simplement supprimés, sans transfert de droits.
         name: 'Exporter les transactions d\'une campagne d\'abonnement',
         slug: 'abonnements_exporter_transactions_campagne_abonnement',
+      },
+      // Transactions transverses (une seule table de paiements sert Abonnements ET Zaimu).
+      {
+        name: 'Consulter les transactions de paiement (toutes campagnes)',
+        slug: 'paiements_voir',
+        group: 'Transactions',
+      },
+      { name: 'Initier une transaction de paiement', slug: 'paiements_creer', group: 'Transactions' },
+      {
+        name: 'Vérifier / synchroniser une transaction de paiement',
+        slug: 'paiements_modifier',
+        group: 'Transactions',
       },
     ],
   },
@@ -346,55 +309,43 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
     name: 'Zaimu',
     description: 'Campagnes de zaimu, contributions et paiements associés.',
     permissions: [
+      { name: 'Accéder au menu Zaimu', slug: 'donations_voir_menu_donations' },
       {
-        name: 'Accéder au menu Zaimu',
+        name: 'Consulter les campagnes de zaimu (liste et détail)',
         slug: 'dons_voir',
-        aliases: [
-          { slug: 'donations_voir_menu_donations', reason: 'web config/menus.ts : entrée « Zaimu »' },
-        ],
+        absorbs: ['zaimu_consulter_liste_campagnes_zaimu', 'zaimu_consulter_detail_campagne_zaimu'],
       },
-      { name: 'Consulter la liste des campagnes de zaimu', slug: 'zaimu_consulter_liste_campagnes_zaimu' },
       {
         name: 'Créer une campagne de zaimu',
         slug: 'dons_creer',
-        aliases: [
-          { slug: 'donations_ajouter_donations', reason: 'web DonationModal.tsx : bouton d’enregistrement' },
-        ],
+        absorbs: ['donations_ajouter_donations'],
       },
       {
-        name: 'Modifier une campagne de zaimu',
+        name: 'Modifier une campagne de zaimu (dont terminer)',
         slug: 'dons_modifier',
-        aliases: [
-          { slug: 'donations_modifier_donations', reason: 'web DonationGrid.tsx : bouton « Modifier »' },
-        ],
+        absorbs: ['donations_modifier_donations', 'zaimu_terminer_campagne_zaimu'],
       },
-      { name: 'Terminer une campagne de zaimu', slug: 'zaimu_terminer_campagne_zaimu' },
       {
         name: 'Archiver une campagne de zaimu',
-        slug: 'zaimu_archiver_campagne_zaimu',
-        aliases: [
-          { slug: 'dons_supprimer', reason: 'API donate.controller : DELETE /donate/:uuid' },
-          { slug: 'donations_archiver_donations', reason: 'web DonationGrid.tsx : bouton « Archiver »' },
-        ],
+        slug: 'dons_supprimer',
+        absorbs: ['zaimu_archiver_campagne_zaimu', 'donations_archiver_donations'],
       },
-      { name: 'Consulter le détail d\'une campagne de zaimu', slug: 'zaimu_consulter_detail_campagne_zaimu' },
-      { name: 'Consulter les statistiques d\'une campagne', slug: 'zaimu_consulter_statistiques_campagne' },
-      { name: 'Consulter la liste des paiements d\'une campagne de zaimu', slug: 'dons_paiements_voir' },
-      { name: 'Filtrer les paiements par bénéficiaire', slug: 'zaimu_filtrer_paiements_beneficiaire' },
+      { name: 'Filtrer les campagnes de zaimu par statut', slug: 'dons_filtrer_par_statut' },
       {
-        name: 'Filtrer les campagnes de zaimu par statut',
-        slug: 'dons_filtrer_par_statut',
+        name: 'Consulter les statistiques financières d\'une campagne (montant récolté, paiements réussis)',
+        slug: 'zaimu_consulter_statistiques_campagne',
       },
       {
-        name: 'Faire un zaimu',
-        slug: 'dons_paiements_creer',
-        aliases: [
-          { slug: 'dons_paiements_supprimer', reason: 'API donate-payment.controller : DELETE /donate-payment/:uuid' },
-        ],
+        name: 'Consulter la liste des paiements d\'une campagne de zaimu',
+        slug: 'dons_paiements_voir',
       },
+      { name: 'Faire un zaimu', slug: 'dons_paiements_creer' },
       { name: 'Faire un zaimu pour un bénéficiaire tiers', slug: 'zaimu_faire_zaimu_beneficiaire_tiers' },
-      { name: 'Vérifier le statut d\'un paiement', slug: 'dons_paiements_modifier' },
+      { name: 'Vérifier le statut d\'un paiement de zaimu', slug: 'dons_paiements_modifier' },
+      { name: 'Annuler un paiement de zaimu', slug: 'dons_paiements_supprimer' },
       {
+        // Même règle que côté abonnements : le fantôme « filtrer par bénéficiaire » est
+        // supprimé SANS transfert (l'export ne doit hériter d'aucun droit de confort).
         name: 'Exporter les transactions d\'une campagne de zaimu',
         slug: 'zaimu_exporter_transactions_campagne_zaimu',
       },
@@ -404,111 +355,86 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
     name: 'Journaux - Éditions',
     description: 'Éditions du journal : distribution, réception, analyse, besoins et impression.',
     permissions: [
-      { name: 'Accéder au menu Journaux', slug: 'journals_voir_le_module_journal' },
-      { name: 'Accéder au menu Éditions', slug: 'journals_acceder_menu_editions' },
-      { name: 'Consulter la liste des éditions', slug: 'journal_editions_voir' },
-      { name: 'Filtrer les éditions par titre', slug: 'journals_filtrer_editions_titre' },
       {
-        name: 'Créer une édition',
+        name: 'Accéder au menu Journal',
+        slug: 'journals_voir_le_module_journal',
+        absorbs: ['journals_acceder_menu_editions'],
+      },
+      {
+        name: 'Consulter les éditions (liste et détail)',
+        slug: 'journal_editions_voir',
+        absorbs: ['journals_consulter_detail_edition', 'journals_filtrer_editions_titre', 'journals_consulter_statistiques_edition'],
+      },
+      {
+        name: 'Créer une édition (dont pièces jointes)',
         slug: 'journal_editions_creer',
-        aliases: [
-          { slug: 'editions_ajouter_editions', reason: 'web JournalEditionModal.tsx' },
+        absorbs: [
+          'editions_ajouter_editions',
+          'journals_joindre_photo_couverture_edition',
+          'journals_joindre_version_numerique_pdf_edition',
         ],
-      },
-      {
-        name: 'Joindre une photo de couverture à une édition',
-        slug: 'journals_joindre_photo_couverture_edition',
-      },
-      {
-        name: 'Joindre la version numérique (PDF) d\'une édition',
-        slug: 'journals_joindre_version_numerique_pdf_edition',
       },
       {
         name: 'Modifier une édition',
         slug: 'journal_editions_modifier',
-        aliases: [
-          { slug: 'editions_modifier_editions', reason: 'web JournalEditionTable.tsx' },
-        ],
+        absorbs: ['editions_modifier_editions'],
       },
       {
         name: 'Supprimer une édition',
         slug: 'journal_editions_supprimer',
-        aliases: [
-          { slug: 'editions_supprimer_editions', reason: 'web JournalEditionTable.tsx' },
-        ],
-      },
-      { name: 'Consulter le détail d\'une édition', slug: 'journals_consulter_detail_edition' },
-      {
-        name: 'Vérifier les retards et relancer les responsables',
-        slug: 'journals_verifier_retards_relancer_responsables',
-      },
-      // Édition - onglet Statistiques
-      {
-        name: 'Consulter les statistiques d\'une édition',
-        slug: 'journals_consulter_statistiques_edition',
-        group: 'Édition - onglet Statistiques',
+        absorbs: ['editions_supprimer_editions'],
       },
       {
-        name: 'Consulter les quantités attendues et livrées',
-        slug: 'journals_consulter_quantites_attendues_livrees',
-        group: 'Édition - onglet Statistiques',
-      },
-      {
-        name: 'Consulter les taux de livraison (zones et quantités)',
-        slug: 'journals_consulter_taux_livraison_zones_quantites',
-        group: 'Édition - onglet Statistiques',
-      },
-      {
-        name: 'Consulter la répartition par zone',
-        slug: 'journals_consulter_repartition_zone',
-        group: 'Édition - onglet Statistiques',
-      },
-      // Édition - onglet Distribution
-      {
-        name: 'Consulter la liste des distributions',
+        name: 'Consulter la distribution (zones, besoins, impression, abonnés)',
         slug: 'journal_distribution_voir',
         group: 'Édition - onglet Distribution',
+        absorbs: [
+          'journals_consulter_detail_distribution',
+          'journals_filtrer_distributions_zone',
+          'journals_consulter_quantites_attendues_livrees',
+          'journals_consulter_taux_livraison_zones_quantites',
+          'journals_consulter_repartition_zone',
+          'journals_consulter_besoins_calcules_depuis_abonnements',
+          'journals_consulter_taux_rattachement_abonnes_zone',
+          'journals_consulter_repartition_besoins_zone',
+          'journals_consulter_listings_impression',
+          'journals_definir_capacite_colis_appliquer',
+          'journals_consulter_liste_impression',
+          'journals_consulter_recapitulatif_abonnes',
+          'journals_consulter_etiquettes',
+          'journals_imprimer_rapport_impression_imprimer_pdf',
+          'journals_exporter_rapport_impression_excel',
+        ],
       },
       {
-        name: 'Filtrer les distributions par zone',
-        slug: 'journals_filtrer_distributions_zone',
-        group: 'Édition - onglet Distribution',
-      },
-      {
-        name: 'Lancer la distribution d\'une édition',
+        name: 'Lancer la distribution d\'une édition (notifications comprises)',
         slug: 'journal_distribution_lancer',
         group: 'Édition - onglet Distribution',
-      },
-      {
-        name: 'Choisir le canal de notification (SMS)',
-        slug: 'journals_choisir_canal_notification_sms',
-        group: 'Édition - onglet Distribution',
-      },
-      {
-        name: 'Personnaliser le message de notification de distribution',
-        slug: 'journals_personnaliser_message_notification_distribution',
-        group: 'Édition - onglet Distribution',
-      },
-      {
-        name: 'Consulter le détail d\'une distribution',
-        slug: 'journals_consulter_detail_distribution',
-        group: 'Édition - onglet Distribution',
+        absorbs: [
+          'journals_verifier_retards_relancer_responsables',
+          'journals_choisir_canal_notification_sms',
+          'journals_personnaliser_message_notification_distribution',
+        ],
       },
       {
         name: 'Confirmer ou compléter la réception d\'une zone',
         slug: 'journal_distribution_modifier',
         group: 'Édition - onglet Distribution',
       },
-      // Édition - onglet Réception
       {
-        name: 'Consulter le suivi de réception',
+        name: 'Consulter le suivi et l\'analytique de réception',
         slug: 'journal_reception_voir',
         group: 'Édition - onglet Réception',
-      },
-      {
-        name: 'Filtrer les districts par statut (tous, reçus, en attente, en retard)',
-        slug: 'journals_filtrer_districts_statut_tous_recus_attente_retard',
-        group: 'Édition - onglet Réception',
+        absorbs: [
+          'journals_filtrer_districts_statut_tous_recus_attente_retard',
+          'journals_consulter_analytique_reception',
+          'journals_consulter_avancement_global_membres_servis',
+          'journals_consulter_repartition_districts_statut',
+          'journals_consulter_evolution_distribution_temps',
+          'journals_consulter_suivi_responsable_district',
+          'journals_filtrer_suivi_responsable_tous_retard_non_demarres_termines',
+          'journals_exporter_suivi_responsable_csv',
+        ],
       },
       {
         name: 'Valider le lot d\'un district',
@@ -519,94 +445,10 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
         name: 'Cocher la réception d\'un membre',
         slug: 'journals_cocher_reception_membre',
         group: 'Édition - onglet Réception',
-      },
-      // Édition - onglet Analyse
-      {
-        name: 'Consulter l\'analytique de réception',
-        slug: 'journals_consulter_analytique_reception',
-        group: 'Édition - onglet Analyse',
-      },
-      {
-        name: 'Consulter l\'avancement global des membres servis',
-        slug: 'journals_consulter_avancement_global_membres_servis',
-        group: 'Édition - onglet Analyse',
-      },
-      {
-        name: 'Consulter la répartition des districts par statut',
-        slug: 'journals_consulter_repartition_districts_statut',
-        group: 'Édition - onglet Analyse',
-      },
-      {
-        name: 'Consulter l\'évolution de la distribution dans le temps',
-        slug: 'journals_consulter_evolution_distribution_temps',
-        group: 'Édition - onglet Analyse',
-      },
-      {
-        name: 'Consulter le suivi par responsable de district',
-        slug: 'journals_consulter_suivi_responsable_district',
-        group: 'Édition - onglet Analyse',
-      },
-      {
-        name: 'Filtrer le suivi par responsable (tous, en retard, non démarrés, terminés)',
-        slug: 'journals_filtrer_suivi_responsable_tous_retard_non_demarres_termines',
-        group: 'Édition - onglet Analyse',
-      },
-      {
-        name: 'Exporter le suivi par responsable (CSV)',
-        slug: 'journals_exporter_suivi_responsable_csv',
-        group: 'Édition - onglet Analyse',
-      },
-      // Édition - onglet Besoin (abonnements)
-      {
-        name: 'Consulter les besoins calculés depuis les abonnements',
-        slug: 'journals_consulter_besoins_calcules_depuis_abonnements',
-        group: 'Édition - onglet Besoin (abonnements)',
-      },
-      {
-        name: 'Consulter le taux de rattachement des abonnés à une zone',
-        slug: 'journals_consulter_taux_rattachement_abonnes_zone',
-        group: 'Édition - onglet Besoin (abonnements)',
-      },
-      {
-        name: 'Consulter la répartition des besoins par zone',
-        slug: 'journals_consulter_repartition_besoins_zone',
-        group: 'Édition - onglet Besoin (abonnements)',
-      },
-      // Édition - onglet Impression
-      {
-        name: 'Consulter les listings d\'impression',
-        slug: 'journals_consulter_listings_impression',
-        group: 'Édition - onglet Impression',
-      },
-      {
-        name: 'Définir la capacité par colis et l\'appliquer',
-        slug: 'journals_definir_capacite_colis_appliquer',
-        group: 'Édition - onglet Impression',
-      },
-      {
-        name: 'Consulter la liste d\'impression',
-        slug: 'journals_consulter_liste_impression',
-        group: 'Édition - onglet Impression',
-      },
-      {
-        name: 'Consulter le récapitulatif des abonnés',
-        slug: 'journals_consulter_recapitulatif_abonnes',
-        group: 'Édition - onglet Impression',
-      },
-      {
-        name: 'Consulter les étiquettes',
-        slug: 'journals_consulter_etiquettes',
-        group: 'Édition - onglet Impression',
-      },
-      {
-        name: 'Imprimer le rapport d\'impression (Imprimer / PDF)',
-        slug: 'journals_imprimer_rapport_impression_imprimer_pdf',
-        group: 'Édition - onglet Impression',
-      },
-      {
-        name: 'Exporter le rapport d\'impression (Excel)',
-        slug: 'journals_exporter_rapport_impression_excel',
-        group: 'Édition - onglet Impression',
+        // Le bouton « J'ai reçu mon journal » des actions prioritaires est offert au MEMBRE,
+        // mais son droit était à 0 : le geste finissait en 403. Le service borne déjà le
+        // self-service (chacun ne coche QUE sa propre réception) - l'octroi est donc sûr.
+        grantTo: ['membre'],
       },
     ],
   },
@@ -614,67 +456,41 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
     name: 'Zones',
     description: 'Zones de diffusion du journal et destinations rattachées.',
     permissions: [
+      { name: 'Accéder au menu Zones', slug: 'zones_voir_menu_zones' },
       {
-        name: 'Accéder au menu Zones',
-        slug: 'zones_voir_menu_zones',
-        aliases: [
-          { slug: 'journal_zones_voir', reason: 'API journal-zone.controller : GET' },
-        ],
+        name: 'Consulter les zones',
+        slug: 'journal_zones_voir',
+        absorbs: ['zones_consulter_liste_zones', 'zones_filtrer_zones_nom'],
       },
       {
-        name: 'Consulter la liste des zones',
-        slug: 'zones_consulter_liste_zones',
-        aliases: [
-          { slug: 'journal_destinations_voir', reason: 'API journal-destination.controller : GET' },
-        ],
-      },
-      { name: 'Filtrer les zones par nom', slug: 'zones_filtrer_zones_nom' },
-      {
-        name: 'Créer une zone (numéro, nom, région)',
+        name: 'Créer une zone (villes desservies et responsable compris)',
         slug: 'journal_zones_creer',
-        aliases: [
-          { slug: 'zones_ajouter_zones', reason: 'web ZoneModal.tsx' },
+        absorbs: [
+          'zones_ajouter_zones',
+          'zones_rattacher_villes_desservies_zone',
+          'zones_affecter_responsable_zone_telephone_whatsapp',
         ],
       },
-      { name: 'Rattacher des villes desservies à une zone', slug: 'zones_rattacher_villes_desservies_zone' },
+      { name: 'Modifier une zone', slug: 'journal_zones_modifier', absorbs: ['zones_modifier_zones'] },
+      { name: 'Supprimer une zone', slug: 'journal_zones_supprimer', absorbs: ['zones_supprimer_zones'] },
       {
-        name: 'Affecter un responsable de zone (téléphone, WhatsApp)',
-        slug: 'zones_affecter_responsable_zone_telephone_whatsapp',
-      },
-      {
-        name: 'Modifier une zone',
-        slug: 'journal_zones_modifier',
-        aliases: [
-          { slug: 'zones_modifier_zones', reason: 'web ZoneTable.tsx' },
-        ],
-      },
-      {
-        name: 'Supprimer une zone',
-        slug: 'journal_zones_supprimer',
-        aliases: [
-          { slug: 'zones_supprimer_zones', reason: 'web ZoneTable.tsx' },
-        ],
+        name: 'Consulter les destinations (annuaire des correspondants)',
+        slug: 'journal_destinations_voir',
       },
       {
         name: 'Créer une destination',
         slug: 'journal_destinations_creer',
-        aliases: [
-          { slug: 'destinations_ajouter_destinations', reason: 'web JournalDestinationModal.tsx' },
-        ],
+        absorbs: ['destinations_ajouter_destinations'],
       },
       {
         name: 'Modifier une destination',
         slug: 'journal_destinations_modifier',
-        aliases: [
-          { slug: 'destinations_modifier_destinations', reason: 'web JournalDestinationTable.tsx' },
-        ],
+        absorbs: ['destinations_modifier_destinations'],
       },
       {
         name: 'Supprimer une destination',
         slug: 'journal_destinations_supprimer',
-        aliases: [
-          { slug: 'destinations_supprimer_destinations', reason: 'web JournalDestinationTable.tsx' },
-        ],
+        absorbs: ['destinations_supprimer_destinations'],
       },
     ],
   },
@@ -683,66 +499,87 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
     description: 'Exports asynchrones : suivi de progression et téléchargement des fichiers.',
     permissions: [
       { name: 'Accéder au menu Exports', slug: 'exports_voir_menu_exports' },
-      { name: 'Consulter la liste de ses exports', slug: 'exports_consulter_liste_exports' },
-      { name: 'Rechercher un export par nom de fichier', slug: 'exports_rechercher_export_nom_fichier' },
       {
-        name: 'Filtrer les exports par type, par période et par statut',
-        slug: 'exports_filtrer_exports_type_periode_statut',
+        name: 'Consulter la liste et la progression de ses exports',
+        slug: 'exports_consulter_liste_exports',
+        absorbs: [
+          'exports_consulter_progression_export',
+          'exports_rechercher_export_nom_fichier',
+          'exports_filtrer_exports_type_periode_statut',
+          'exports_trier_exports',
+        ],
       },
-      { name: 'Trier les exports', slug: 'exports_trier_exports' },
-      { name: 'Consulter la progression d\'un export', slug: 'exports_consulter_progression_export' },
       { name: 'Télécharger un fichier d\'export', slug: 'exports_telecharger_fichier_export' },
     ],
   },
   {
     name: 'Activités',
-    description: 'Activités de l’organisation et leurs types.',
+    description: 'Activités de l’organisation, participants, présence, quotas et comités d’organisation.',
     permissions: [
       {
         name: 'Accéder au menu Activités',
-        slug: 'activites_voir',
-        aliases: [
-          { slug: 'activites_voir_menu_activites', reason: 'web config/menus.ts : entrée « Activités »' },
-        ],
-      },
-      { name: 'Consulter la liste des activités', slug: 'activites_consulter_liste_activites' },
-      {
-        name: 'Créer une activité',
-        slug: 'activites_creer',
-        aliases: [
-          { slug: 'activites_ajouter_activites', reason: 'web ActivityModal.tsx' },
-        ],
+        slug: 'activites_voir_menu_activites',
+        absorbs: ['activites_voir'],
       },
       {
-        name: 'Modifier une activité',
-        slug: 'activites_modifier',
-        aliases: [
-          { slug: 'activites_modifier_activites', reason: 'web ActivityTable.tsx' },
-        ],
+        name: 'Consulter la liste des activités',
+        slug: 'activites_consulter_liste_activites',
+        seedFrom: ['activites_voir'],
       },
       {
-        name: 'Supprimer une activité',
-        slug: 'activites_supprimer',
-        aliases: [
-          { slug: 'activites_supprimer_activites', reason: 'web ActivityTable.tsx' },
-        ],
+        name: 'Consulter le détail d\'une activité',
+        slug: 'activites_consulter_detail_activite',
+        seedFrom: ['activites_voir'],
       },
-      { name: 'Consulter le détail d\'une activité', slug: 'activites_consulter_detail_activite' },
-      { name: 'Consulter la liste des types d\'activités', slug: 'types_activite_voir' },
-      { name: 'Créer un type d\'activité', slug: 'types_activite_creer' },
+      { name: 'Créer une activité', slug: 'activites_creer', absorbs: ['activites_ajouter_activites'] },
+      { name: 'Modifier une activité', slug: 'activites_modifier', absorbs: ['activites_modifier_activites'] },
+      { name: 'Supprimer une activité', slug: 'activites_supprimer', absorbs: ['activites_supprimer_activites'] },
+      {
+        name: 'Consulter les participants et la feuille de présence',
+        slug: 'activites_participants_voir',
+        group: 'Détail d\'une activité',
+        seedFrom: ['activites_voir'],
+      },
+      {
+        name: 'Gérer les participants (inscrire, changer de rôle, retirer)',
+        slug: 'activites_participants_gerer',
+        group: 'Détail d\'une activité',
+        seedFrom: ['activites_creer', 'activites_modifier'],
+      },
+      {
+        name: 'Pointer la présence (unitaire et en masse)',
+        slug: 'activites_presence_pointer',
+        group: 'Détail d\'une activité',
+        seedFrom: ['activites_creer', 'activites_modifier'],
+      },
+      {
+        name: 'Gérer les quotas par structure',
+        slug: 'activites_quotas_gerer',
+        group: 'Détail d\'une activité',
+        seedFrom: ['activites_creer', 'activites_modifier'],
+      },
+      {
+        name: 'Gérer les comités d\'organisation d\'une activité',
+        slug: 'activites_comites_gerer',
+        group: 'Détail d\'une activité',
+        seedFrom: ['activites_creer', 'activites_modifier'],
+      },
+      {
+        name: 'Créer un type d\'activité',
+        slug: 'types_activite_creer',
+        group: 'Types d\'activité',
+      },
       {
         name: 'Modifier un type d\'activité',
         slug: 'types_activite_modifier',
-        aliases: [
-          { slug: 'types_activites_modifier_types_activites', reason: 'web ActivityTypeTable.tsx' },
-        ],
+        group: 'Types d\'activité',
+        absorbs: ['types_activites_modifier_types_activites'],
       },
       {
         name: 'Supprimer un type d\'activité',
         slug: 'types_activite_supprimer',
-        aliases: [
-          { slug: 'types_activites_supprimer_types_activites', reason: 'web ActivityTypeTable.tsx' },
-        ],
+        group: 'Types d\'activité',
+        absorbs: ['types_activites_supprimer_types_activites'],
       },
     ],
   },
@@ -755,10 +592,15 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
       { name: 'Créer un rôle', slug: 'roles_ajouter_un_role' },
       { name: 'Modifier un rôle', slug: 'roles_modifier_un_role' },
       { name: 'Activer ou désactiver un rôle', slug: 'roles_activer_ou_desactiver_un_role' },
-      { name: 'Consulter les permissions d\'un rôle', slug: 'roles_consulter_permissions_role' },
+      {
+        name: 'Consulter les permissions d\'un rôle',
+        slug: 'roles_consulter_permissions_role',
+        seedFrom: ['roles_voir_le_module_role'],
+      },
       {
         name: 'Attribuer ou retirer une permission à un rôle',
         slug: 'roles_attribuer_retirer_permission_role',
+        seedFrom: ['roles_activer_ou_desactiver_un_role'],
       },
     ],
   },
@@ -775,23 +617,17 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
       {
         name: 'Créer une permission dans un module',
         slug: 'permissions_creer',
-        aliases: [
-          { slug: 'permissions_ajouter_permissions', reason: 'web PermissionModal.tsx' },
-        ],
+        absorbs: ['permissions_ajouter_permissions'],
       },
       {
         name: 'Modifier une permission',
         slug: 'permissions_modifier',
-        aliases: [
-          { slug: 'permissions_modifier_permissions', reason: 'web PermissionTable.tsx' },
-        ],
+        absorbs: ['permissions_modifier_permissions'],
       },
       {
         name: 'Supprimer une permission',
         slug: 'permissions_supprimer',
-        aliases: [
-          { slug: 'permissions_supprimer_permissions', reason: 'web PermissionTable.tsx' },
-        ],
+        absorbs: ['permissions_supprimer_permissions'],
       },
     ],
   },
@@ -799,27 +635,28 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
     name: 'Collaborateurs',
     description: 'Comptes collaborateurs et rôles qui leur sont assignés.',
     permissions: [
-      { name: 'Accéder à l\'onglet Collaborateurs', slug: 'collaborateurs_acceder_onglet_collaborateurs' },
-      { name: 'Consulter la liste des collaborateurs', slug: 'utilisateurs_voir' },
       {
-        name: 'Consulter le détail d\'un collaborateur',
-        slug: 'collaborateurs_consulter_detail_collaborateur',
+        name: 'Consulter les collaborateurs (liste et détail)',
+        slug: 'utilisateurs_voir',
+        absorbs: [
+          'collaborateurs_acceder_onglet_collaborateurs',
+          'collaborateurs_consulter_detail_collaborateur',
+        ],
       },
       { name: 'Créer un collaborateur', slug: 'utilisateurs_creer' },
       { name: 'Modifier un collaborateur', slug: 'utilisateurs_modifier' },
       {
-        name: 'Activer ou désactiver un collaborateur',
-        slug: 'collaborateurs_activer_desactiver_collaborateur',
-        aliases: [
-          { slug: 'utilisateurs_supprimer', reason: 'API user.controller : DELETE /users/:uuid' },
-        ],
+        name: 'Supprimer un compte collaborateur (définitif)',
+        slug: 'utilisateurs_supprimer',
+        absorbs: ['collaborateurs_activer_desactiver_collaborateur'],
+      },
+      {
+        name: 'Consulter les rôles assignés aux collaborateurs',
+        slug: 'utilisateurs_roles_voir',
       },
       {
         name: 'Assigner un rôle à un collaborateur',
         slug: 'collaborateurs_assigner_un_role_a_un_collaborateur',
-        aliases: [
-          { slug: 'utilisateurs_roles_voir', reason: 'API user-roles.controller : GET' },
-        ],
       },
     ],
   },
@@ -828,37 +665,29 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
     description: 'Arborescence des structures de l’organisation.',
     permissions: [
       { name: 'Accéder au menu Structures', slug: 'parametres_voir_menu_structures' },
-      { name: 'Consulter l\'arborescence des structures', slug: 'structures_voir' },
       {
-        name: 'Naviguer dans un niveau de structure (voir les structures filles)',
-        slug: 'structures_naviguer_niveau_structure_voir_structures_filles',
+        name: 'Consulter l\'arbre complet des structures (avec effectifs)',
+        slug: 'structures_voir',
+        absorbs: [
+          'structures_naviguer_niveau_structure_voir_structures_filles',
+          'structures_acceder_propre_structure_gestionnaire',
+        ],
       },
       {
-        name: 'Créer une structure au niveau courant (région, centre régional, centre, chapitre, district, groupe, sous-groupe)',
+        name: 'Créer une structure',
         slug: 'structures_creer',
-        aliases: [
-          { slug: 'structures_ajouter_structures', reason: 'web StructureModal.tsx' },
-        ],
+        absorbs: ['structures_ajouter_structures'],
       },
       {
         name: 'Modifier une structure',
         slug: 'structures_modifier',
-        aliases: [
-          { slug: 'structures_modifier_structures', reason: 'web StructureTable.tsx' },
-        ],
+        absorbs: ['structures_modifier_structures'],
       },
       {
         name: 'Supprimer une structure',
         slug: 'structures_supprimer',
-        aliases: [
-          { slug: 'structures_supprimer_structures', reason: 'web StructureTable.tsx' },
-        ],
+        absorbs: ['structures_supprimer_structures'],
       },
-      {
-        name: 'Accéder à sa propre structure (gestionnaire)',
-        slug: 'structures_acceder_propre_structure_gestionnaire',
-      },
-      { name: 'Consulter les membres d\'une structure', slug: 'structures_consulter_membres_structure' },
     ],
   },
   {
@@ -867,383 +696,155 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
     permissions: [
       { name: 'Accéder au menu Comités', slug: 'parametres_voir_menu_comites' },
       { name: 'Consulter la liste des comités', slug: 'comites_voir' },
+      { name: 'Créer un comité', slug: 'comites_creer', absorbs: ['comites_ajouter_comites'] },
       {
-        name: 'Créer un comité',
-        slug: 'comites_creer',
-        aliases: [
-          { slug: 'comites_ajouter_comites', reason: 'web ComiteModal.tsx' },
-        ],
-      },
-      {
-        name: 'Modifier un comité',
+        name: 'Modifier un comité (responsable compris)',
         slug: 'comites_modifier',
-        aliases: [
-          { slug: 'comites_modifier_comites', reason: 'web ComiteTable.tsx' },
+        absorbs: [
+          'comites_modifier_comites',
+          'comites_assigner_responsable_comite',
+          'comites_retirer_responsable_comite',
         ],
       },
-      {
-        name: 'Supprimer un comité',
-        slug: 'comites_supprimer',
-        aliases: [
-          { slug: 'comites_supprimer_comites', reason: 'web ComiteTable.tsx' },
-        ],
-      },
-      { name: 'Assigner un responsable à un comité', slug: 'comites_assigner_responsable_comite' },
-      { name: 'Retirer le responsable d\'un comité', slug: 'comites_retirer_responsable_comite' },
+      { name: 'Supprimer un comité', slug: 'comites_supprimer', absorbs: ['comites_supprimer_comites'] },
     ],
   },
   {
     name: 'Niveaux',
-    description: 'Niveaux de découpage hiérarchique des structures.',
+    description: 'Niveaux de découpage hiérarchique des structures (lecture libre pour tout connecté).',
     permissions: [
       { name: 'Accéder au menu Niveaux', slug: 'parametres_voir_menu_niveaux' },
-      { name: 'Consulter la liste des niveaux de découpage', slug: 'niveaux_voir' },
-      {
-        name: 'Créer un niveau (ordre, libellé)',
-        slug: 'niveaux_creer',
-        aliases: [
-          { slug: 'niveaux_ajouter_niveaux', reason: 'web LevelModal.tsx' },
-        ],
-      },
-      {
-        name: 'Modifier un niveau',
-        slug: 'niveaux_modifier',
-        aliases: [
-          { slug: 'niveaux_modifier_niveaux', reason: 'web LevelTable.tsx' },
-        ],
-      },
-      {
-        name: 'Supprimer un niveau',
-        slug: 'niveaux_supprimer',
-        aliases: [
-          { slug: 'niveaux_supprimer_niveaux', reason: 'web LevelTable.tsx' },
-        ],
-      },
+      { name: 'Créer un niveau (ordre, libellé)', slug: 'niveaux_creer', absorbs: ['niveaux_ajouter_niveaux'] },
+      { name: 'Modifier un niveau', slug: 'niveaux_modifier', absorbs: ['niveaux_modifier_niveaux'] },
+      { name: 'Supprimer un niveau', slug: 'niveaux_supprimer', absorbs: ['niveaux_supprimer_niveaux'] },
     ],
   },
   {
     name: 'Départements',
-    description: 'Référentiel des départements.',
+    description: 'Référentiel des départements (lecture libre pour tout connecté).',
     permissions: [
       { name: 'Accéder au menu Départements', slug: 'parametres_voir_menu_departements' },
-      { name: 'Consulter la liste des départements', slug: 'departements_voir' },
-      {
-        name: 'Créer un département',
-        slug: 'departements_creer',
-        aliases: [
-          { slug: 'departements_ajouter_departements', reason: 'web DepartementModal.tsx' },
-        ],
-      },
-      {
-        name: 'Modifier un département',
-        slug: 'departements_modifier',
-        aliases: [
-          { slug: 'departements_modifier_departements', reason: 'web DepartementTable.tsx' },
-        ],
-      },
-      {
-        name: 'Supprimer un département',
-        slug: 'departements_supprimer',
-        aliases: [
-          { slug: 'departements_supprimer_departements', reason: 'web DepartementTable.tsx' },
-        ],
-      },
+      { name: 'Créer un département', slug: 'departements_creer', absorbs: ['departements_ajouter_departements'] },
+      { name: 'Modifier un département', slug: 'departements_modifier', absorbs: ['departements_modifier_departements'] },
+      { name: 'Supprimer un département', slug: 'departements_supprimer', absorbs: ['departements_supprimer_departements'] },
     ],
   },
   {
     name: 'Divisions',
-    description: 'Référentiel des divisions.',
+    description: 'Référentiel des divisions (lecture libre pour tout connecté).',
     permissions: [
       { name: 'Accéder au menu Divisions', slug: 'parametres_voir_menu_divisions' },
-      { name: 'Consulter la liste des divisions', slug: 'divisions_voir' },
-      {
-        name: 'Créer une division',
-        slug: 'divisions_creer',
-        aliases: [
-          { slug: 'divisions_ajouter_divisions', reason: 'web DivisionModal.tsx' },
-        ],
-      },
-      {
-        name: 'Modifier une division',
-        slug: 'divisions_modifier',
-        aliases: [
-          { slug: 'divisions_modifier_divisions', reason: 'web DivisionTable.tsx' },
-        ],
-      },
-      {
-        name: 'Supprimer une division',
-        slug: 'divisions_supprimer',
-        aliases: [
-          { slug: 'divisions_supprimer_divisions', reason: 'web DivisionTable.tsx' },
-        ],
-      },
+      { name: 'Créer une division', slug: 'divisions_creer', absorbs: ['divisions_ajouter_divisions'] },
+      { name: 'Modifier une division', slug: 'divisions_modifier', absorbs: ['divisions_modifier_divisions'] },
+      { name: 'Supprimer une division', slug: 'divisions_supprimer', absorbs: ['divisions_supprimer_divisions'] },
     ],
   },
   {
     name: 'Responsabilités',
-    description: 'Référentiel des responsabilités occupables dans une structure.',
+    description: 'Référentiel des responsabilités occupables (lecture libre pour tout connecté).',
     permissions: [
       { name: 'Accéder au menu Responsabilités', slug: 'parametres_voir_menu_responsabilites' },
-      { name: 'Consulter la liste des responsabilités', slug: 'responsabilites_voir' },
-      {
-        name: 'Créer une responsabilité',
-        slug: 'responsabilites_creer',
-        aliases: [
-          { slug: 'responsabilites_ajouter_responsabilites', reason: 'web ResponsibilityModal.tsx' },
-        ],
-      },
-      {
-        name: 'Modifier une responsabilité',
-        slug: 'responsabilites_modifier',
-        aliases: [
-          { slug: 'responsabilites_modifier_responsabilites', reason: 'web ResponsibilityTable.tsx' },
-        ],
-      },
-      {
-        name: 'Supprimer une responsabilité',
-        slug: 'responsabilites_supprimer',
-        aliases: [
-          { slug: 'responsabilites_supprimer_responsabilites', reason: 'web ResponsibilityTable.tsx' },
-        ],
-      },
+      { name: 'Créer une responsabilité', slug: 'responsabilites_creer', absorbs: ['responsabilites_ajouter_responsabilites'] },
+      { name: 'Modifier une responsabilité', slug: 'responsabilites_modifier', absorbs: ['responsabilites_modifier_responsabilites'] },
+      { name: 'Supprimer une responsabilité', slug: 'responsabilites_supprimer', absorbs: ['responsabilites_supprimer_responsabilites'] },
     ],
   },
   {
     name: 'Formations',
-    description: 'Référentiel des formations et qualifications.',
+    description: 'Référentiel des formations et qualifications (lecture libre pour tout connecté).',
     permissions: [
       { name: 'Accéder au menu Formations', slug: 'parametres_voir_menu_formations' },
-      { name: 'Consulter la liste des formations / qualifications', slug: 'formations_voir' },
-      {
-        name: 'Créer une formation',
-        slug: 'formations_creer',
-        aliases: [
-          { slug: 'formations_ajouter_formations', reason: 'web FormationModal.tsx' },
-        ],
-      },
-      {
-        name: 'Modifier une formation',
-        slug: 'formations_modifier',
-        aliases: [
-          { slug: 'formations_modifier_formations', reason: 'web FormationTable.tsx' },
-        ],
-      },
-      {
-        name: 'Supprimer une formation',
-        slug: 'formations_supprimer',
-        aliases: [
-          { slug: 'formations_supprimer_formations', reason: 'web FormationTable.tsx' },
-        ],
-      },
+      { name: 'Créer une formation', slug: 'formations_creer', absorbs: ['formations_ajouter_formations'] },
+      { name: 'Modifier une formation', slug: 'formations_modifier', absorbs: ['formations_modifier_formations'] },
+      { name: 'Supprimer une formation (dont reversement)', slug: 'formations_supprimer', absorbs: ['formations_supprimer_formations'] },
     ],
   },
   {
     name: 'Métiers',
-    description: 'Référentiel des métiers.',
+    description: 'Référentiel des métiers (lecture libre pour tout connecté).',
     permissions: [
       { name: 'Accéder au menu Métiers', slug: 'parametres_voir_menu_metiers' },
-      { name: 'Consulter la liste des métiers', slug: 'metiers_voir' },
-      {
-        name: 'Créer un métier',
-        slug: 'metiers_creer',
-        aliases: [
-          { slug: 'metiers_ajouter_metiers', reason: 'web JobModal.tsx' },
-        ],
-      },
-      {
-        name: 'Modifier un métier',
-        slug: 'metiers_modifier',
-        aliases: [
-          { slug: 'metiers_modifier_metiers', reason: 'web JobTable.tsx' },
-        ],
-      },
-      {
-        name: 'Supprimer un métier',
-        slug: 'metiers_supprimer',
-        aliases: [
-          { slug: 'metiers_supprimer_metiers', reason: 'web JobTable.tsx' },
-        ],
-      },
+      { name: 'Créer un métier', slug: 'metiers_creer', absorbs: ['metiers_ajouter_metiers'] },
+      { name: 'Modifier un métier', slug: 'metiers_modifier', absorbs: ['metiers_modifier_metiers'] },
+      { name: 'Supprimer un métier (dont reversement)', slug: 'metiers_supprimer', absorbs: ['metiers_supprimer_metiers'] },
     ],
   },
   {
     name: 'Localités de résidence',
-    description: 'Référentiel des localités de résidence des membres.',
+    description: 'Référentiel des localités de résidence (lecture libre pour tout connecté).',
     permissions: [
       { name: 'Accéder au menu Localités de résidence', slug: 'parametres_voir_menu_localite_de_residences' },
-      { name: 'Consulter la liste des localités', slug: 'villes_voir' },
-      {
-        name: 'Créer une localité',
-        slug: 'villes_creer',
-        aliases: [
-          { slug: 'localite_de_residence_ajouter_localite_de_residences', reason: 'web CityModal.tsx' },
-        ],
-      },
-      {
-        name: 'Modifier une localité',
-        slug: 'villes_modifier',
-        aliases: [
-          { slug: 'localite_de_residence_modifier_localite_de_residences', reason: 'web CityTable.tsx' },
-        ],
-      },
-      {
-        name: 'Supprimer une localité',
-        slug: 'villes_supprimer',
-        aliases: [
-          { slug: 'localite_de_residence_supprimer_localite_de_residences', reason: 'web CityTable.tsx' },
-        ],
-      },
+      { name: 'Créer une localité', slug: 'villes_creer', absorbs: ['localite_de_residence_ajouter_localite_de_residences'] },
+      { name: 'Modifier une localité', slug: 'villes_modifier', absorbs: ['localite_de_residence_modifier_localite_de_residences'] },
+      { name: 'Supprimer une localité (dont reversement)', slug: 'villes_supprimer', absorbs: ['localite_de_residence_supprimer_localite_de_residences'] },
     ],
   },
   {
     name: 'Villes de l\'organisation',
-    description: 'Référentiel des villes de l’organisation.',
+    description: 'Référentiel des villes de l’organisation (lecture libre pour tout connecté).',
     permissions: [
       {
         name: 'Accéder au menu Villes de l\'organisation',
         slug: 'villes_organisation_acceder_menu_villes_organisation',
       },
-      { name: 'Consulter la liste des villes de l\'organisation', slug: 'villes_organisation_voir' },
-      {
-        name: 'Créer une ville d\'organisation',
-        slug: 'villes_organisation_creer',
-        aliases: [
-          { slug: 'organisations_ajouter_organisations', reason: 'web OrganisationCityModal.tsx' },
-        ],
-      },
-      {
-        name: 'Modifier une ville d\'organisation',
-        slug: 'villes_organisation_modifier',
-        aliases: [
-          { slug: 'organisations_modifier_organisations', reason: 'web OrganisationCityTable.tsx' },
-        ],
-      },
-      {
-        name: 'Supprimer une ville d\'organisation',
-        slug: 'villes_organisation_supprimer',
-        aliases: [
-          { slug: 'organisations_supprimer_organisations', reason: 'web OrganisationCityTable.tsx' },
-        ],
-      },
+      { name: 'Créer une ville d\'organisation', slug: 'villes_organisation_creer', absorbs: ['organisations_ajouter_organisations'] },
+      { name: 'Modifier une ville d\'organisation', slug: 'villes_organisation_modifier', absorbs: ['organisations_modifier_organisations'] },
+      { name: 'Supprimer une ville d\'organisation', slug: 'villes_organisation_supprimer', absorbs: ['organisations_supprimer_organisations'] },
     ],
   },
   {
     name: 'Pays',
-    description: 'Référentiel des pays.',
+    description: 'Référentiel des pays (lecture libre pour tout connecté).',
     permissions: [
       { name: 'Accéder au menu Pays', slug: 'parametres_voir_menu_pays' },
-      { name: 'Consulter la liste des pays', slug: 'pays_voir' },
-      {
-        name: 'Créer un pays',
-        slug: 'pays_creer',
-        aliases: [
-          { slug: 'pays_ajouter_pays', reason: 'web CountryModal.tsx' },
-        ],
-      },
-      {
-        name: 'Modifier un pays',
-        slug: 'pays_modifier',
-        aliases: [
-          { slug: 'pays_modifier_pays', reason: 'web CountryTable.tsx' },
-        ],
-      },
-      {
-        name: 'Supprimer un pays',
-        slug: 'pays_supprimer',
-        aliases: [
-          { slug: 'pays_supprimer_pays', reason: 'web CountryTable.tsx' },
-        ],
-      },
+      { name: 'Créer un pays', slug: 'pays_creer', absorbs: ['pays_ajouter_pays'] },
+      { name: 'Modifier un pays', slug: 'pays_modifier', absorbs: ['pays_modifier_pays'] },
+      { name: 'Supprimer un pays', slug: 'pays_supprimer', absorbs: ['pays_supprimer_pays'] },
     ],
   },
   {
     name: 'Civilités',
-    description: 'Référentiel des civilités.',
+    description: 'Référentiel des civilités (lecture libre pour tout connecté).',
     permissions: [
       { name: 'Accéder au menu Civilités', slug: 'parametres_voir_menu_civilites' },
-      { name: 'Consulter la liste des civilités', slug: 'civilites_voir' },
-      {
-        name: 'Créer une civilité (libellé, sigle, genre)',
-        slug: 'civilites_creer',
-        aliases: [
-          { slug: 'civilites_ajouter_civilites', reason: 'web CivilityModal.tsx' },
-        ],
-      },
-      {
-        name: 'Modifier une civilité',
-        slug: 'civilites_modifier',
-        aliases: [
-          { slug: 'civilites_modifier_civilites', reason: 'web CivilityTable.tsx' },
-        ],
-      },
-      {
-        name: 'Supprimer une civilité',
-        slug: 'civilites_supprimer',
-        aliases: [
-          { slug: 'civilites_supprimer_civilites', reason: 'web CivilityTable.tsx' },
-        ],
-      },
+      { name: 'Créer une civilité (libellé, sigle, genre)', slug: 'civilites_creer', absorbs: ['civilites_ajouter_civilites'] },
+      { name: 'Modifier une civilité', slug: 'civilites_modifier', absorbs: ['civilites_modifier_civilites'] },
+      { name: 'Supprimer une civilité', slug: 'civilites_supprimer', absorbs: ['civilites_supprimer_civilites'] },
     ],
   },
   {
     name: 'Situations matrimoniales',
-    description: 'Référentiel des situations matrimoniales.',
+    description: 'Référentiel des situations matrimoniales (lecture libre pour tout connecté).',
     permissions: [
       {
         name: 'Accéder au menu Situations matrimoniales',
         slug: 'parametres_voir_menu_situation_matrimoniales',
       },
-      { name: 'Consulter la liste des situations matrimoniales', slug: 'situations_matrimoniales_voir' },
       {
         name: 'Créer une situation matrimoniale',
         slug: 'situations_matrimoniales_creer',
-        aliases: [
-          { slug: 'situation_matrimoniales_ajouter_situation_matrimoniales', reason: 'web MaritalStatusModal.tsx' },
-        ],
+        absorbs: ['situation_matrimoniales_ajouter_situation_matrimoniales'],
       },
       {
         name: 'Modifier une situation matrimoniale',
         slug: 'situations_matrimoniales_modifier',
-        aliases: [
-          { slug: 'situation_matrimoniales_modifier_situation_matrimoniales', reason: 'web MaritalStatusTable.tsx' },
-        ],
+        absorbs: ['situation_matrimoniales_modifier_situation_matrimoniales'],
       },
       {
         name: 'Supprimer une situation matrimoniale',
         slug: 'situations_matrimoniales_supprimer',
-        aliases: [
-          { slug: 'situation_matrimoniales_supprimer_situation_matrimoniales', reason: 'web MaritalStatusTable.tsx' },
-        ],
+        absorbs: ['situation_matrimoniales_supprimer_situation_matrimoniales'],
       },
     ],
   },
   {
     name: 'Accessoires',
-    description: 'Référentiel des accessoires de pratique.',
+    description: 'Référentiel des accessoires de pratique (lecture libre pour tout connecté).',
     permissions: [
       { name: 'Accéder au menu Accessoires', slug: 'parametres_voir_menu_accessoires' },
-      { name: 'Consulter la liste des accessoires de pratique', slug: 'accessoires_voir' },
-      {
-        name: 'Créer un accessoire',
-        slug: 'accessoires_creer',
-        aliases: [
-          { slug: 'accessoires_ajouter_accessoires', reason: 'web AccessoryModal.tsx' },
-        ],
-      },
-      {
-        name: 'Modifier un accessoire',
-        slug: 'accessoires_modifier',
-        aliases: [
-          { slug: 'accessoires_modifier_accessoires', reason: 'web AccessoryTable.tsx' },
-        ],
-      },
-      {
-        name: 'Supprimer un accessoire',
-        slug: 'accessoires_supprimer',
-        aliases: [
-          { slug: 'accessoires_supprimer_accessoires', reason: 'web AccessoryTable.tsx' },
-        ],
-      },
+      { name: 'Créer un accessoire', slug: 'accessoires_creer', absorbs: ['accessoires_ajouter_accessoires'] },
+      { name: 'Modifier un accessoire', slug: 'accessoires_modifier', absorbs: ['accessoires_modifier_accessoires'] },
+      { name: 'Supprimer un accessoire', slug: 'accessoires_supprimer', absorbs: ['accessoires_supprimer_accessoires'] },
     ],
   },
   {
@@ -1251,28 +852,41 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
     description: 'Configurations générales de l’application, dont les fournisseurs SMS.',
     permissions: [
       { name: 'Accéder au menu Paramètres', slug: 'parametres_voir_menu_parametres' },
-      { name: 'Consulter le bloc des configurations', slug: 'parametres_consulter_bloc_configurations' },
       {
         name: 'Consulter les paramètres SMS',
         slug: 'parametres_voir_sms',
-        aliases: [
-          { slug: 'parametres_voir_menu_sms', reason: 'web : entrée de menu « SMS » des paramètres' },
-        ],
+        absorbs: ['parametres_voir_menu_sms', 'parametres_consulter_bloc_configurations'],
       },
       { name: 'Gérer les paramètres SMS', slug: 'parametres_gerer_sms' },
+      {
+        name: 'Exécuter les migrations techniques',
+        slug: 'migration_executer',
+      },
     ],
   },
 ];
 
-/** Toutes les permissions à plat : entrées du .md + alias, avec leur module d'appartenance. */
+/** Toutes les permissions du catalogue à plat, avec leur module d'appartenance. */
 export function listCatalogPermissions(): Array<{
   module: string;
   name: string;
   slug: string;
   description: string;
-  isAlias: boolean;
+  absorbs: string[];
+  seedFrom: string[];
+  defaults: Record<string, boolean>;
+  grantTo: string[];
 }> {
-  const lignes: Array<{ module: string; name: string; slug: string; description: string; isAlias: boolean }> = [];
+  const lignes: Array<{
+    module: string;
+    name: string;
+    slug: string;
+    description: string;
+    absorbs: string[];
+    seedFrom: string[];
+    defaults: Record<string, boolean>;
+    grantTo: string[];
+  }> = [];
   for (const mod of PERMISSION_CATALOG) {
     for (const p of mod.permissions) {
       lignes.push({
@@ -1280,17 +894,11 @@ export function listCatalogPermissions(): Array<{
         name: p.name,
         slug: p.slug,
         description: p.group ? `${mod.name} - ${p.group}` : mod.name,
-        isAlias: false,
+        absorbs: p.absorbs ?? [],
+        seedFrom: p.seedFrom ?? [],
+        defaults: p.defaults ?? {},
+        grantTo: p.grantTo ?? [],
       });
-      for (const a of p.aliases ?? []) {
-        lignes.push({
-          module: mod.name,
-          name: `${p.name} (accès technique)`,
-          slug: a.slug,
-          description: `Alias technique de « ${p.name} ». ${a.reason}. Ne pas supprimer : la fonction se fermerait.`,
-          isAlias: true,
-        });
-      }
     }
   }
   return lignes;

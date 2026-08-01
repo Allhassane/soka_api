@@ -5,6 +5,7 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateMaritalStatusDto } from './dto/create-marital-status.dto';
 import { UpdateMaritalStatusDto } from './dto/update-marital-status.dto';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { ReferentialRead } from 'src/auth/decorators/referential-read.decorator';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
@@ -15,7 +16,7 @@ export class MaritalStatusController {
   constructor(private readonly maritalStatusService: MaritalStatusService) {}
 
   @Get()
-  @RequirePermissions('situations_matrimoniales_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Liste toutes les situations matrimoniale' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
@@ -33,7 +34,7 @@ export class MaritalStatusController {
   }
 
   @Get(':uuid')
-  @RequirePermissions('situations_matrimoniales_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Récupérer une situation matrimoniale par UUID' })
   @ApiResponse({ status: 200, description: 'Situation matrimoniale trouvé.' })
   @ApiResponse({ status: 400, description: 'Situation matrimoniale non trouvé.' })

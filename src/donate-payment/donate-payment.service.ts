@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -20,6 +21,7 @@ import { DonateEntity } from 'src/donate/entities/donate.entity';
 import { DonateCategory } from 'src/shared/enums/donate.enum';
 import { SubscriptionPaymentEntity } from 'src/subscription-payment/entities/subscription-payment.entity';
 import { HubService } from 'src/payments/hub.service';
+import { EffectivePermissionsService } from 'src/access-scope/effective-permissions.service';
 
 @Injectable()
 export class DonatePaymentService {
@@ -47,6 +49,9 @@ export class DonatePaymentService {
 
     /** Périmètre hiérarchique du demandeur (service @Global). */
     private readonly accessScopeService: AccessScopeService,
+
+    /** Droits effectifs du demandeur (service @Global, cache 30 s). */
+    private readonly effectivePermissions: EffectivePermissionsService,
   ) { }
 
   // ============================================================
@@ -60,6 +65,20 @@ export class DonatePaymentService {
     const beneficiary = await this.findMember(dto.beneficiary_uuid);
     const actor = await this.findMember(admin.member_uuid);
     const donate = await this.findCampaign(dto.donation_uuid);
+
+    // ── Bénéficiaire tiers : barrière réelle (audit §M13, miroir des abonnements) ──
+    // Faire un zaimu POUR QUELQU'UN D'AUTRE exige le droit nommé ; pour soi-même, libre.
+    if (beneficiary.uuid !== actor.uuid && admin.is_admin !== true) {
+      const droits = await this.effectivePermissions.slugsFor({
+        uuid: admin.uuid,
+        member_uuid: admin.member_uuid,
+      });
+      if (!droits.has('zaimu_faire_zaimu_beneficiaire_tiers')) {
+        throw new ForbiddenException(
+          "Vous n'avez pas le droit de faire un zaimu pour un autre membre.",
+        );
+      }
+    }
 
     // -----------------------------------------
     // Vérification période de validité du don

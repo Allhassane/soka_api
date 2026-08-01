@@ -83,12 +83,25 @@ export class DonateController {
   @ApiOperation({ summary: 'Récupérer une don par UUID' })
   @ApiResponse({ status: 200, description: 'Don trouvé.' })
   @ApiResponse({ status: 400, description: 'Don non trouvé.' })
-  findOne(@Param('uuid') uuid: string, @Request() req) {
+  /**
+   * ⚠️ Le bloc `statistics` (montant récolté, paiements réussis) n'est calculé que pour un
+   * porteur du droit `zaimu_consulter_statistiques_campagne` - miroir exact des abonnements.
+   */
+  async findOne(@Param('uuid') uuid: string, @Request() req) {
+    const peutVoirStats =
+      req.user?.is_admin === true ||
+      (
+        await this.effectivePermissions.slugsFor({
+          uuid: req.user?.uuid,
+          member_uuid: req.user?.member_uuid,
+        })
+      ).has('zaimu_consulter_statistiques_campagne');
+
     return this.donateService.findOne(
       uuid,
       req.user.uuid,
       req.user.member_uuid,
-      req.user.responsibilities?.[0]?.structure?.uuid,
+      peutVoirStats ? req.user.responsibilities?.[0]?.structure?.uuid : undefined,
     );
   }
 

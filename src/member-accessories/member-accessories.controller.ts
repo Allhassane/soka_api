@@ -33,7 +33,7 @@ export class MemberAccessoriesController {
   constructor(private readonly service: MemberAccessoryService) {}
 
   @Post()
-  @RequirePermissions('membres_accessoires_creer')
+  @RequirePermissions('membres_modifier_situation_membre_sein_organisation')
   @ApiOperation({ summary: 'Assigner un accessoire à un utilisateur' })
   @ApiResponse({ status: 201, type: MemberAccessoryEntity })
   async create(
@@ -43,7 +43,7 @@ export class MemberAccessoriesController {
   }
 
   @Get()
-  @RequirePermissions('membres_accessoires_voir')
+  @RequirePermissions('membres_acceder_alonglet_membre')
   @ApiOperation({
     summary: 'Lister toutes les affectations membre/accessoire',
   })
@@ -52,7 +52,7 @@ export class MemberAccessoriesController {
   }
 
   @Get(':uuid')
-  @RequirePermissions('membres_accessoires_voir')
+  @RequirePermissions('membres_acceder_alonglet_membre')
   @ApiOperation({ summary: 'Voir une affectation utilisateur/accessoire' })
   @ApiParam({
     name: 'uuid',
@@ -64,7 +64,7 @@ export class MemberAccessoriesController {
   }
 
   @Put(':uuid')
-  @RequirePermissions('membres_accessoires_modifier')
+  @RequirePermissions('membres_modifier_situation_membre_sein_organisation')
   @ApiOperation({ summary: 'Modifier une affectation membre/accessoire' })
   @ApiParam({
     name: 'uuid',
@@ -78,7 +78,7 @@ export class MemberAccessoriesController {
   }
 
   @Delete(':uuid')
-  @RequirePermissions('membres_accessoires_supprimer')
+  @RequirePermissions('membres_modifier_situation_membre_sein_organisation')
   @ApiOperation({
     summary: 'Supprimer un accessoire utilisateur/rôle (soft delete)',
   })

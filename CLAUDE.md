@@ -298,21 +298,32 @@ services) : abonnements et dons.
   - Côté contrôleur, lire le périmètre avec **`allowedRootUuidsFromJwt(req.user)`** - jamais
     `responsibilities[0].structure.uuid` (ignore les comités, et l'ordre du tableau est indéterminé).
 
-- **🗂️ Catalogue des permissions : `src/permission/permission-catalog.ts`** (depuis le 2026-07-28).
-  Transcription du document fonctionnel **`permissions/permissions-soka-digital.md`** (racine du
-  monorepo), qui est la source de vérité métier : une section « ## Module … » = un module, une puce
-  = une permission. **28 modules / 344 slugs** (259 puces + 85 alias).
-  Rechargement : `npm run seed:permissions` (purge + insertion + **un lien `roles_permissions` par
-  rôle**, tout coché pour ADMINISTRATEUR et RESPONSABLE, à 0 pour les autres) ; `--dry-run` joue
-  tout puis annule. `npm run seed:reset-permissions` ne fait que vider (sauvegarde JSON dans
-  `backups/`). Ajouter une permission = puce dans le .md → entrée dans le catalogue → seed rejoué
-  → `@RequirePermissions` sur la route.
-  ⚠️ **Ne jamais renommer un slug** (référencé côté web et stocké en base) : quand une puce décrit
-  un droit déjà contrôlé, on **reprend son slug existant**. Un droit exigé par le code sans puce
-  dédiée s'ajoute en `aliases` - le seed en fait une permission du même module. Le seed relit les
-  sources (`permission-code-usage.ts`) et **liste les slugs exigés mais non créés**.
-  ⚠️ Une permission naît **décochée** pour les rôles non servis d'office : ouvrir explicitement les
-  rôles concernés, sinon la fonctionnalité est fermée à tous sauf `is_admin`.
+- **🗂️ Catalogue des permissions : `src/permission/permission-catalog.ts`** (REFONDU le 2026-08-01,
+  c'est désormais LA source de vérité - le `.md` fonctionnel décrit l'ancien monde). **28 modules /
+  182 slugs canoniques** : une permission = UNE capacité réelle (menu, action, onglet, information
+  sensible), avec le MÊME slug côté API et côté web. Les 85 « alias techniques » (2 slugs, 1 action)
+  et les ~96 fantômes ont été supprimés.
+  - **`npm run seed:permissions` est CONVERGENT et rejouable** (plus de purge) : upsert par slug,
+    les statuts `roles_permissions` existants sont préservés et ne peuvent que s'élargir
+    (`absorbs`/`grantTo`), les permissions hors catalogue sont supprimées avec leurs liens,
+    les orphelines purgées. `--dry-run` joue tout puis annule. La même logique
+    (`permission-catalog-sync.ts`) est appliquée par la migration `SyncPermissionCatalogV2`
+    **au démarrage en prod**.
+  - **Lectures de référentiels = `@ReferentialRead()`**, ouvertes à tout AUTHENTIFIÉ (civilités,
+    pays, localités, formations, métiers, niveaux, départements, divisions, responsabilités,
+    accessoires, villes d'organisation, situations, types d'activité, cascade `structure/childrens`).
+    Motif : ces listes nourrissent les formulaires des autres modules - une permission d'un module
+    ne doit jamais fermer l'action d'un autre (audit H1/H8/H9). Les ÉCRITURES restent sous
+    permission. `check:permissions` accepte ce décorateur comme exemption déclarée.
+  - Ajouter une permission = entrée dans le catalogue (avec `seedFrom`/`defaults` pour l'état
+    initial) → `npm run seed:permissions` → `@RequirePermissions` sur la route → `hasPermission`
+    côté web. Le seed relit les sources (`permission-code-usage.ts`) et ÉCHOUE si un slug exigé
+    par l'API manque au catalogue.
+  ⚠️ **Ne jamais renommer un slug** (référencé côté web et stocké en base).
+  ⚠️ **`absorbs` fusionne les DROITS ACCORDÉS** : ne jamais y mettre un slug plus faible que la
+  capacité cible (ex. une lecture absorbée par un `_creer` donnerait le droit d'écrire à qui
+  savait lire - deux débordements de ce type ont été attrapés et refermés au premier seed local).
+  ⚠️ Une permission naît **décochée** pour les rôles non couverts par `seedFrom`/`defaults`.
   ⚠️ `permission-manifest.ts` n'est **plus** la source de vérité : il ne sert qu'à la migration
   historique `1782800300000-SeedPermissionCatalog`, qui ne doit plus être rejouée.
 
@@ -366,7 +377,8 @@ services) : abonnements et dons.
 
 - **🛡️ Toute route doit être protégée ou explicitement exemptée.** `npm run check:permissions`
   échoue sinon. Une exemption s'écrit dans `scripts/check-route-permissions.js` **avec sa
-  justification** (ou via `@Public()`). Ce garde-fou existe parce qu'un codemod avait protégé
+  justification**, via `@Public()`, ou via `@ReferentialRead()` (lecture de nomenclature ouverte
+  à tout authentifié - jamais sur une route qui rend de la donnée de membre). Ce garde-fou existe parce qu'un codemod avait protégé
   les lectures d'un contrôleur en laissant ses écritures ouvertes - import de masse et envoi
   SMS de masse accessibles à tout compte authentifié, sans que rien ne le détecte.
 

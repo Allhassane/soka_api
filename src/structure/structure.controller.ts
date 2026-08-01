@@ -29,6 +29,7 @@ import { UpdateStructureDto } from './dto/update-structure.dto';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { ReferentialRead } from 'src/auth/decorators/referential-read.decorator';
 import { MemberStatsFilters, PaginationMemberParams, StructureTreeService } from './structure-tree.service';
 import { StructureTreeNodeDto } from './dto/tree.dto';
 import { StructurePaginationQueryDto } from './dto/structure-pagination-query.dto';
@@ -93,8 +94,19 @@ export class StructureController {
     );
   }
 
+    // ⚠️ OU logique. Cette route est LE sélecteur de membres de l'application : liste des membres,
+    // choix des participants d'une activité, d'un membre de comité, d'un transfert. Elle était sous
+    // `structures_voir` (ADMINISTRATEUR seul) : le droit nommé « Consulter la liste des membres »
+    // ne commandait rien (audit §H11). Elle exige désormais le droit du module Membres, OU l'un
+    // des droits d'action qui ont besoin du sélecteur. Les données restent bornées au sous-arbre
+    // du demandeur par le service (le filtre ne peut que rétrécir).
     @Get('my-members')
-    @RequirePermissions('structures_voir')
+    @RequirePermissions(
+      'membres_voir_menu_liste_membres',
+      'activites_participants_gerer',
+      'membres_gerer_membres_comite',
+      'membres_initier_transfert',
+    )
     @UseGuards(JwtAuthGuard, PermissionsGuard)
     @ApiOperation({
       summary: 'Récupérer les membres accessibles par l\'utilisateur connecté avec leur structure_tree',
@@ -250,41 +262,16 @@ async queueMembersExport(
   );
 }
 
-@Get('async-export/status/:jobId')
-@RequirePermissions('structures_voir')
-@ApiOperation({ summary: 'Vérifier le statut d\'un export de membres' })
-async getExportStatus(@Param('jobId') jobId: string) {
-  return this.structureTreeService.getExportJobStatus(jobId);
-}
+// Les routes `async-export/status/:jobId` et `async-exports/download/:jobUuid` de ce contrôleur
+// ont été SUPPRIMÉES (refonte permissions 2026-08-01) : aucun appelant web - le suivi et le
+// téléchargement des exports passent par `/payments/async-exports/*` (audit §B31, le lien de
+// téléchargement généré ici pointait d'ailleurs vers un chemin inexistant).
 
-@Get('async-exports/download/:jobUuid')
-@RequirePermissions('structures_voir')
-@ApiOperation({ summary: 'Télécharger un export de membres terminé' })
-async downloadMembersExport(
-  @Param('jobUuid') jobUuid: string,
-  @Res() res: Response,
-  @Req() req,
-) {
-  try {
-    const { buffer, filename, mimeType } = await this.structureTreeService.downloadMembersExport(
-      jobUuid,
-      req.user.uuid,
-    );
-
-    res.setHeader('Content-Type', mimeType);
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Length', buffer.length);
-    res.send(buffer);
-  } catch (error) {
-    res.status(error.status || 500).json({
-      success: false,
-      message: error.message
-    });
-  }
-}
-
+    // Sélecteur de bénéficiaire des paiements (souscription / zaimu pour un tiers) : exige le
+    // droit de payer, plus `structures_voir` qui fermait l'écran de paiement aux non-admins.
+    // La liste reste bornée au périmètre par `AccessScopeService` (et inclut toujours le demandeur).
     @Get('my-beneficiary')
-    @RequirePermissions('structures_voir')
+    @RequirePermissions('abonnements_paiements_creer', 'dons_paiements_creer')
     @UseGuards(JwtAuthGuard, PermissionsGuard)
     @ApiOperation({
       summary: 'Récupérer tous les membres accessibles par l\'utilisateur connecté (bénéficiaires)',
@@ -367,13 +354,11 @@ async downloadMembersExport(
     );
   }
 
-  // ⚠️ OU logique. `dashboard_consulter_comite_structure` est le droit que le catalogue NOMME
-  // pour ce bloc et il est accordé aux 3 rôles ; il n'était exigé par aucune route (audit §H3),
-  // si bien que le panneau « Comité » du tableau de bord affichait en permanence « Impossible de
-  // charger les responsables du comité » pour RESPONSABLE et MEMBRE. `structures_voir` reste en
-  // OU : le retirer fermerait la route aux appelants qui ne portent que lui.
+  // `dashboard_consulter_comite_structure` est le droit que le catalogue NOMME pour ce bloc et il
+  // est accordé aux 3 rôles (audit §H3). `structures_voir` (l'arbre complet) n'a plus rien à faire
+  // ici : consulter SON comité n'est pas consulter l'arborescence.
   @Get('my-committee')
-  @RequirePermissions('dashboard_consulter_comite_structure', 'structures_voir')
+  @RequirePermissions('dashboard_consulter_comite_structure')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiOperation({
     summary: 'Comité de la structure de l\'utilisateur connecté',
@@ -386,7 +371,7 @@ async downloadMembersExport(
   // l'appelant : le contrôle de périmètre qui la borne plus bas reste **indispensable** et ne
   // doit pas être retiré au prétexte que le droit est désormais plus largement accordé.
   @Get(':uuid/committee')
-  @RequirePermissions('dashboard_consulter_comite_structure', 'structures_voir')
+  @RequirePermissions('dashboard_consulter_comite_structure')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiOperation({
     summary: 'Comité (responsables + responsabilités vacantes) d\'une structure',
@@ -589,8 +574,11 @@ async exportStatCategory(
     return this.structureService.create(createStructureDto);
   }
 
+  // Une structure isolée (nom, niveau, parent) est une donnée de nomenclature : lisible par tout
+  // connecté, comme la cascade `childrens`. Seuls l'arbre complet et la liste exhaustive (avec
+  // effectifs) restent sous `structures_voir`.
   @Get(':uuid')
-  @RequirePermissions('structures_voir')
+  @ReferentialRead()
   @ApiOperation({
     summary: 'Recupérer une structure',
   })
@@ -606,14 +594,13 @@ async exportStatCategory(
     return this.structureService.findOne(uuid);
   }
 
-  // ⚠️ OU logique. Cette route alimente **deux** usages : la cascade du formulaire membre et les
-  // 7 listes du filtre du tableau de bord. `dashboard_filtrer_statistiques_perimetre` est le droit
-  // nommé pour le second et était exigé nulle part (audit §H16) : le filtre était accordé au
-  // RESPONSABLE pendant que la cascade qu'il pilote lui était refusée, listes vides et **sans
-  // message d'erreur**. Ce slug vaut 0 pour MEMBRE : l'ajouter n'ouvre donc rien de plus à lui.
-  // La barrière de navigabilité posée dans le service reste le seul contrôle de périmètre ici.
+  // Cascade de structures (noms des enfants d'un nœud) : nomenclature consommée par le formulaire
+  // membre, le filtre du tableau de bord, les modales d'activité et de transfert. La garder sous
+  // permission fermait ces formulaires à qui ne portait pas un droit d'un AUTRE module (audit
+  // §H16/H9) - c'est exactement le cas d'usage de `@ReferentialRead()`. La barrière de
+  // navigabilité posée dans le service reste le seul contrôle de périmètre ici.
   @Get('childrens/:uuid')
-  @RequirePermissions('dashboard_filtrer_statistiques_perimetre', 'structures_voir')
+  @ReferentialRead()
   @ApiOperation({
     summary: "Recupérer les enfants d'une structure",
   })
@@ -636,7 +623,7 @@ async exportStatCategory(
   }
 
   @Get('by-childrens/:uuid')
-  @RequirePermissions('structures_voir')
+  @ReferentialRead()
   @ApiOperation({
     summary: "Recupérer les enfants d'une structure",
   })
@@ -660,7 +647,7 @@ async exportStatCategory(
 
 
   @Get('by-all-childrens/:uuid')
-  @RequirePermissions('structures_voir')
+  @ReferentialRead()
   @ApiOperation({
     summary: "Recupérer les enfants d'une structure",
   })
@@ -683,7 +670,7 @@ async exportStatCategory(
   }
 
   @Get('find-by-level/:level_uuid')
-  @RequirePermissions('structures_voir')
+  @ReferentialRead()
   @ApiOperation({
     summary: "Recupérer les structures d'un niveau",
   })
@@ -744,8 +731,10 @@ async exportStatCategory(
 
 
 
+  // Donnée de MEMBRES (pas de structure) : même droit que la liste des membres. Le périmètre
+  // de l'appelant reste contrôlé dans le service (audit §B29 : borné vérifié).
   @Get('members/:uuid')
-  @RequirePermissions('structures_voir')
+  @RequirePermissions('membres_voir_menu_liste_membres')
   @ApiOperation({
     summary: 'Récupérer tous les membres d\'une structure avec statistiques et pagination',
   })
