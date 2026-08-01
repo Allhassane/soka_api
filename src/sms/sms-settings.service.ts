@@ -13,6 +13,7 @@ import type { SendMessageResult } from 'src/journals/interfaces/sms-provider.int
 import type { ProviderBalance } from './interfaces/managed-sms-provider.interface';
 import {
   SETTING_SMS_ACTIVE_PROVIDER,
+  SETTING_SMS_BROADCAST_ENABLED,
   SETTING_SMS_FAILOVER_ENABLED,
   settingProviderEnabledKey,
   SMS_PROVIDER_LABELS,
@@ -36,6 +37,12 @@ export interface ProviderState {
 export interface SmsSettingsState {
   active_provider: string;
   failover_enabled: boolean;
+  /**
+   * Mode diffusion : tous les fournisseurs activés envoient le même SMS (le
+   * membre en reçoit un par fournisseur). Quand il est ON, `active_provider` et
+   * `failover_enabled` n'ont plus d'effet sur l'envoi.
+   */
+  broadcast_enabled: boolean;
   providers: ProviderState[];
 }
 
@@ -99,6 +106,12 @@ export class SmsSettingsService {
       SETTING_SMS_FAILOVER_ENABLED,
       true,
     );
+    // Même source de défaut que le dispatcher, sinon l'écran annoncerait un mode
+    // et un autre s'appliquerait.
+    const broadcast = await this.settings.getBool(
+      SETTING_SMS_BROADCAST_ENABLED,
+      this.appConfig.smsBroadcastEnabled,
+    );
     const providers: ProviderState[] = [];
     for (const name of SMS_PROVIDER_NAMES) {
       const provider = this.registry.get(name);
@@ -115,7 +128,12 @@ export class SmsSettingsService {
         balance: includeBalance ? await this.balanceOf(name) : null,
       });
     }
-    return { active_provider: active, failover_enabled: failover, providers };
+    return {
+      active_provider: active,
+      failover_enabled: failover,
+      broadcast_enabled: broadcast,
+      providers,
+    };
   }
 
   async setActiveProvider(name: string): Promise<SmsSettingsState> {
@@ -166,6 +184,21 @@ export class SmsSettingsService {
     }
     await this.settings.set(
       settingProviderEnabledKey(provider),
+      enabled ? 'true' : 'false',
+      'boolean',
+    );
+    return this.getState(false);
+  }
+
+  /**
+   * Active / désactive le mode DIFFUSION (envoi par tous les fournisseurs à la
+   * fois). Prend effet au prochain envoi, sans redéploiement. Aucun garde-fou à
+   * poser ici : couper la diffusion fait simplement retomber sur l'aiguillage
+   * fournisseur actif + repli.
+   */
+  async setBroadcast(enabled: boolean): Promise<SmsSettingsState> {
+    await this.settings.set(
+      SETTING_SMS_BROADCAST_ENABLED,
       enabled ? 'true' : 'false',
       'boolean',
     );

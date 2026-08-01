@@ -7,6 +7,7 @@ import { SuccessMessage } from 'src/shared/decorators/success-message.decorator'
 import { SmsSettingsService } from './sms-settings.service';
 import {
   SetActiveProviderDto,
+  SetBroadcastDto,
   SetFailoverDto,
   TestSmsDto,
   ToggleProviderDto,
@@ -58,6 +59,17 @@ export class SmsSettingsController {
     @Body() dto: ToggleProviderDto,
   ) {
     return this.service.setProviderEnabled(name, dto.enabled);
+  }
+
+  @Patch('broadcast')
+  @RequirePermissions(PERM_PARAMETRES_GERER_SMS)
+  @SuccessMessage('Mode diffusion SMS mis à jour')
+  @ApiOperation({
+    summary:
+      'Activer / désactiver la diffusion (envoi par TOUS les fournisseurs à la fois)',
+  })
+  setBroadcast(@Body() dto: SetBroadcastDto) {
+    return this.service.setBroadcast(dto.enabled);
   }
 
   @Patch('failover')

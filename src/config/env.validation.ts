@@ -2,6 +2,7 @@ import * as Joi from 'joi';
 import { AppEnv } from '../shared/enums/app-env.enum';
 import {
   SMS_DEFAULT_ACTIVE_PROVIDER,
+  SMS_DEFAULT_BROADCAST_ENABLED,
   SMS_PROVIDER_NAMES,
 } from '../sms/sms.constants';
 
@@ -54,4 +55,10 @@ export const envValidationSchema = Joi.object({
   SMS_ACTIVE_PROVIDER: Joi.string()
     .valid(...SMS_PROVIDER_NAMES)
     .default(SMS_DEFAULT_ACTIVE_PROVIDER),
+
+  // --- Mode diffusion (les DEUX fournisseurs envoient le même SMS) ---
+  // Défaut de DÉPLOIEMENT lui aussi surchargé par `app_settings.sms.broadcast.enabled`.
+  SMS_BROADCAST_ENABLED: Joi.string()
+    .valid('true', 'false')
+    .default(SMS_DEFAULT_BROADCAST_ENABLED ? 'true' : 'false'),
 });

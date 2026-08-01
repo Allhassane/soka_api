@@ -4,6 +4,7 @@ import { AppEnv } from 'src/shared/enums/app-env.enum';
 import {
   isSmsProviderName,
   SMS_DEFAULT_ACTIVE_PROVIDER,
+  SMS_DEFAULT_BROADCAST_ENABLED,
   type SmsProviderName,
 } from 'src/sms/sms.constants';
 
@@ -104,5 +105,22 @@ export class AppConfigService {
       .trim()
       .toLowerCase();
     return isSmsProviderName(raw) ? raw : SMS_DEFAULT_ACTIVE_PROVIDER;
+  }
+
+  /**
+   * Mode DIFFUSION par défaut, lu dans `.env` (`SMS_BROADCAST_ENABLED`) : envoi
+   * du même SMS par TOUS les fournisseurs activés (le membre reçoit 2 SMS).
+   *
+   * Même statut que `smsDefaultProvider` : simple défaut de DÉPLOIEMENT, la ligne
+   * `app_settings.sms.broadcast.enabled` le surcharge à chaud. Point de résolution
+   * UNIQUE pour `SmsDispatcher` (qui envoie) et `SmsSettingsService` (qui affiche).
+   */
+  get smsBroadcastEnabled(): boolean {
+    const raw = (this.config.get<string>('SMS_BROADCAST_ENABLED') ?? '')
+      .trim()
+      .toLowerCase();
+    if (raw === 'true') return true;
+    if (raw === 'false') return false;
+    return SMS_DEFAULT_BROADCAST_ENABLED;
   }
 }
