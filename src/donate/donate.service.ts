@@ -317,6 +317,7 @@ export class DonateService {
     // Enregistrement
     const saved = await this.donateRepo.save({
       ...createDonateDto,
+      max_payments_per_beneficiary: createDonateDto.max_payments_per_beneficiary ?? 1,
       status: GlobalStatus.STARTED,
       history: JSON.stringify(history),
       admin_uuid,
@@ -357,6 +358,7 @@ export class DonateService {
 
     Object.assign(donate, {
       ...updateDonateDto,
+      max_payments_per_beneficiary: updateDonateDto.max_payments_per_beneficiary ?? 1,
       updated_at: new Date(),
     });
 

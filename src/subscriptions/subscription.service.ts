@@ -294,6 +294,7 @@ export class SubscriptionService {
 
       const newSubscription = this.subscriptionRepo.create({
         ...payload,
+        max_payments_per_beneficiary: payload.max_payments_per_beneficiary ?? 1,
         admin_uuid,
         status:GlobalStatus.STARTED,
         history: JSON.stringify(history),
@@ -335,6 +336,7 @@ export class SubscriptionService {
 
     Object.assign(subscription, {
       ...payload,
+      max_payments_per_beneficiary: payload.max_payments_per_beneficiary ?? 1,
       admin_uuid: admin_uuid,
       updated_at: new Date(),
     });

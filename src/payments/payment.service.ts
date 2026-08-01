@@ -739,19 +739,6 @@ async findTransactionsForSubGroups(
   }
   const sousGroups = await this.structureService.findByAllChildrens(structure_uuid);
 
-  if (!sousGroups.length) {
-    return {
-      total: 0,
-      page,
-      limit,
-      sous_groups: [],
-      total_campaign_amount: 0,
-      total_successful_payments: 0,
-      total_successful_amount: 0,
-      data: [],
-    };
-  }
-
   // Query principale avec recherche
   const qb = this.paymentRepo
     .createQueryBuilder('p')
@@ -759,8 +746,11 @@ async findTransactionsForSubGroups(
     .leftJoinAndSelect('actor.structure', 'actorStructure')
     .leftJoinAndSelect('p.beneficiary', 'beneficiary')
     .leftJoinAndSelect('beneficiary.structure', 'beneficiaryStructure')
-    .where('p.source_uuid = :source_uuid', { source_uuid })
-    .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups });
+    .where('p.source_uuid = :source_uuid', { source_uuid });
+
+  if (sousGroups.length) {
+    qb.andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups });
+  }
 
   //  Ajouter la recherche sur actor et beneficiary
   if (search && search.trim() !== '') {
@@ -816,8 +806,14 @@ async findTransactionsForSubGroups(
         .select('COUNT(DISTINCT d.uuid)', 'count')
         .addSelect('SUM(d.amount)', 'sum')
         .where('d.donate_uuid = :id', { id: source_uuid })
-        .andWhere('d.status = :status', { status: GlobalStatus.SUCCESS })
-        .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups });
+        .andWhere('d.status = :status', { status: GlobalStatus.SUCCESS });
+
+      if (sousGroups.length) {
+        successfulDonationsQb.andWhere(
+          'actor.structure_uuid IN (:...groups)',
+          { groups: sousGroups },
+        );
+      }
 
       //  Appliquer le même filtre de recherche
       if (search && search.trim() !== '') {
@@ -860,8 +856,14 @@ async findTransactionsForSubGroups(
         .select('COUNT(DISTINCT s.uuid)', 'count')
         .addSelect('SUM(s.amount)', 'sum')
         .where('s.subscription_uuid = :id', { id: source_uuid })
-        .andWhere('s.status = :status', { status: GlobalStatus.SUCCESS })
-        .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups });
+        .andWhere('s.status = :status', { status: GlobalStatus.SUCCESS });
+
+      if (sousGroups.length) {
+        successfulSubscriptionsQb.andWhere(
+          'actor.structure_uuid IN (:...groups)',
+          { groups: sousGroups },
+        );
+      }
 
       //  Appliquer le même filtre de recherche
       if (search && search.trim() !== '') {

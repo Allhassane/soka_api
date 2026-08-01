@@ -6,7 +6,7 @@ import {
 import { DonatePaymentEntity } from './entities/donate-payment.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { AccessScopeService } from 'src/access-scope/access-scope.service';
-import { ILike, Repository } from 'typeorm';
+import { ILike, In, Repository } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
 import { LogActivitiesService } from 'src/log-activities/log-activities.service';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
@@ -80,6 +80,21 @@ export class DonatePaymentService {
       );
     }
 
+    // Bloquer si un paiement est déjà en cours pour ce bénéficiaire
+    const inProgressPayment = await this.donateRepo.count({
+      where: {
+        donate_uuid: donate.uuid,
+        beneficiary_uuid: beneficiary.uuid,
+        status: In([GlobalStatus.INIT, GlobalStatus.PENDING]),
+      },
+    });
+
+    if (inProgressPayment > 0) {
+      throw new BadRequestException(
+        'Un paiement est déjà en cours pour ce bénéficiaire sur cette campagne.',
+      );
+    }
+
     let unitAmount: number;
     let quantity: number;
 
@@ -127,7 +142,7 @@ export class DonatePaymentService {
           `Il ne reste que ${remaining} paiement(s) possible(s) pour ${beneficiaryLabel} sur cette campagne (maximum ${maxPerBeneficiary}, déjà réglé ${alreadyPaid}).`,
         );
       }
-    }
+    } 
 
     if (donate.category === DonateCategory.FIXIED_AMOUNT) {
       // Montant imposé par la campagne
