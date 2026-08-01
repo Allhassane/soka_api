@@ -447,6 +447,49 @@ services) : abonnements et dons.
   `422`. Un HTTP **200 peut porter `{status:'error'}`** : toujours relire l'enveloppe.
   Normalisation : `225` + les 10 chiffres locaux **en conservant le `0`** (`0749326623` →
   `2250749326623`) - retirer le `0` fait rejeter le SMS.
+- **👤 Le compte de connexion d'un membre : UN seul point, `MemberAccountService`**
+  (`src/users/member-account.service.ts`, exporté par `UserModule`). `reconcileAccount(member,
+  manager?)` crée le compte s'il manque, sinon réaligne nom/prénom/e-mail/**téléphone**, et rend un
+  verdict (`created` · `updated` · `unchanged` · `skipped_no_phone` · `skipped_phone_taken`).
+  Appelé par `MemberService.store()`, `MemberService.update()` **et** les deux branches de
+  `ImportService`. ⚠️ **Ne pas réimplémenter la règle chez un 4ᵉ appelant** : c'est exactement ce qui
+  s'est passé jusqu'au 2026-08-01 - l'import écrivait le membre seul, d'où **360 membres sans
+  compte** (donc sans connexion possible) que rien ne signalait, rattrapés à la main par
+  `seed:create-missing-user-accounts`. Un membre sans compte ressemble à un membre normal
+  jusqu'à sa 1re connexion.
+  ⚖️ **Écart `members` ↔ `users` : `npm run seed:reconcile-member-accounts`** (simulation par
+  défaut, `--apply` pour écrire). Décompose l'écart en 7 cas, **corrige** les deux sûrs (membre
+  vivant sans aucun compte → création + ligne `user_roles` ; compte actif sur un membre supprimé →
+  `is_active = 0`) et **signale** les cinq qui demandent un arbitrage. Il **réutilise** ce service
+  plutôt que d'en recopier les règles. ⚠️ Ses candidats sont les membres **sans aucune ligne
+  `users`, soft-deleted comprises** : `reconcileAccount` cherche via `findOne`, qui **ignore les
+  lignes soft-deleted**, donc un membre au compte soft-deleted paraîtrait sans compte et en
+  recevrait un **second sur le même numéro**. ⚠️ Hors contexte Nest, `UserDefaultRoleSubscriber`
+  ne se déclenche pas : tout seed qui crée un compte doit appeler `ensureDefaultRole()` lui-même.
+  ⚠️ **Le téléphone EST l'identifiant de connexion** : pas de téléphone ⇒ pas de compte, et un
+  numéro déjà porté par un autre compte n'est **jamais** réutilisé ni volé (à la création comme à
+  la mise à jour). `users.phone_number` n'a **aucun index UNIQUE** en base : rien d'autre
+  n'empêcherait deux comptes sur un même numéro, et la connexion deviendrait ambiguë.
+  ⚠️ **Toujours `repo.create()` + `save()`**, jamais un `INSERT` SQL : le hachage du mot de passe
+  est un hook `@BeforeInsert` de `User`. Un insert brut stocke le mot de passe **en clair**.
+  ⚠️ Le compte naît au **mot de passe par défaut** avec `must_change_password = true` - aucun SMS
+  n'est envoyé à la création ; le vrai mot de passe part au **1er login** (`AuthService`).
+  Passer le `manager` de la transaction en cours quand il y en a une, sinon un rollback du membre
+  laisse un compte orphelin.
+- **🔓 `POST /auth/forgot-password` répond en clair - il n'est PLUS anti-énumération** (depuis le
+  2026-07-31). Chaque situation qui empêche le membre de recevoir son SMS a son code, parce que la
+  page « Recevoir mon mot de passe » affiche le message tel quel : **404** numéro inconnu · **403**
+  compte désactivé · **429** relance dans la fenêtre · **503** envoi impossible · **200** avec
+  `data.retry_after`. Avant, ces quatre cas renvoyaient « SMS envoyé » et le membre attendait un SMS
+  qui ne partait pas. ⚠️ **Contrepartie** : l'endpoint est **public** et permet donc de tester si un
+  numéro a un compte ; le cooldown étant **par numéro**, il ne borne pas un balayage - **rate-limit
+  par IP à poser** (non fait).
+  ⚠️ **`AuthService.RESET_COOLDOWN_SECONDS` (300 s) est la seule source du délai** : il sert à
+  l'anti-spam serveur **et** est renvoyé au client, qui en fait son compte à rebours et désactive
+  son bouton d'envoi. Le figer en dur côté web ferait diverger l'écran et le refus 429.
+  ⚠️ Invariants à ne pas casser : sur échec d'envoi, le mot de passe **n'est pas écrit** (le membre
+  ne l'a jamais reçu) **et aucun cooldown n'est posé** (une panne fournisseur ne doit pas enfermer
+  le membre 5 min). Verrouillés par `auth/auth.service.spec.ts`.
 - **Login = phone_number + password**, pas email. Le guard local attend ces champs.
 - **Migrations manuelles.** `synchronize` doit rester **off** ; passer par
   `migration:generate` / `migration:run`. Ne jamais laisser TypeORM modifier `soka_db` en auto.

@@ -7,12 +7,13 @@ import { MemberEntity } from 'src/members/entities/member.entity';
 import { MemberResponsibilityEntity } from 'src/member-responsibility/entities/member-responsibility.entity';
 import { ImportFailureEntity } from './entities/import-failure.entity';
 import { ImportBatchEntity } from './entities/import-batch.entity';
+import { UserModule } from 'src/users/user.module';
 
 /**
  * Module d'importation Excel des membres.
  * - Validation du format canonique + parsing.
  * - Dry-run : résolution des référentiels/structure + simulation create/update.
- * - Commit : création/mise à jour réelle + persistance des échecs (import_failures).
+ * - Commit : création/mise à jour réelle + compte de connexion + persistance des échecs.
  */
 @Module({
   imports: [
@@ -22,6 +23,8 @@ import { ImportBatchEntity } from './entities/import-batch.entity';
       ImportFailureEntity,
       ImportBatchEntity,
     ]),
+    // Pour `MemberAccountService` : un membre importé sans compte ne peut pas se connecter.
+    UserModule,
   ],
   controllers: [ImportController],
   providers: [ImportService, ImportReferenceService],

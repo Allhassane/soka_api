@@ -142,8 +142,12 @@ export class CommitteeController {
     return this.committeeService.addMember(uuid, payload.member_uuid, req.user);
   }
 
+  // ⚠️ OU logique (audit §M1) : `membres_retirer_membre_comite` existait au catalogue et ne
+  // gardait rien - un seul droit couvrait l'ajout ET le retrait. Déjà à 1 pour RESPONSABLE.
+  // `CommitteeService.canManage()` (être responsable de CE comité, ou is_admin) reste exigé en
+  // plus : ce décorateur n'est que la première des deux conditions.
   @Delete(':uuid/members/:memberUuid')
-  @RequirePermissions(MANAGE_COMMITTEE_MEMBERS)
+  @RequirePermissions('membres_retirer_membre_comite', MANAGE_COMMITTEE_MEMBERS)
   @ApiOperation({ summary: 'Retirer un membre du comité (responsable ou admin)' })
   @ApiResponse({ status: 403, description: 'Permission manquante ou non responsable du comité.' })
   removeMember(

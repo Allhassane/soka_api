@@ -60,8 +60,13 @@ export class ActivityController {
   // CRUD ACTIVITE
   // ============================================================
 
+  // ⚠️ Deux slugs = OU logique. `activites_consulter_liste_activites` est le droit que le
+  // catalogue NOMME pour cette lecture ; il n'était exigé nulle part et se décochait donc sans
+  // rien retirer (audit 2026-08-01 §C1). `activites_voir` (« Accéder au menu Activités ») est
+  // conservé à côté le temps que le droit fin soit ouvert aux rôles concernés : le retirer
+  // maintenant fermerait la liste à tout rôle qui n'a que le menu.
   @Get()
-  @RequirePermissions('activites_voir')
+  @RequirePermissions('activites_consulter_liste_activites', 'activites_voir')
   @ApiOperation({
     summary: 'Liste filtrable et paginee des activites',
     description:
@@ -87,8 +92,11 @@ export class ActivityController {
     return this.activityService.store(payload, req.user.uuid as string);
   }
 
+  // ⚠️ Même raison qu'à la liste : `activites_consulter_detail_activite` est le droit nommé, en
+  // OU avec `activites_voir` pendant la transition. Cette route renvoie **les participants** :
+  // c'est de la donnée personnelle, elle ne doit pas rester sous un simple droit de menu.
   @Get(':uuid')
-  @RequirePermissions('activites_voir')
+  @RequirePermissions('activites_consulter_detail_activite', 'activites_voir')
   @ApiOperation({ summary: 'Recuperer une activite par UUID (avec participants)' })
   @ApiParam({ name: 'uuid', description: 'UUID de l activite' })
   @ApiResponse({ status: 200, description: 'Activite trouvee.' })

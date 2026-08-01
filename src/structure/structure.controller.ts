@@ -191,8 +191,13 @@ async exportMembersToExcel(
 /* ######################## */
 
 
+// ⚠️ OU logique. Cette route génère un **Excel de tous les membres du périmètre, coordonnées
+// comprises** : la garder sous le seul `exports_voir_menu_exports` — le libellé d'une entrée de
+// NAVIGATION — revenait à faire d'un droit de menu un droit d'extraction (audit §H5). Le droit
+// nommé est ajouté devant ; il est déjà à 1 pour ADMINISTRATEUR et RESPONSABLE, donc opérant
+// sans migration, et à 0 pour MEMBRE, qui n'y gagne rien.
 @Get('export/my-members/excel')
-@RequirePermissions('exports_voir_menu_exports')
+@RequirePermissions('dashboard_exporter_donnees_globales_tableau_bord', 'exports_voir_menu_exports')
 @ApiOperation({ summary: 'Lancer l\'export des membres en arrière-plan' })
 @ApiQuery({ name: 'search', required: false })
 @ApiQuery({ name: 'gender', required: false, enum: ['homme', 'femme'] })
@@ -362,8 +367,13 @@ async downloadMembersExport(
     );
   }
 
+  // ⚠️ OU logique. `dashboard_consulter_comite_structure` est le droit que le catalogue NOMME
+  // pour ce bloc et il est accordé aux 3 rôles ; il n'était exigé par aucune route (audit §H3),
+  // si bien que le panneau « Comité » du tableau de bord affichait en permanence « Impossible de
+  // charger les responsables du comité » pour RESPONSABLE et MEMBRE. `structures_voir` reste en
+  // OU : le retirer fermerait la route aux appelants qui ne portent que lui.
   @Get('my-committee')
-  @RequirePermissions('structures_voir')
+  @RequirePermissions('dashboard_consulter_comite_structure', 'structures_voir')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiOperation({
     summary: 'Comité de la structure de l\'utilisateur connecté',
@@ -372,8 +382,11 @@ async downloadMembersExport(
     return this.structureService.getMyCommittee(req.user);
   }
 
+  // ⚠️ Même correctif qu'à `my-committee` (audit §H3). Cette route-ci reçoit un uuid de
+  // l'appelant : le contrôle de périmètre qui la borne plus bas reste **indispensable** et ne
+  // doit pas être retiré au prétexte que le droit est désormais plus largement accordé.
   @Get(':uuid/committee')
-  @RequirePermissions('structures_voir')
+  @RequirePermissions('dashboard_consulter_comite_structure', 'structures_voir')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @ApiOperation({
     summary: 'Comité (responsables + responsabilités vacantes) d\'une structure',
@@ -384,9 +397,11 @@ async downloadMembersExport(
     return this.structureService.getCommittee(uuid);
   }
 
+// ⚠️ Même correctif qu'à l'export des membres (audit §H5) : `dashboard_exporter_donnees_statistique`
+// est le droit nommé pour cet export par catégorie, à 1 pour ADMINISTRATEUR et RESPONSABLE.
 @Post('stats/export/:category')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
-@RequirePermissions('exports_voir_menu_exports')
+@RequirePermissions('dashboard_exporter_donnees_statistique', 'exports_voir_menu_exports')
 @ApiOperation({
   summary: 'Exporter les membres par catégorie de statistiques',
   description: 'Génère un fichier Excel contenant la liste des membres selon la catégorie choisie (total, hommes, femmes, départements, divisions)'
@@ -591,8 +606,14 @@ async exportStatCategory(
     return this.structureService.findOne(uuid);
   }
 
+  // ⚠️ OU logique. Cette route alimente **deux** usages : la cascade du formulaire membre et les
+  // 7 listes du filtre du tableau de bord. `dashboard_filtrer_statistiques_perimetre` est le droit
+  // nommé pour le second et était exigé nulle part (audit §H16) : le filtre était accordé au
+  // RESPONSABLE pendant que la cascade qu'il pilote lui était refusée, listes vides et **sans
+  // message d'erreur**. Ce slug vaut 0 pour MEMBRE : l'ajouter n'ouvre donc rien de plus à lui.
+  // La barrière de navigabilité posée dans le service reste le seul contrôle de périmètre ici.
   @Get('childrens/:uuid')
-  @RequirePermissions('structures_voir')
+  @RequirePermissions('dashboard_filtrer_statistiques_perimetre', 'structures_voir')
   @ApiOperation({
     summary: "Recupérer les enfants d'une structure",
   })

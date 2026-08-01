@@ -318,6 +318,17 @@ export class DonatePaymentService {
     return await this.donateRepo.save(donation);
   }
 
+  /**
+   * Annule une tentative de paiement encore en cours.
+   *
+   * Simple délégation : la règle vit dans `PaymentService`, partagée par les
+   * abonnements et les zaimu (comme `confirmHubPayment`). La dupliquer ici
+   * ferait diverger les deux modules sur un geste qui touche à l'argent.
+   */
+  async cancelHubPayment(transaction_id: string) {
+    return this.paymentService.cancelHubPaymentByTransactionId(transaction_id);
+  }
+
   async confirmHubPayment(payload: { transaction_id: string }, admin_uuid: string) {
     try {
       const { transaction_id } = payload;
@@ -337,15 +348,12 @@ export class DonatePaymentService {
       if (result.status === 'paid') {
         return {
           success: true,
+          status: 'paid' as const,
           message: 'Paiement confirmé avec succès',
           transaction_id,
           donation_uuid: result.donation_uuid ?? null,
           hub_payment: result.hub_payment ?? null,
         };
-      }
-
-      if (result.status === 'failed') {
-        throw new BadRequestException('Paiement échoué');
       }
 
       if (result.status === 'not_found') {
@@ -354,7 +362,33 @@ export class DonatePaymentService {
         );
       }
 
-      throw new BadRequestException('Le paiement est en attente de validation.');
+      // ⚠️ « échoué » et « en attente » ne sont PLUS des exceptions HTTP.
+      // Une 400 arrivait au front comme une erreur réseau indifférenciée : la page
+      // de résultat n'avait plus ni le motif, ni le moyen de distinguer un paiement
+      // REFUSÉ d'un paiement ENCORE EN COURS - et affichait « paiement non abouti »
+      // dans les deux cas. Un payeur revenu quelques secondes trop tôt se voyait
+      // donc annoncer un échec pour un paiement qui allait aboutir.
+      // Les deux cas restent `success: false` : les appelants qui testent
+      // `isHubPaymentConfirmed` prennent la même branche qu'avant.
+      if (result.status === 'failed') {
+        return {
+          success: false,
+          status: 'failed' as const,
+          message: 'Paiement échoué',
+          transaction_id,
+          donation_uuid: result.donation_uuid ?? null,
+          hub_payment: result.hub_payment ?? null,
+        };
+      }
+
+      return {
+        success: false,
+        status: 'pending' as const,
+        message: 'Le paiement est en attente de validation.',
+        transaction_id,
+        donation_uuid: result.donation_uuid ?? null,
+        hub_payment: result.hub_payment ?? null,
+      };
     } catch (error) {
       console.error('Erreur vérification Hub :', error.response?.data ?? error.message);
 

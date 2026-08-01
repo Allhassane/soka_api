@@ -76,8 +76,14 @@ export class MemberTransferController {
     return this.transferService.create(payload, this.perimeter(req));
   }
 
+  // ⚠️ OU logique (audit §M8) : **lire** la liste exigeait le droit de **décider**, si bien que
+  // `transferts_consulter_liste_demandes_transfert` - le droit nommé pour cette lecture - ne
+  // commandait rien. Déjà à 1 pour RESPONSABLE : aucune écriture en base n'est nécessaire.
   @Get('incoming')
-  @RequirePermissions('membres_approuver_transfert')
+  @RequirePermissions(
+    'transferts_consulter_liste_demandes_transfert',
+    'membres_approuver_transfert',
+  )
   @ApiOperation({ summary: 'Demandes à traiter (district cible dans mon périmètre)' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -96,8 +102,12 @@ export class MemberTransferController {
     );
   }
 
+  // ⚠️ Même correctif qu'à `incoming` (audit §M8).
   @Get('outgoing')
-  @RequirePermissions('membres_initier_transfert')
+  @RequirePermissions(
+    'transferts_consulter_liste_demandes_transfert',
+    'membres_initier_transfert',
+  )
   @ApiOperation({ summary: 'Demandes parties de mon périmètre' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -124,16 +134,28 @@ export class MemberTransferController {
     return this.transferService.memberHistory(memberUuid);
   }
 
+  // ⚠️ OU logique (audit §M7) : le détail d'une demande - impact recalculé, responsabilités
+  // perdues - était gardé par le slug de **menu**. `transferts_consulter_detail_demande_transfert`
+  // est le droit nommé, déjà à 1 pour RESPONSABLE. Le service borne au périmètre : pas d'accès
+  // « par uuid » depuis l'extérieur.
   @Get(':uuid')
-  @RequirePermissions('membres_voir_menu_transferts')
+  @RequirePermissions(
+    'transferts_consulter_detail_demande_transfert',
+    'membres_voir_menu_transferts',
+  )
   @ApiOperation({ summary: 'Détail d’une demande, avec impact recalculé' })
   @ApiParam({ name: 'uuid', description: 'UUID de la demande' })
   findOne(@Param('uuid') uuid: string, @Req() req) {
     return this.transferService.findOne(uuid, this.perimeter(req));
   }
 
+  // ⚠️ OU logique (audit §M8) : `transferts_traiter_demande_transfert` est le droit nommé pour
+  // cette action, déjà à 1 pour RESPONSABLE.
   @Post(':uuid/approve')
-  @RequirePermissions('membres_approuver_transfert')
+  @RequirePermissions(
+    'transferts_traiter_demande_transfert',
+    'membres_approuver_transfert',
+  )
   @ApiOperation({
     summary: "Approuver : fixe la structure d'accueil de chaque membre et applique le transfert",
   })
@@ -146,8 +168,12 @@ export class MemberTransferController {
     return this.transferService.approve(uuid, payload, this.perimeter(req));
   }
 
+  // ⚠️ OU logique (audit §M8) : refuser a son propre droit nommé, `transferts_refuser_transfert`.
   @Post(':uuid/reject')
-  @RequirePermissions('membres_approuver_transfert')
+  @RequirePermissions(
+    'transferts_refuser_transfert',
+    'membres_approuver_transfert',
+  )
   @ApiOperation({ summary: 'Refuser la demande (motif obligatoire)' })
   reject(
     @Param('uuid') uuid: string,
@@ -157,8 +183,14 @@ export class MemberTransferController {
     return this.transferService.reject(uuid, payload, this.perimeter(req));
   }
 
+  // ⚠️ OU logique (audit §M8) : annuler a son propre droit nommé,
+  // `transferts_annuler_demande_transfert`. Le service vérifie en plus que la demande est bien
+  // celle de l'appelant et qu'elle est encore en attente.
   @Post(':uuid/cancel')
-  @RequirePermissions('membres_initier_transfert')
+  @RequirePermissions(
+    'transferts_annuler_demande_transfert',
+    'membres_initier_transfert',
+  )
   @ApiOperation({ summary: 'Annuler sa propre demande tant qu’elle est en attente' })
   cancel(@Param('uuid') uuid: string, @Req() req) {
     return this.transferService.cancel(uuid, this.perimeter(req));
