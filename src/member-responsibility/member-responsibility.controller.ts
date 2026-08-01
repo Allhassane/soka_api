@@ -19,7 +19,7 @@ export class MemberResponsibilityController {
   constructor(private readonly service: MemberResponsibilityService) {}
 
   @Post()
-  @RequirePermissions('membres_responsabilites_creer')
+  @RequirePermissions('membres_modifier_situation_membre_sein_organisation')
   @ApiOperation({
     summary: 'Ajouter une responsabilité',
   })

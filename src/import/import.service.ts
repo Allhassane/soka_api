@@ -9,6 +9,7 @@ import { MemberEntity } from 'src/members/entities/member.entity';
 import { MemberResponsibilityEntity } from 'src/member-responsibility/entities/member-responsibility.entity';
 import { ImportFailureEntity } from './entities/import-failure.entity';
 import { ImportBatchEntity } from './entities/import-batch.entity';
+import { MemberAccountService } from 'src/users/member-account.service';
 
 /** Sentinelle d'API pour le pseudo-groupe « échecs sans fichier » (batch_uuid NULL). */
 export const NO_BATCH = 'none';
@@ -44,6 +45,17 @@ export interface CommitResult {
   rows: RowOutcome[];
   /** Identifiant du « fichier chargé » créé pour ce commit (cf. import_batches). */
   batch_uuid: string;
+  /** Comptes de connexion créés par cet import (membres neufs + anciens qui n'en avaient pas). */
+  accounts_created: number;
+  /** Comptes dont l'identité a été réalignée sur la fiche (dont le téléphone de connexion). */
+  accounts_updated: number;
+  /**
+   * Lignes écrites SANS compte utilisable, avec la raison. Remonté explicitement : un membre
+   * sans compte ne peut pas se connecter et rien d'autre ne le signale.
+   * Ces compteurs ne sont pas stockés dans `import_batches` (pas de migration) - ils valent
+   * pour la réponse du commit.
+   */
+  accounts_skipped: { line: number; reason: string }[];
 }
 
 @Injectable()
@@ -58,6 +70,8 @@ export class ImportService {
     private readonly failureRepo: Repository<ImportFailureEntity>,
     @InjectRepository(ImportBatchEntity)
     private readonly batchRepo: Repository<ImportBatchEntity>,
+    /** Règle unique du compte de connexion, partagée avec `MemberService.store()`. */
+    private readonly accounts: MemberAccountService,
   ) {}
 
   // ─────────────────────────── Parsing / format ───────────────────────────
@@ -318,6 +332,9 @@ export class ImportService {
     let created = 0;
     let updated = 0;
     let failed = 0;
+    let accountsCreated = 0;
+    let accountsUpdated = 0;
+    const accountsSkipped: { line: number; reason: string }[] = [];
     const outcomes: RowOutcome[] = [];
 
     for (let i = 0; i < rows.length; i++) {
@@ -340,12 +357,42 @@ export class ImportService {
           payload.admin_uuid = adminUuid;
           const entity = this.memberRepo.create();
           Object.assign(entity, payload);
-          const saved = await this.memberRepo.save(entity);
+
+          // Membre + compte de connexion dans UNE transaction, comme `MemberService.store()`.
+          // Jusqu'au 2026-08-01 l'import n'écrivait que le membre : les lignes importées
+          // naissaient sans compte, donc sans moyen de se connecter, et rien ne le signalait
+          // (360 membres dans ce cas au 2026-07-30, rattrapés par un seed manuel).
+          const saved = await this.memberRepo.manager.transaction(async (manager) => {
+            const savedMember = await manager.save(entity);
+            const outcome = await this.accounts.reconcileAccount(savedMember, manager);
+            if (outcome === 'created') accountsCreated++;
+            else accountsSkipped.push({ line: ev.line, reason: outcome });
+            return savedMember;
+          });
+
           memberUuid = saved.uuid;
           created++;
         } else {
           memberUuid = this.ref.matchMember(ev.matricule, ev.phone) as string;
           await this.memberRepo.update({ uuid: memberUuid }, payload as never);
+
+          // Le téléphone est l'identifiant de connexion : une fiche corrigée par l'import
+          // doit réaligner le compte, sinon le membre continue de se connecter avec l'ancien
+          // numéro (origine des 29 écarts compte/fiche relevés le 2026-07-30). Relecture en
+          // base plutôt que réutilisation de `payload` : ce dernier omet les colonnes vides,
+          // il ne dit donc pas ce que vaut la fiche après écriture.
+          // Un membre existant SANS compte en reçoit un ici - c'est ce qui referme l'écart
+          // historique au fil des ré-imports, sans seed de rattrapage.
+          const fresh = await this.memberRepo.findOne({ where: { uuid: memberUuid } });
+          if (fresh) {
+            const outcome = await this.accounts.reconcileAccount(fresh);
+            if (outcome === 'created') accountsCreated++;
+            else if (outcome === 'updated') accountsUpdated++;
+            else if (outcome !== 'unchanged') {
+              accountsSkipped.push({ line: ev.line, reason: outcome });
+            }
+          }
+
           updated++;
         }
 
@@ -386,6 +433,9 @@ export class ImportService {
       total_en_base: this.ref.totalMembersInDb + created,
       rows: outcomes,
       batch_uuid: batch.uuid,
+      accounts_created: accountsCreated,
+      accounts_updated: accountsUpdated,
+      accounts_skipped: accountsSkipped,
     };
   }
 

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException,ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException,ForbiddenException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { AccessScopeService } from 'src/access-scope/access-scope.service';
 import { In, Repository } from 'typeorm';
@@ -411,15 +411,29 @@ export class PaymentService {
       return { status: 'not_found', transaction_id };
     }
 
+    // ⚠️ Ces deux sorties anticipées répondent depuis la base, sans rappeler HUB.
+    // Elles doivent tout de même renvoyer un `hub_payment` : sinon la réponse
+    // change de FORME selon que l'appelant a déclenché la synchronisation ou non.
+    // C'est ce qui produisait le bug du 2026-08-01 - deuxième appareil (ou simple
+    // F5) sur l'écran de résultat : `hub_payment` à null, et le web déclarait
+    // « paiement non abouti » un paiement pourtant encaissé.
     if (payment.payment_status === PaymentStatus.PAID) {
-      return this.buildHubPaymentSyncResult('paid', payment);
+      return this.buildHubPaymentSyncResult(
+        'paid',
+        payment,
+        this.hubPaymentFromLocal(payment, 'successful'),
+      );
     }
 
     if (
       payment.payment_status === PaymentStatus.FAILED
       || payment.payment_status === PaymentStatus.CANCELLED
     ) {
-      return this.buildHubPaymentSyncResult('failed', payment);
+      return this.buildHubPaymentSyncResult(
+        'failed',
+        payment,
+        this.hubPaymentFromLocal(payment, 'failed'),
+      );
     }
 
     const hubStatus = await this.hubService.checkPaymentStatus(transaction_id);
@@ -463,6 +477,92 @@ export class PaymentService {
       payment,
       hubStatus.payment ?? null,
     );
+  }
+
+  /**
+   * **Annule une tentative de paiement encore en cours** (bouton « Annuler »).
+   *
+   * Répond au cas réel : un membre relance le paiement plusieurs fois, une
+   * tentative aboutit, les autres restent `pending` - et chacune reste
+   * **encaissable** tant que le payeur détient un OTP ou un lien Wave valide.
+   *
+   * ⚠️ **Vérifier un paiement ne débite JAMAIS** (`checkPaymentStatus` est une
+   * lecture). Le risque de double débit ne vient pas de la vérification mais de
+   * ces tentatives laissées ouvertes : c'est elles que cette méthode referme.
+   *
+   * ⚠️ **HUB2 n'expose aucune annulation.** Ce qui est garanti : la gateway
+   * refuse tout nouvel appel sur ce lien (lien désactivé, sessions et intentions
+   * annulées). Une autorisation déjà validée par le payeur chez son opérateur
+   * ira, elle, à son terme - le webhook la ramènera et écrasera ce statut.
+   *
+   * Ordre volontaire : **la gateway d'abord** (elle interroge HUB2 et refuse
+   * d'annuler une tentative aboutie), **la base locale ensuite**. L'inverse
+   * marquerait « annulé » un paiement que la gateway aurait refusé de fermer.
+   */
+  async cancelHubPaymentByTransactionId(
+    transaction_id: string,
+  ): Promise<HubPaymentSyncResult & { message: string }> {
+    if (!transaction_id?.trim()) {
+      throw new BadRequestException('transaction_id manquant');
+    }
+
+    const payment = await this.paymentRepo.findOne({ where: { transaction_id } });
+    if (!payment) {
+      throw new NotFoundException(
+        `Aucun paiement trouvé pour transaction_id = ${transaction_id}`,
+      );
+    }
+
+    // Déjà payé localement : on refuse sans même appeler la gateway.
+    if (payment.payment_status === PaymentStatus.PAID) {
+      throw new ConflictException(
+        'Ce paiement a abouti : il ne peut pas être annulé.',
+      );
+    }
+
+    // Déjà refermé : idempotent, on ne rappelle pas la gateway.
+    if (
+      payment.payment_status === PaymentStatus.CANCELLED
+      || payment.payment_status === PaymentStatus.FAILED
+    ) {
+      return {
+        ...(await this.buildHubPaymentSyncResult(
+          'failed',
+          payment,
+          this.hubPaymentFromLocal(payment, 'failed'),
+        )),
+        message: 'Cette tentative était déjà close.',
+      };
+    }
+
+    const result = await this.hubService.cancelPaymentLink(transaction_id);
+
+    // La gateway a trouvé une tentative ABOUTIE : on ne referme rien, on
+    // enregistre le succès qu'on ignorait. Ce n'est pas une erreur.
+    if (!result.canceled && result.reason === 'already_paid') {
+      const synced = await this.syncHubPaymentByTransactionId(transaction_id);
+      return {
+        ...synced,
+        message:
+          "Ce paiement a en réalité abouti : il a été enregistré comme payé, rien n'a été annulé.",
+      };
+    }
+
+    await this.updatePayment(payment.uuid, {
+      status: GlobalStatus.CANCELED,
+      payment_status: PaymentStatus.CANCELLED,
+    });
+    await this.updateLinkedEntities(payment, GlobalStatus.CANCELED);
+
+    const fresh = await this.paymentRepo.findOne({ where: { uuid: payment.uuid } });
+    return {
+      ...(await this.buildHubPaymentSyncResult(
+        'failed',
+        fresh ?? payment,
+        this.hubPaymentFromLocal(fresh ?? payment, 'failed'),
+      )),
+      message: 'Tentative annulée : aucun débit ne peut plus partir de ce lien.',
+    };
   }
 
   async syncAllPendingHubPayments(
@@ -510,6 +610,30 @@ export class PaymentService {
     }
 
     return result;
+  }
+
+  /**
+   * Reconstruit un détail de paiement à partir de la ligne LOCALE, pour les
+   * réponses servies depuis la base (paiement déjà connu payé ou échoué).
+   *
+   * On ne rappelle pas HUB : le statut local est déjà définitif. Le but est
+   * uniquement que la réponse garde la **même forme** que celle de l'appel qui a
+   * déclenché la synchronisation - montant et opérateur compris, faute de quoi
+   * ils disparaissent du récapitulatif au deuxième affichage.
+   */
+  private hubPaymentFromLocal(
+    payment: PaymentEntity,
+    status: 'successful' | 'failed',
+  ): Record<string, unknown> {
+    return {
+      status,
+      amount: Number(payment.total_amount ?? payment.amount ?? 0),
+      currency: 'XOF',
+      // L'opérateur n'est pas stocké localement : `null` plutôt qu'inventé.
+      // Le bloc « Opérateur » est masqué côté web quand la valeur est absente.
+      provider: null,
+      transaction_id: payment.transaction_id,
+    };
   }
 
   private async buildHubPaymentSyncResult(
@@ -739,19 +863,6 @@ async findTransactionsForSubGroups(
   }
   const sousGroups = await this.structureService.findByAllChildrens(structure_uuid);
 
-  if (!sousGroups.length) {
-    return {
-      total: 0,
-      page,
-      limit,
-      sous_groups: [],
-      total_campaign_amount: 0,
-      total_successful_payments: 0,
-      total_successful_amount: 0,
-      data: [],
-    };
-  }
-
   // Query principale avec recherche
   const qb = this.paymentRepo
     .createQueryBuilder('p')
@@ -759,8 +870,11 @@ async findTransactionsForSubGroups(
     .leftJoinAndSelect('actor.structure', 'actorStructure')
     .leftJoinAndSelect('p.beneficiary', 'beneficiary')
     .leftJoinAndSelect('beneficiary.structure', 'beneficiaryStructure')
-    .where('p.source_uuid = :source_uuid', { source_uuid })
-    .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups });
+    .where('p.source_uuid = :source_uuid', { source_uuid });
+
+  if (sousGroups.length) {
+    qb.andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups });
+  }
 
   //  Ajouter la recherche sur actor et beneficiary
   if (search && search.trim() !== '') {
@@ -816,8 +930,14 @@ async findTransactionsForSubGroups(
         .select('COUNT(DISTINCT d.uuid)', 'count')
         .addSelect('SUM(d.amount)', 'sum')
         .where('d.donate_uuid = :id', { id: source_uuid })
-        .andWhere('d.status = :status', { status: GlobalStatus.SUCCESS })
-        .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups });
+        .andWhere('d.status = :status', { status: GlobalStatus.SUCCESS });
+
+      if (sousGroups.length) {
+        successfulDonationsQb.andWhere(
+          'actor.structure_uuid IN (:...groups)',
+          { groups: sousGroups },
+        );
+      }
 
       //  Appliquer le même filtre de recherche
       if (search && search.trim() !== '') {
@@ -860,8 +980,14 @@ async findTransactionsForSubGroups(
         .select('COUNT(DISTINCT s.uuid)', 'count')
         .addSelect('SUM(s.amount)', 'sum')
         .where('s.subscription_uuid = :id', { id: source_uuid })
-        .andWhere('s.status = :status', { status: GlobalStatus.SUCCESS })
-        .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups });
+        .andWhere('s.status = :status', { status: GlobalStatus.SUCCESS });
+
+      if (sousGroups.length) {
+        successfulSubscriptionsQb.andWhere(
+          'actor.structure_uuid IN (:...groups)',
+          { groups: sousGroups },
+        );
+      }
 
       //  Appliquer le même filtre de recherche
       if (search && search.trim() !== '') {

@@ -100,8 +100,11 @@ for (const f of fichiers) {
     if (!protegee) {
       // `@Public()` est une exemption déjà déclarée DANS le code : on la respecte telle quelle
       // (le décorateur est lu par `PermissionsGuard`, ce n'est pas une simple annotation).
+      // `@ReferentialRead()` = lecture de nomenclature ouverte à tout AUTHENTIFIÉ (JwtAuthGuard
+      // conservé) : exemption déclarée dans le code, cf. auth/decorators/referential-read.decorator.ts.
       const estPublic = /@Public\(\)/.test(fenetre);
-      if (!estPublic && !(cle in EXEMPTIONS)) {
+      const estReferentiel = /@ReferentialRead\(\)/.test(fenetre);
+      if (!estPublic && !estReferentiel && !(cle in EXEMPTIONS)) {
         anomalies.push(`  ${m[1].padEnd(6)} ${chemin.padEnd(38)} ${rel}:${i + 1}`);
       }
       continue;

@@ -5,6 +5,7 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateDepartmentDto } from './dto/create-department.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { ReferentialRead } from 'src/auth/decorators/referential-read.decorator';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
@@ -15,7 +16,7 @@ export class DepartmentController {
   constructor(private readonly departmentService: DepartmentService) {}
 
   @Get()
-  @RequirePermissions('departements_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Liste tous les département' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
@@ -26,7 +27,7 @@ export class DepartmentController {
 
 
     @Get('find-by-gender/:gender')
-    @RequirePermissions('departements_voir')
+    @ReferentialRead()
     @ApiOperation({ summary: 'Récupérer un département par genre' })
     @ApiResponse({ status: 200, description: 'Département trouvé.' })
     @ApiResponse({ status: 400, description: 'Département non trouvé.' })
@@ -52,7 +53,7 @@ export class DepartmentController {
   }
 
   @Get(':uuid')
-  @RequirePermissions('departements_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Récupérer un département par UUID' })
   @ApiResponse({ status: 200, description: 'Département trouvé.' })
   @ApiResponse({ status: 400, description: 'Département non trouvé.' })

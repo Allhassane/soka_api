@@ -81,8 +81,14 @@ export class PaymentController {
   }
 
 
+// ⚠️ OU logique (audit §M12) : les deux droits d'export nommés au catalogue commandent enfin
+// l'export Excel des transactions ; `paiements_voir` reste en OU pour ne rien fermer.
 @Get('export/subgroups')
-@RequirePermissions('paiements_voir')
+@RequirePermissions(
+  'abonnements_exporter_transactions_campagne_abonnement',
+  'zaimu_exporter_transactions_campagne_zaimu',
+  'paiements_voir',
+)
 @ApiOperation({ summary: 'Lancer l\'export des transactions en arrière-plan' })
 async queueTransactionsExport(
   @Query('source_uuid') source_uuid: string,
@@ -98,8 +104,14 @@ async queueTransactionsExport(
   );
 }
 
+// ⚠️ OU logique (audit §H6) : cette route est l'unique point de téléchargement des exports du
+// module Exports - y compris les exports de MEMBRES lancés depuis le tableau de bord - et elle
+// était gardée par le seul `paiements_voir`. Les 6 droits nommés du module Exports ne
+// commandaient donc rien. `exports_telecharger_fichier_export` est déjà à 1 pour ADMINISTRATEUR
+// et RESPONSABLE : correctif opérant sans migration. `paiements_voir` reste en OU, sans quoi on
+// fermerait le téléchargement aux exports lancés depuis Abonnements et Zaimu.
 @Get('async-exports/download/:jobUuid')
-@RequirePermissions('paiements_voir')
+@RequirePermissions('exports_telecharger_fichier_export', 'paiements_voir')
 @ApiOperation({
   summary: 'Télécharger un export de transactions terminé',
   description: `Télécharge le fichier Excel d'un export de transactions terminé.
@@ -202,8 +214,11 @@ async getExportStatus(@Param('jobId') jobId: string) {
 }
 
 
+// ⚠️ OU logique (audit §H6) : la liste de l'écran Exports, gardée par le seul `paiements_voir`.
+// `exports_consulter_liste_exports` est le droit nommé, déjà à 1 pour ADMINISTRATEUR et
+// RESPONSABLE.
 @Get('async-exports/my-exports')
-@RequirePermissions('paiements_voir')
+@RequirePermissions('exports_consulter_liste_exports', 'paiements_voir')
 @ApiOperation({ summary: 'Liste paginée et filtrée de mes exports' })
 async getMyExports(
   @Request() req,

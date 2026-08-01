@@ -1,40 +1,28 @@
 import 'reflect-metadata';
 import * as path from 'path';
-import { DataSource, EntityManager } from 'typeorm';
-import { v4 as uuidv4 } from 'uuid';
+import { DataSource } from 'typeorm';
 import AppDataSource from '../data-source';
-import {
-  PERMISSION_CATALOG,
-  listCatalogPermissions,
-} from '../permission/permission-catalog';
+import { listCatalogPermissions } from '../permission/permission-catalog';
+import { syncPermissionCatalog } from '../permission/permission-catalog-sync';
 import {
   listEnforcedApiSlugs,
   listWebPermissionSlugs,
 } from '../permission/permission-code-usage';
-import {
-  ROLE_ADMIN_SLUG,
-  ROLE_RESPONSABLE_SLUG,
-} from '../shared/constants/constants';
-import { resetPermissionTables } from './seed-reset-permissions';
 
 /**
- * SEED - Référentiel de permissions complet, à partir de `permissions/permissions-soka-digital.md`
- * (transcrit dans `src/permission/permission-catalog.ts`).
+ * SEED - Synchronisation de la base sur le catalogue `src/permission/permission-catalog.ts`.
  *
- * Déroulé, le tout dans UNE transaction :
- *   1. purge de `roles_permissions`, `permissions`, `modules` (avec sauvegarde JSON) ;
- *   2. création d'un module par section « ## Module … » du référentiel ;
- *   3. création d'une permission par puce, plus les alias techniques du catalogue ;
- *   4. création d'un lien `roles_permissions` pour CHAQUE rôle × CHAQUE permission.
+ * ⚠️ Depuis la refonte du 2026-08-01, ce seed est CONVERGENT et NON destructeur :
+ *  - il ne purge plus les tables (l'ancienne version remettait RESPONSABLE à « tout coché »
+ *    et effaçait la curation manuelle des rôles - c'est terminé) ;
+ *  - une ligne `roles_permissions` existante GARDE son statut (elle peut seulement
+ *    s'élargir quand une permission absorbée était cochée) ;
+ *  - les permissions retirées du catalogue sont supprimées, celles qui manquent créées.
+ * Toute la logique vit dans `permission-catalog-sync.ts`, partagée avec la migration
+ * `SyncPermissionCatalogV2` (qui applique la même synchronisation au démarrage en prod).
  *
- * **Rôles servis d'office** : ADMINISTRATEUR et RESPONSABLE reçoivent toutes les permissions
- * (`status = 1`). Les autres rôles (MEMBRE, rôles métier) reçoivent la ligne mais à `status = 0` :
- * sans ligne, la case de Paramètres → Rôles est incochable (« Aucun élément trouvé », le toggle
- * n'a pas d'uuid à mettre à jour - cf. api/CLAUDE.md).
- *
- * ⚠️ Les droits d'une session déjà ouverte ne changent pas : les permissions du front sont
- * chargées au login. Se **reconnecter** pour recetter. Côté API, le cache de
- * `EffectivePermissionsService` expire en 30 s.
+ * ⚠️ Effet visible : côté API < 30 s (cache `EffectivePermissionsService`) ; côté web à la
+ * RECONNEXION (les permissions d'affichage sont chargées au login).
  *
  * Exécution (depuis api/) :
  *   npm run seed:permissions
@@ -42,114 +30,40 @@ import { resetPermissionTables } from './seed-reset-permissions';
  *   npm run seed:permissions -- --no-backup
  */
 
-/** Rôles qui reçoivent l'intégralité du référentiel, cochée. */
-const ROLES_TOUT_ACCORDE: readonly string[] = [
-  ROLE_ADMIN_SLUG,
-  ROLE_RESPONSABLE_SLUG,
-];
-
-const LOT = 500;
-
-interface LigneModule {
-  uuid: string;
-  name: string;
-  slug: string;
-  description: string;
-  admin_uuid: string;
-  status: string;
-  created_at: Date;
-  updated_at: Date;
-}
-
-interface LignePermission {
-  uuid: string;
-  name: string;
-  slug: string;
-  description: string;
-  module_uuid: string;
-  created_at: Date;
-  updated_at: Date;
-}
-
-interface LigneRolePermission {
-  uuid: string;
-  role_id: number;
-  permission_id: number;
-  role_uuid: string;
-  permission_uuid: string;
-  status: boolean;
-}
-
-/** Même règle que `ModuleEntity.generateSlug()`, appliquée ici pour ne pas dépendre du hook. */
-function slugifyModule(nom: string): string {
-  return (
-    nom
-      .toLowerCase()
-      .normalize('NFKD')
-      // Diacritiques combinants laissés par la normalisation NFKD (même plage que l’entité).
-      .replace(/[\u0300-\u036F]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)+/g, '')
-  );
-}
-
-async function insererParLots<T extends object>(
-  manager: EntityManager,
-  table: string,
-  lignes: T[],
-): Promise<void> {
-  for (let i = 0; i < lignes.length; i += LOT) {
-    const lot = lignes.slice(i, i + LOT);
-    if (lot.length === 0) continue;
-    const colonnes = Object.keys(lot[0]);
-    const marqueurs = `(${colonnes.map(() => '?').join(', ')})`;
-    const valeurs = lot.flatMap((l) =>
-      colonnes.map((c) => (l as Record<string, unknown>)[c]),
-    );
-    await manager.query(
-      `INSERT INTO \`${table}\` (${colonnes.map((c) => `\`${c}\``).join(', ')}) VALUES ` +
-        lot.map(() => marqueurs).join(', '),
-      valeurs,
-    );
-  }
-}
-
-/** Avertit si un slug exigé par le code n'a pas été créé - la fonction serait fermée. */
-function controlerCouvertureDuCode(slugsCrees: Set<string>): void {
+/** Contrôle : tout slug exigé par le code doit exister dans le catalogue. */
+function controlerCouvertureDuCode(): boolean {
   const racineApi = path.resolve(__dirname, '..');
   const racineWeb = path.resolve(__dirname, '..', '..', '..', 'web');
+  const slugsCatalogue = new Set(listCatalogPermissions().map((p) => p.slug));
 
   const manquantsApi = listEnforcedApiSlugs(racineApi).filter(
-    (u) => !slugsCrees.has(u.slug),
+    (u) => !slugsCatalogue.has(u.slug),
   );
   const manquantsWeb = listWebPermissionSlugs(racineWeb).filter(
-    (u) => !slugsCrees.has(u.slug),
+    (u) => !slugsCatalogue.has(u.slug),
   );
 
   if (manquantsApi.length === 0 && manquantsWeb.length === 0) {
-    console.log(
-      '[seed] Contrôle : tous les slugs exigés par le code existent en base. ✅',
-    );
-    return;
+    console.log('[seed] Contrôle : tous les slugs exigés par le code existent au catalogue. ✅');
+    return true;
   }
   console.log(
-    '\n[seed] ⚠️ Slugs exigés par le code et ABSENTS du catalogue : la fonction correspondante ' +
-      'est fermée à tous sauf is_admin.',
+    '\n[seed] ⚠️ Slugs exigés par le code et ABSENTS du catalogue - la fonction correspondante ' +
+      'est fermée à tous sauf is_admin (API) ou masquée pour tous (web) :',
   );
   for (const u of manquantsApi) {
-    console.log(
-      `  API  ${u.slug.padEnd(48)} ${u.files.slice(0, 2).join(', ')}`,
-    );
+    console.log(`  API  ${u.slug.padEnd(52)} ${u.files.slice(0, 2).join(', ')}`);
   }
   for (const u of manquantsWeb) {
-    console.log(
-      `  WEB  ${u.slug.padEnd(48)} ${u.files.slice(0, 2).join(', ')}`,
-    );
+    console.log(`  WEB  ${u.slug.padEnd(52)} ${u.files.slice(0, 2).join(', ')}`);
   }
   console.log(
     '  (le scan est textuel : il relève aussi le code commenté et les exemples de JSDoc - ' +
       'vérifier l’usage réel avant d’ajouter un slug au catalogue)',
   );
+  // Un slug API manquant ferme une route : c'est bloquant. Un slug web manquant ne fait
+  // que masquer un bouton : signalé, non bloquant.
+  return manquantsApi.length === 0;
 }
 
 async function run(): Promise<void> {
@@ -164,122 +78,35 @@ async function run(): Promise<void> {
   await runner.startTransaction();
 
   try {
-    const manager = runner.manager;
-    const maintenant = new Date();
-
-    // -- 1. Purge ------------------------------------------------------------------
-    const purge = await resetPermissionTables(manager, {
+    const rapport = await syncPermissionCatalog(runner.manager, {
       backup: backup && !dryRun,
     });
+
     console.log(
-      `[seed] Purge : ${purge.modules} module(s), ${purge.permissions} permission(s), ` +
-        `${purge.rolePermissions} lien(s) supprimé(s).`,
+      `\n[seed] Modules      : +${rapport.modulesInseres} · ~${rapport.modulesMisAJour} · -${rapport.modulesSupprimes}\n` +
+        `[seed] Permissions  : +${rapport.permissionsInserees} · ~${rapport.permissionsMisesAJour} · -${rapport.permissionsSupprimees.length}\n` +
+        `[seed] Liens        : +${rapport.liensInseres} · élargis ${rapport.liensElargis} · -${rapport.liensSupprimes} · orphelins purgés ${rapport.liensOrphelinsPurges}`,
     );
-    if (purge.backupFile)
-      console.log(`[seed] Sauvegarde : ${purge.backupFile}`);
-
-    // -- 2. Auteur des modules -----------------------------------------------------
-    // `modules.admin_uuid` porte l'auteur du module : on prend un compte administrateur.
-    const [auteur] = (await manager.query(
-      'SELECT uuid FROM users WHERE is_admin = 1 ORDER BY id LIMIT 1',
-    )) as Array<{ uuid: string }>;
-    const [premier] = auteur
-      ? [auteur]
-      : ((await manager.query(
-          'SELECT uuid FROM users ORDER BY id LIMIT 1',
-        )) as Array<{
-          uuid: string;
-        }>);
-    if (!premier)
-      throw new Error(
-        'Aucun utilisateur en base : impossible de renseigner admin_uuid.',
-      );
-
-    // -- 3. Modules ----------------------------------------------------------------
-    const modules: LigneModule[] = PERMISSION_CATALOG.map((mod) => ({
-      uuid: uuidv4(),
-      name: mod.name,
-      slug: slugifyModule(mod.name),
-      description: mod.description,
-      admin_uuid: premier.uuid,
-      status: 'enable',
-      created_at: maintenant,
-      updated_at: maintenant,
-    }));
-    await insererParLots(manager, 'modules', modules);
-    const uuidParModule = new Map(modules.map((m) => [m.name, m.uuid]));
-
-    // -- 4. Permissions ------------------------------------------------------------
-    const catalogue = listCatalogPermissions();
-    const permissions: LignePermission[] = catalogue.map((p) => ({
-      uuid: uuidv4(),
-      name: p.name,
-      slug: p.slug,
-      description: p.description,
-      module_uuid: uuidParModule.get(p.module)!,
-      created_at: maintenant,
-      updated_at: maintenant,
-    }));
-    await insererParLots(manager, 'permissions', permissions);
-
-    // -- 5. Liens rôle <-> permission ----------------------------------------------
-    const roles = (await manager.query(
-      'SELECT uuid, name, slug FROM roles ORDER BY name',
-    )) as Array<{ uuid: string; name: string; slug: string }>;
-    if (roles.length === 0)
-      throw new Error('Aucun rôle en base : rien à rattacher.');
-
-    for (const attendu of ROLES_TOUT_ACCORDE) {
-      if (!roles.some((r) => (r.slug ?? '').toLowerCase() === attendu)) {
-        console.log(
-          `[seed] ⚠️ Rôle « ${attendu} » introuvable : aucune permission ne lui sera accordée.`,
-        );
-      }
+    if (rapport.permissionsSupprimees.length) {
+      console.log(`[seed] Slugs supprimés (${rapport.permissionsSupprimees.length}) :`);
+      for (const s of rapport.permissionsSupprimees) console.log(`   - ${s}`);
     }
+    console.log('[seed] Permissions actives par rôle :', rapport.actifsParRole);
+    if (rapport.backupFile) console.log(`[seed] Sauvegarde : ${rapport.backupFile}`);
 
-    const liens: LigneRolePermission[] = [];
-    for (const role of roles) {
-      const toutAccorde = ROLES_TOUT_ACCORDE.includes(
-        (role.slug ?? '').toLowerCase(),
-      );
-      for (const perm of permissions) {
-        liens.push({
-          // `role_id` / `permission_id` restent à 0 : le lien réel passe par les `*_uuid`
-          // (`roles.id` est un CHAR(36), incompatible avec ces colonnes int - cf. api/CLAUDE.md).
-          uuid: uuidv4(),
-          role_id: 0,
-          permission_id: 0,
-          role_uuid: role.uuid,
-          permission_uuid: perm.uuid,
-          status: toutAccorde,
-        });
-      }
-      console.log(
-        `[seed]   ${role.name.padEnd(16)} ${permissions.length} lien(s) - ` +
-          `${toutAccorde ? 'TOUTES accordées' : 'aucune cochée (à ouvrir depuis Paramètres → Rôles)'}`,
-      );
-    }
-    await insererParLots(manager, 'roles_permissions', liens);
-
-    // -- 6. Rapport ----------------------------------------------------------------
-    const alias = catalogue.filter((p) => p.isAlias).length;
-    console.log(
-      `\n[seed] Modules     : ${modules.length}\n` +
-        `[seed] Permissions : ${permissions.length} ` +
-        `(${permissions.length - alias} du référentiel + ${alias} alias technique(s))\n` +
-        `[seed] Liens       : ${liens.length} (${roles.length} rôle(s) × ${permissions.length})`,
-    );
-    controlerCouvertureDuCode(new Set(permissions.map((p) => p.slug)));
+    const couvertureOk = controlerCouvertureDuCode();
 
     if (dryRun) {
       await runner.rollbackTransaction();
-      console.log(
-        '\n[seed] --dry-run : transaction annulée, la base est inchangée.',
-      );
+      console.log('\n[seed] --dry-run : transaction annulée, la base est inchangée.');
+    } else if (!couvertureOk) {
+      await runner.rollbackTransaction();
+      console.error('\n[seed] ❌ Couverture incomplète côté API : transaction annulée.');
+      process.exit(1);
     } else {
       await runner.commitTransaction();
       console.log(
-        '\n[seed] Terminé. Se reconnecter pour que les droits prennent effet côté front.',
+        '\n[seed] Terminé. Effet API < 30 s ; se reconnecter pour l’affichage côté web.',
       );
     }
   } catch (err) {

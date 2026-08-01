@@ -5,6 +5,7 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateCountryDto } from './dto/create-countries.dto';
 import { UpdateCountryDto } from './dto/update-countries.dto';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { ReferentialRead } from 'src/auth/decorators/referential-read.decorator';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
@@ -15,7 +16,7 @@ export class CountryController {
   constructor(private readonly countryService: CountryService) {}
 
   @Get()
-  @RequirePermissions('pays_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Liste toutes les métiers ' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
@@ -33,7 +34,7 @@ export class CountryController {
   }
 
   @Get(':uuid')
-  @RequirePermissions('pays_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Récupérer une métier par UUID' })
   @ApiResponse({ status: 200, description: 'Métier trouvé.' })
   @ApiResponse({ status: 400, description: 'Metier non trouvé.' })

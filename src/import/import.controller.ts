@@ -96,7 +96,7 @@ export class ImportController {
   }
 
   @Get('members/failures')
-  @RequirePermissions('importations_voir')
+  @RequirePermissions('importations_voir', 'importations_consulter_echecs_importation')
   @ApiOperation({
     summary:
       'Liste paginée des lignes en échec (filtrable par fichier via le paramètre « batch »)',
@@ -114,7 +114,7 @@ export class ImportController {
   }
 
   @Get('members/failures/export')
-  @RequirePermissions('importations_voir')
+  @RequirePermissions('importations_voir', 'importations_consulter_echecs_importation')
   @ApiOperation({
     summary:
       'Télécharge en Excel (.xlsx, ré-importable) les erreurs d\'un fichier chargé (paramètre « batch »)',

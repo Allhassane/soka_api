@@ -1,12 +1,13 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { DonatePaymentEntity } from './entities/donate-payment.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { AccessScopeService } from 'src/access-scope/access-scope.service';
-import { ILike, Repository } from 'typeorm';
+import { ILike, In, Repository } from 'typeorm';
 import { User } from 'src/users/entities/user.entity';
 import { LogActivitiesService } from 'src/log-activities/log-activities.service';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
@@ -20,6 +21,7 @@ import { DonateEntity } from 'src/donate/entities/donate.entity';
 import { DonateCategory } from 'src/shared/enums/donate.enum';
 import { SubscriptionPaymentEntity } from 'src/subscription-payment/entities/subscription-payment.entity';
 import { HubService } from 'src/payments/hub.service';
+import { EffectivePermissionsService } from 'src/access-scope/effective-permissions.service';
 
 @Injectable()
 export class DonatePaymentService {
@@ -47,6 +49,9 @@ export class DonatePaymentService {
 
     /** Périmètre hiérarchique du demandeur (service @Global). */
     private readonly accessScopeService: AccessScopeService,
+
+    /** Droits effectifs du demandeur (service @Global, cache 30 s). */
+    private readonly effectivePermissions: EffectivePermissionsService,
   ) { }
 
   // ============================================================
@@ -60,6 +65,20 @@ export class DonatePaymentService {
     const beneficiary = await this.findMember(dto.beneficiary_uuid);
     const actor = await this.findMember(admin.member_uuid);
     const donate = await this.findCampaign(dto.donation_uuid);
+
+    // ── Bénéficiaire tiers : barrière réelle (audit §M13, miroir des abonnements) ──
+    // Faire un zaimu POUR QUELQU'UN D'AUTRE exige le droit nommé ; pour soi-même, libre.
+    if (beneficiary.uuid !== actor.uuid && admin.is_admin !== true) {
+      const droits = await this.effectivePermissions.slugsFor({
+        uuid: admin.uuid,
+        member_uuid: admin.member_uuid,
+      });
+      if (!droits.has('zaimu_faire_zaimu_beneficiaire_tiers')) {
+        throw new ForbiddenException(
+          "Vous n'avez pas le droit de faire un zaimu pour un autre membre.",
+        );
+      }
+    }
 
     // -----------------------------------------
     // Vérification période de validité du don
@@ -77,6 +96,21 @@ export class DonatePaymentService {
     if (now > stop) {
       throw new BadRequestException(
         `Cette campagne de zaimu est déjà clôturée depuis le ${stop.toLocaleDateString()}.`
+      );
+    }
+
+    // Bloquer si un paiement est déjà en cours pour ce bénéficiaire
+    const inProgressPayment = await this.donateRepo.count({
+      where: {
+        donate_uuid: donate.uuid,
+        beneficiary_uuid: beneficiary.uuid,
+        status: In([GlobalStatus.INIT, GlobalStatus.PENDING]),
+      },
+    });
+
+    if (inProgressPayment > 0) {
+      throw new BadRequestException(
+        'Un paiement est déjà en cours pour ce bénéficiaire sur cette campagne.',
       );
     }
 
@@ -127,7 +161,7 @@ export class DonatePaymentService {
           `Il ne reste que ${remaining} paiement(s) possible(s) pour ${beneficiaryLabel} sur cette campagne (maximum ${maxPerBeneficiary}, déjà réglé ${alreadyPaid}).`,
         );
       }
-    }
+    } 
 
     if (donate.category === DonateCategory.FIXIED_AMOUNT) {
       // Montant imposé par la campagne
@@ -303,6 +337,17 @@ export class DonatePaymentService {
     return await this.donateRepo.save(donation);
   }
 
+  /**
+   * Annule une tentative de paiement encore en cours.
+   *
+   * Simple délégation : la règle vit dans `PaymentService`, partagée par les
+   * abonnements et les zaimu (comme `confirmHubPayment`). La dupliquer ici
+   * ferait diverger les deux modules sur un geste qui touche à l'argent.
+   */
+  async cancelHubPayment(transaction_id: string) {
+    return this.paymentService.cancelHubPaymentByTransactionId(transaction_id);
+  }
+
   async confirmHubPayment(payload: { transaction_id: string }, admin_uuid: string) {
     try {
       const { transaction_id } = payload;
@@ -322,15 +367,12 @@ export class DonatePaymentService {
       if (result.status === 'paid') {
         return {
           success: true,
+          status: 'paid' as const,
           message: 'Paiement confirmé avec succès',
           transaction_id,
           donation_uuid: result.donation_uuid ?? null,
           hub_payment: result.hub_payment ?? null,
         };
-      }
-
-      if (result.status === 'failed') {
-        throw new BadRequestException('Paiement échoué');
       }
 
       if (result.status === 'not_found') {
@@ -339,7 +381,33 @@ export class DonatePaymentService {
         );
       }
 
-      throw new BadRequestException('Le paiement est en attente de validation.');
+      // ⚠️ « échoué » et « en attente » ne sont PLUS des exceptions HTTP.
+      // Une 400 arrivait au front comme une erreur réseau indifférenciée : la page
+      // de résultat n'avait plus ni le motif, ni le moyen de distinguer un paiement
+      // REFUSÉ d'un paiement ENCORE EN COURS - et affichait « paiement non abouti »
+      // dans les deux cas. Un payeur revenu quelques secondes trop tôt se voyait
+      // donc annoncer un échec pour un paiement qui allait aboutir.
+      // Les deux cas restent `success: false` : les appelants qui testent
+      // `isHubPaymentConfirmed` prennent la même branche qu'avant.
+      if (result.status === 'failed') {
+        return {
+          success: false,
+          status: 'failed' as const,
+          message: 'Paiement échoué',
+          transaction_id,
+          donation_uuid: result.donation_uuid ?? null,
+          hub_payment: result.hub_payment ?? null,
+        };
+      }
+
+      return {
+        success: false,
+        status: 'pending' as const,
+        message: 'Le paiement est en attente de validation.',
+        transaction_id,
+        donation_uuid: result.donation_uuid ?? null,
+        hub_payment: result.hub_payment ?? null,
+      };
     } catch (error) {
       console.error('Erreur vérification Hub :', error.response?.data ?? error.message);
 

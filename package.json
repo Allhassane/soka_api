@@ -33,6 +33,7 @@
     "seed:members-without-account-audit": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-members-without-account-audit.ts",
     "seed:purge-members-without-account": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-purge-members-without-account.ts",
     "seed:create-missing-user-accounts": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-create-missing-user-accounts.ts",
+    "seed:reconcile-member-accounts": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-reconcile-member-accounts.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",

@@ -68,8 +68,10 @@ export class JournalEditionController {
     return this.service.store(payload, req.user.uuid as string);
   }
 
+  // ⚠️ OU logique (audit §B1) : remplacer la couverture d'une édition EXISTANTE est un geste de
+  // modification - un rôle qui peut modifier une édition doit pouvoir téléverser le fichier.
   @Post('upload')
-  @RequirePermissions('journal_editions_creer')
+  @RequirePermissions('journal_editions_creer', 'journal_editions_modifier')
   @ApiOperation({
     summary: 'Upload d un fichier d edition (couverture ou version numerique)',
     description:

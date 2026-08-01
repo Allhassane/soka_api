@@ -13,7 +13,13 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
-import { ApiTags, ApiOperation, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBody,
+  ApiBearerAuth,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { LoginDto } from './dtos/login.dto';
 import { JwtAuthGuard } from './guards/auth.guard';
 import { User } from 'src/users/entities/user.entity';
@@ -75,12 +81,22 @@ export class AuthController {
   }
 
   // « Mot de passe oublié » (public) : génère un nouveau mot de passe et l'envoie par SMS.
+  // ⚠️ Répond en erreur explicite (404 / 403 / 429 / 503) - voir requestPasswordReset :
+  // la page d'accueil affiche ce message tel quel dans une alerte.
   @Post('forgot-password')
   @ApiOperation({
     summary:
       'Mot de passe oublié : génère un nouveau mot de passe et l envoie par SMS',
   })
   @ApiBody({ type: ForgotPasswordDto })
+  @ApiResponse({
+    status: 200,
+    description: 'SMS envoyé ; `data.retry_after` = délai (s) avant une relance',
+  })
+  @ApiResponse({ status: 403, description: 'Compte désactivé' })
+  @ApiResponse({ status: 404, description: 'Aucun compte pour ce numéro' })
+  @ApiResponse({ status: 429, description: 'Relance trop rapprochée (5 min)' })
+  @ApiResponse({ status: 503, description: "L'envoi du SMS a échoué" })
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.requestPasswordReset(dto.phone_number);
   }

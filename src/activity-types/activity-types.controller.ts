@@ -25,6 +25,7 @@ import { CreateActivityTypeDto } from './dto/create-activity-type.dto';
 import { UpdateActivityTypeDto } from './dto/update-activity-type.dto';
 import { ActivityTypeFamily } from './entities/activity-type.entity';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { ReferentialRead } from 'src/auth/decorators/referential-read.decorator';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
@@ -35,7 +36,7 @@ export class ActivityTypesController {
   constructor(private readonly activityTypesService: ActivityTypesService) {}
 
   @Get()
-  @RequirePermissions('types_activite_voir')
+  @ReferentialRead()
   @ApiOperation({
     summary: "Liste des types d'activité",
     description: "Filtre optionnel par famille : 'traditionnelle' ou 'sporadique'.",
@@ -48,7 +49,7 @@ export class ActivityTypesController {
   }
 
   @Get(':uuid')
-  @RequirePermissions('types_activite_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: "Récupérer un type d'activité par UUID" })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: "Type d'activité trouvé." })

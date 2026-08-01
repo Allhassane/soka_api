@@ -60,8 +60,11 @@ export class ActivityController {
   // CRUD ACTIVITE
   // ============================================================
 
+  // `activites_consulter_liste_activites` seul (audit §C1) : `activites_voir` a été retiré du
+  // catalogue - le seed a transféré ses droits accordés vers les slugs fins de lecture, donc
+  // aucun rôle n'a perdu la liste. Un simple droit de MENU n'ouvre plus aucune donnée.
   @Get()
-  @RequirePermissions('activites_voir')
+  @RequirePermissions('activites_consulter_liste_activites')
   @ApiOperation({
     summary: 'Liste filtrable et paginee des activites',
     description:
@@ -87,8 +90,10 @@ export class ActivityController {
     return this.activityService.store(payload, req.user.uuid as string);
   }
 
+  // Cette route renvoie **les participants** : donnée personnelle, sous le droit fin de détail
+  // (plus jamais sous un droit de menu - audit §C1).
   @Get(':uuid')
-  @RequirePermissions('activites_voir')
+  @RequirePermissions('activites_consulter_detail_activite')
   @ApiOperation({ summary: 'Recuperer une activite par UUID (avec participants)' })
   @ApiParam({ name: 'uuid', description: 'UUID de l activite' })
   @ApiResponse({ status: 200, description: 'Activite trouvee.' })
@@ -175,7 +180,7 @@ export class ActivityController {
   }
 
   @Post(':uuid/participants/auto-assign')
-  @RequirePermissions('activites_creer')
+  @RequirePermissions('activites_participants_gerer')
   @ApiOperation({
     summary: 'Auto-assigner les membres cibles comme participants. Idempotent.',
     description: 'Sautent silencieusement les membres deja inscrits. Body optionnel pour overrider.',
@@ -211,7 +216,7 @@ export class ActivityController {
   // ============================================================
 
   @Get(':uuid/participants')
-  @RequirePermissions('activites_voir')
+  @RequirePermissions('activites_participants_voir')
   @ApiOperation({ summary: 'Liste des participants d une activite' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Liste des participants.' })
@@ -222,7 +227,7 @@ export class ActivityController {
   }
 
   @Post(':uuid/participants')
-  @RequirePermissions('activites_creer')
+  @RequirePermissions('activites_participants_gerer')
   @ApiOperation({ summary: 'Assigner des membres comme participants (bulk)' })
   @ApiParam({ name: 'uuid' })
   @ApiBody({ type: AssignParticipantsDto })
@@ -239,7 +244,7 @@ export class ActivityController {
   }
 
   @Put('participants/:participant_uuid/role')
-  @RequirePermissions('activites_modifier')
+  @RequirePermissions('activites_participants_gerer')
   @ApiOperation({ summary: 'Changer le role d un participant' })
   @ApiParam({ name: 'participant_uuid' })
   @ApiBody({
@@ -262,7 +267,7 @@ export class ActivityController {
   }
 
   @Delete('participants/:participant_uuid')
-  @RequirePermissions('activites_supprimer')
+  @RequirePermissions('activites_participants_gerer')
   @ApiOperation({ summary: 'Retirer un participant (soft delete)' })
   @ApiParam({ name: 'participant_uuid' })
   @ApiResponse({ status: 200, description: 'Participant retire.' })
@@ -277,7 +282,7 @@ export class ActivityController {
   // ============================================================
 
   @Get(':uuid/attendance')
-  @RequirePermissions('activites_voir')
+  @RequirePermissions('activites_participants_voir')
   @ApiOperation({
     summary: 'Feuille de presence (participants x pointage fusionnes)',
     description: 'Inclut les inscrits non encore pointes (present=false, arrived_at=null).',
@@ -291,7 +296,7 @@ export class ActivityController {
   }
 
   @Post(':uuid/attendance')
-  @RequirePermissions('activites_creer')
+  @RequirePermissions('activites_presence_pointer')
   @ApiOperation({ summary: 'Marquer la presence d un membre' })
   @ApiParam({ name: 'uuid' })
   @ApiBody({ type: MarkAttendanceDto })
@@ -308,7 +313,7 @@ export class ActivityController {
   }
 
   @Post(':uuid/attendance/bulk')
-  @RequirePermissions('activites_creer')
+  @RequirePermissions('activites_presence_pointer')
   @ApiOperation({ summary: 'Marquer la presence en masse (bulk)' })
   @ApiParam({ name: 'uuid' })
   @ApiBody({ type: BulkMarkAttendanceDto })
@@ -329,7 +334,7 @@ export class ActivityController {
   // ============================================================
 
   @Get(':uuid/stats')
-  @RequirePermissions('activites_voir')
+  @RequirePermissions('activites_consulter_detail_activite')
   @ApiOperation({
     summary: 'Statistiques d une activite',
     description: 'Taux de presence global, par structure, par role.',
@@ -343,7 +348,7 @@ export class ActivityController {
   }
 
   @Get('stats/dashboard')
-  @RequirePermissions('activites_voir')
+  @RequirePermissions('activites_consulter_liste_activites')
   @ApiOperation({
     summary: 'Dashboard activites du perimetre du responsable',
     description: 'Si structure_uuid fourni, restreint au sous-arbre via findByAllChildrens.',
@@ -365,7 +370,7 @@ export class ActivityController {
   // ============================================================
 
   @Get(':uuid/quotas')
-  @RequirePermissions('activites_voir')
+  @RequirePermissions('activites_consulter_detail_activite')
   @ApiOperation({ summary: 'Liste des quotas par structure pour une activité' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Liste des quotas.' })
@@ -376,7 +381,7 @@ export class ActivityController {
   }
 
   @Get(':uuid/quotas/summary')
-  @RequirePermissions('activites_voir')
+  @RequirePermissions('activites_consulter_detail_activite')
   @ApiOperation({ summary: 'Récapitulatif des quotas alloués/utilisés pour une activité' })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Récapitulatif des quotas.' })
@@ -387,7 +392,7 @@ export class ActivityController {
   }
 
   @Post(':uuid/quotas')
-  @RequirePermissions('activites_creer')
+  @RequirePermissions('activites_quotas_gerer')
   @ApiOperation({ summary: 'Créer un quota pour une structure dans une activité' })
   @ApiParam({ name: 'uuid' })
   @ApiBody({ type: CreateActivityQuotaDto })
@@ -405,7 +410,7 @@ export class ActivityController {
   }
 
   @Put('quotas/:quota_uuid')
-  @RequirePermissions('activites_modifier')
+  @RequirePermissions('activites_quotas_gerer')
   @ApiOperation({ summary: 'Modifier un quota' })
   @ApiParam({ name: 'quota_uuid' })
   @ApiBody({ type: UpdateActivityQuotaDto })
@@ -422,7 +427,7 @@ export class ActivityController {
   }
 
   @Delete('quotas/:quota_uuid')
-  @RequirePermissions('activites_supprimer')
+  @RequirePermissions('activites_quotas_gerer')
   @ApiOperation({ summary: 'Supprimer un quota (soft delete)' })
   @ApiParam({ name: 'quota_uuid' })
   @ApiResponse({ status: 200, description: 'Quota supprimé.' })
@@ -437,7 +442,7 @@ export class ActivityController {
   // ============================================================
 
   @Get(':uuid/committees')
-  @RequirePermissions('activites_voir')
+  @RequirePermissions('activites_consulter_detail_activite')
   @ApiOperation({ summary: "Liste des comités d'organisation d'une activité" })
   @ApiParam({ name: 'uuid' })
   @ApiResponse({ status: 200, description: 'Liste des comités.' })
@@ -448,7 +453,7 @@ export class ActivityController {
   }
 
   @Post(':uuid/committees')
-  @RequirePermissions('activites_creer')
+  @RequirePermissions('activites_comites_gerer')
   @ApiOperation({ summary: "Créer un comité d'organisation pour une activité" })
   @ApiParam({ name: 'uuid' })
   @ApiBody({ type: CreateActivityCommitteeDto })
@@ -465,7 +470,7 @@ export class ActivityController {
   }
 
   @Get('committees/:committee_uuid')
-  @RequirePermissions('activites_voir')
+  @RequirePermissions('activites_consulter_detail_activite')
   @ApiOperation({ summary: "Récupérer un comité par UUID (avec ses membres)" })
   @ApiParam({ name: 'committee_uuid' })
   @ApiResponse({ status: 200, description: 'Comité trouvé.' })
@@ -476,7 +481,7 @@ export class ActivityController {
   }
 
   @Put('committees/:committee_uuid')
-  @RequirePermissions('activites_modifier')
+  @RequirePermissions('activites_comites_gerer')
   @ApiOperation({ summary: "Modifier un comité d'organisation" })
   @ApiParam({ name: 'committee_uuid' })
   @ApiBody({ type: UpdateActivityCommitteeDto })
@@ -492,7 +497,7 @@ export class ActivityController {
   }
 
   @Delete('committees/:committee_uuid')
-  @RequirePermissions('activites_supprimer')
+  @RequirePermissions('activites_comites_gerer')
   @ApiOperation({ summary: "Supprimer un comité (soft delete)" })
   @ApiParam({ name: 'committee_uuid' })
   @ApiResponse({ status: 200, description: 'Comité supprimé.' })
@@ -505,7 +510,7 @@ export class ActivityController {
   // ---- Membres des comités ----
 
   @Get('committees/:committee_uuid/members')
-  @RequirePermissions('activites_voir')
+  @RequirePermissions('activites_consulter_detail_activite')
   @ApiOperation({ summary: 'Liste des membres d\'un comité' })
   @ApiParam({ name: 'committee_uuid' })
   @ApiResponse({ status: 200, description: 'Liste des membres.' })
@@ -516,7 +521,7 @@ export class ActivityController {
   }
 
   @Post('committees/:committee_uuid/members')
-  @RequirePermissions('activites_creer')
+  @RequirePermissions('activites_comites_gerer')
   @ApiOperation({ summary: 'Ajouter un membre à un comité' })
   @ApiParam({ name: 'committee_uuid' })
   @ApiBody({ type: CreateActivityCommitteeMemberDto })
@@ -534,7 +539,7 @@ export class ActivityController {
   }
 
   @Put('committees/members/:member_uuid')
-  @RequirePermissions('activites_modifier')
+  @RequirePermissions('activites_comites_gerer')
   @ApiOperation({ summary: 'Modifier le rôle ou la commission d\'un membre du comité' })
   @ApiParam({ name: 'member_uuid' })
   @ApiBody({ type: UpdateActivityCommitteeMemberDto })
@@ -550,7 +555,7 @@ export class ActivityController {
   }
 
   @Delete('committees/members/:member_uuid')
-  @RequirePermissions('activites_supprimer')
+  @RequirePermissions('activites_comites_gerer')
   @ApiOperation({ summary: 'Retirer un membre d\'un comité (soft delete)' })
   @ApiParam({ name: 'member_uuid' })
   @ApiResponse({ status: 200, description: 'Membre retiré du comité.' })

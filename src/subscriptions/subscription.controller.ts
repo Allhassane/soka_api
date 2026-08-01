@@ -82,11 +82,29 @@ export class SubscriptionController {
   @ApiOperation({ summary: 'Récupérer une abonnement par UUID' })
   @ApiResponse({ status: 200, description: 'Abonnement trouvé.' })
   @ApiResponse({ status: 400, description: 'Abonnement non trouvé.' })
-  findOne(@Param('uuid') uuid: string, @Request() req) {
-    return this.subscriptionService.findOne( uuid,
+  /**
+   * ⚠️ Le bloc `statistics` (montant récolté, paiements réussis) n'est calculé que pour un
+   * porteur du droit `abonnements_consulter_statistiques_campagne` : le montant collecté est une
+   * donnée sensible qui ne doit plus arriver « gratuitement » avec le détail d'une campagne
+   * (le symptôme d'origine de l'audit - un droit de menu qui ouvrait les montants).
+   * Sans le droit, la réponse est la campagne seule, sans clé `statistics`.
+   */
+  async findOne(@Param('uuid') uuid: string, @Request() req) {
+    const peutVoirStats =
+      req.user?.is_admin === true ||
+      (
+        await this.effectivePermissions.slugsFor({
+          uuid: req.user?.uuid,
+          member_uuid: req.user?.member_uuid,
+        })
+      ).has('abonnements_consulter_statistiques_campagne');
+
+    return this.subscriptionService.findOne(
+      uuid,
       req.user.uuid,
       req.user.member_uuid,
-      req.user.responsibilities?.[0]?.structure?.uuid,);
+      peutVoirStats ? req.user.responsibilities?.[0]?.structure?.uuid : undefined,
+    );
   }
 
  @Put(':uuid')

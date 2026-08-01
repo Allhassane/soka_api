@@ -5,6 +5,7 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateAccessoryDto } from './dto/create-accessory.dto';
 import { UpdateAccessoryDto } from './dto/update-accessory.dto';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { ReferentialRead } from 'src/auth/decorators/referential-read.decorator';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
@@ -15,7 +16,7 @@ export class AccessoryController {
   constructor(private readonly accessoryService: AccessoryService) {}
 
   @Get()
-  @RequirePermissions('accessoires_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Liste toutes les métiers ' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
@@ -33,7 +34,7 @@ export class AccessoryController {
   }
 
   @Get(':uuid')
-  @RequirePermissions('accessoires_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Récupérer une métier par UUID' })
   @ApiResponse({ status: 200, description: 'Métier trouvé.' })
   @ApiResponse({ status: 400, description: 'Metier non trouvé.' })

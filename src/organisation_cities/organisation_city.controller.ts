@@ -5,6 +5,7 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateOrganisationCityDto } from './dto/create-organisation_city.dto';
 import { UpdateOrganisationCityDto } from './dto/update-organisation_city.dto';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { ReferentialRead } from 'src/auth/decorators/referential-read.decorator';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
@@ -15,7 +16,7 @@ export class OrganisationCityController {
   constructor(private readonly organisationCityService: OrganisationCityService) {}
 
   @Get()
-  @RequirePermissions('villes_organisation_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Liste toutes les villes ' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
@@ -33,7 +34,7 @@ export class OrganisationCityController {
   }
 
   @Get(':uuid')
-  @RequirePermissions('villes_organisation_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Récupérer une ville par UUID' })
   @ApiResponse({ status: 200, description: 'ville trouvé.' })
   @ApiResponse({ status: 400, description: 'ville non trouvé.' })

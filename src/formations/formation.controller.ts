@@ -5,6 +5,7 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateFormationDto } from './dto/create-formation.dto';
 import { UpdateFormationDto } from './dto/update-formation.dto';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { ReferentialRead } from 'src/auth/decorators/referential-read.decorator';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 import {
   ReferentialMergeService,
@@ -22,7 +23,7 @@ export class FormationController {
   ) {}
 
   @Get()
-  @RequirePermissions('formations_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Liste toutes les formations ' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
@@ -44,7 +45,7 @@ export class FormationController {
    * dynamique. Même piège que les routes `/quota` des paiements.
    */
   @Get('merge/usage/:uuid')
-  @RequirePermissions('formations_voir')
+  @ReferentialRead()
   @ApiOperation({
     summary: "Nombre de porteurs d'un élément, avant reversement",
   })
@@ -70,7 +71,7 @@ export class FormationController {
   }
 
   @Get(':uuid')
-  @RequirePermissions('formations_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Récupérer une civilité par UUID' })
   @ApiResponse({ status: 200, description: 'Formation trouvé.' })
   @ApiResponse({ status: 400, description: 'Formation non trouvé.' })

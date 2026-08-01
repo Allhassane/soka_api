@@ -1,4 +1,5 @@
 import { AccessScopeService } from 'src/access-scope/access-scope.service';
+import { EffectivePermissionsService } from 'src/access-scope/effective-permissions.service';
 import {
   Injectable,
   NotFoundException,
@@ -20,6 +21,7 @@ import { ResponsibilityService } from 'src/responsibilities/reponsibility.servic
 import { AccessoryService } from 'src/accessories/accessory.service';
 import { MemberAccessoryEntity } from 'src/member-accessories/entities/member-accessories.entity';
 import { UserService } from 'src/users/user.service';
+import { MemberAccountService } from 'src/users/member-account.service';
 import { ResponsibilityEntity } from 'src/responsibilities/entities/responsibility.entity';
 import { MaritalStatusEntity } from 'src/marital-status/entities/marital-status.entity';
 import { CountryEntity } from 'src/countries/entities/country.entity';
@@ -109,6 +111,12 @@ export class MemberService {
 
     /** Périmètre unifié (responsabilités + comités) - cf. `getAccessibleStructureUuids`. */
     private readonly accessScopeService: AccessScopeService,
+
+    /** Règle unique du compte de connexion (création + réalignement), partagée avec l'import. */
+    private readonly memberAccounts: MemberAccountService,
+
+    /** Droits effectifs du demandeur (service @Global, cache 30 s). */
+    private readonly effectivePermissions: EffectivePermissionsService,
 
   ) {}
 
@@ -252,10 +260,6 @@ export class MemberService {
         }
       }
 
-      // Mot de passe par défaut : le compte est créé au défaut (nrh2030) avec
-      // must_change_password=true → au 1er login, rotation + envoi SMS (cf. AuthService).
-      const defaultPassword = process.env.DEFAULT_PASSWORD || 'nrh2030';
-
       // ---- Écritures ATOMIQUES (membre + responsabilité + accessoires + compte) ----
       let userCreated = false;
       const saved = await this.memberRepo.manager.transaction(async (manager) => {
@@ -284,36 +288,12 @@ export class MemberService {
           );
         }
 
-        // Compte utilisateur lié : uniquement si téléphone présent ET non déjà utilisé.
-        if (savedMember.phone) {
-          const existingByPhone = await manager.findOne(User, {
-            where: { phone_number: savedMember.phone },
-          });
-
-          if (!existingByPhone) {
-            // email est UNIQUE : ne pas réutiliser un email déjà pris (sinon la contrainte
-            // ferait échouer toute la création). On retombe sur null le cas échéant.
-            let email: string | null = savedMember.email ?? null;
-            if (email) {
-              const existingByEmail = await manager.findOne(User, { where: { email } });
-              if (existingByEmail) email = null;
-            }
-
-            await manager.save(
-              this.userRepo.create({
-                firstname: savedMember.firstname,
-                lastname: savedMember.lastname,
-                email: email ?? undefined,
-                phone_number: savedMember.phone,
-                password: defaultPassword,
-                is_active: true,
-                member_uuid: savedMember.uuid,
-                must_change_password: true,
-              }),
-            );
-            userCreated = true;
-          }
-        }
+        // Compte utilisateur lié : règle PARTAGÉE avec l'import (`MemberAccountService`) -
+        // téléphone présent et non déjà pris. Elle vivait ici en double, et l'import ne
+        // l'appliquait pas du tout : les membres importés naissaient sans compte.
+        // Toujours dans `manager` : un rollback ne doit pas laisser de compte orphelin.
+        userCreated =
+          (await this.memberAccounts.reconcileAccount(savedMember, manager)) === 'created';
 
         return savedMember;
       });
@@ -383,6 +363,51 @@ export class MemberService {
       dto.structure_uuid !== existingMember.structure_uuid
     ) {
       await this.assertStructureInScope(dto.structure_uuid, admin_uuid);
+    }
+
+    /**
+     * ── La « situation dans l'organisation » a son propre droit (audit §H13) ──
+     *
+     * `PUT /members/:uuid` écrit AUSSI la responsabilité et les accessoires - or attribuer ou
+     * retirer une responsabilité détermine le périmètre hiérarchique du membre visé : c'est un
+     * geste d'organisation, pas une retouche de fiche. Ce geste exige désormais le droit
+     * `membres_modifier_situation_membre_sein_organisation` (les routes dédiées
+     * `/member-responsibility` et `/member-accessories` exigent le même).
+     *
+     * ⚠️ Le contrôle compare aux VALEURS EXISTANTES, pas à la présence des clés : l'onglet
+     * Structure du web envoie toujours `responsibility_uuid` et `accessories` dans le même PUT -
+     * refuser sur la seule présence fermerait l'édition de fiche à tout rôle sans ce droit.
+     */
+    const clefResponsabilite = Object.prototype.hasOwnProperty.call(dto, 'responsibility_uuid');
+    const clefAccessoires = Array.isArray(dto.accessories);
+    if ((clefResponsabilite || clefAccessoires) && admin.is_admin !== true) {
+      const respActuelle = clefResponsabilite
+        ? await this.memberResponsibilityRepo.findOne({ where: { member_uuid: uuid } })
+        : null;
+      const responsabiliteChange =
+        clefResponsabilite &&
+        (dto.responsibility_uuid ?? null) !== (respActuelle?.responsibility_uuid ?? null);
+
+      let accessoiresChangent = false;
+      if (clefAccessoires) {
+        const actuels = await this.memberAccessoryRepo.find({ where: { member_uuid: uuid } });
+        const avant = [...new Set(actuels.map((a) => a.accessory_uuid))].sort();
+        const apres = [...new Set(dto.accessories as string[])].sort();
+        accessoiresChangent =
+          avant.length !== apres.length || avant.some((v, i) => v !== apres[i]);
+      }
+
+      if (responsabiliteChange || accessoiresChangent) {
+        const droits = await this.effectivePermissions.slugsFor({
+          uuid: admin.uuid,
+          member_uuid: admin.member_uuid,
+        });
+        if (!droits.has('membres_modifier_situation_membre_sein_organisation')) {
+          throw new ForbiddenException(
+            "Modifier la responsabilité ou les accessoires d'un membre exige le droit « Modifier la situation d'un membre dans l'organisation ».",
+          );
+        }
+      }
     }
 
     /**
@@ -481,27 +506,26 @@ export class MemberService {
       );
     }
 
-      /**
-      * MISE À JOUR AUTO DU COMPTE UTILISATEUR LIÉ
-    */
-    const linkedUser = await this.userRepo.findOne({
-      where:
-        { member_uuid : uuid }
-    });
+    /**
+     * MISE À JOUR AUTO DU COMPTE UTILISATEUR LIÉ
+     *
+     * Même règle que la création et que l'import (`MemberAccountService`). Deux différences
+     * avec le code qui vivait ici :
+     *  - le téléphone n'est PAS déplacé sur un numéro déjà porté par un autre compte
+     *    (`users.phone_number` n'a aucun index UNIQUE : deux comptes sur un même numéro
+     *    rendraient la connexion ambiguë) ;
+     *  - un membre qui n'avait pas de compte en reçoit un.
+     */
+    const accountOutcome = await this.memberAccounts.reconcileAccount(updated);
 
-    if (linkedUser) {
-      linkedUser.firstname = updated.firstname;
-      linkedUser.lastname = updated.lastname;
-      linkedUser.email = updated.email ?? linkedUser.email;
-      linkedUser.phone_number = updated.phone ?? linkedUser.phone_number;
-
-      await this.userRepo.save(linkedUser);
-
+    if (accountOutcome === 'updated' || accountOutcome === 'created') {
       // journalisation MAJ user
       await this.logService.logAction(
-        'user-update-from-member',
+        accountOutcome === 'created'
+          ? 'user-create-from-member'
+          : 'user-update-from-member',
         admin.id,
-        `Compte utilisateur mis à jour automatiquement pour ${updated.firstname} ${updated.lastname}`,
+        `Compte utilisateur ${accountOutcome === 'created' ? 'créé' : 'mis à jour'} automatiquement pour ${updated.firstname} ${updated.lastname}`,
       );
     }
 

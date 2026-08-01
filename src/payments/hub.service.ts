@@ -32,6 +32,16 @@ interface HubPaymentStatusResponse {
   } | null;
 }
 
+/** Réponse de `POST /payment-links/:id/cancel` (gateway SOKA Pay). */
+export interface HubCancelResponse {
+  canceled: boolean;
+  /** `canceled` = fermé ; `already_paid` = une tentative a abouti, rien n'a été touché. */
+  reason: 'canceled' | 'already_paid';
+  link: string;
+  sessions_canceled?: number;
+  intents_canceled?: number;
+}
+
 interface HubErrorResponse {
   error?: {
     code?: string;
@@ -109,6 +119,54 @@ export class HubService {
       throw new InternalServerErrorException(
         `Erreur Hub : ${error.response?.data?.message ?? error.message}`,
       );
+    }
+  }
+
+  /**
+   * Annule un lien de paiement et toutes ses tentatives encore vivantes.
+   *
+   * ⚠️ **HUB2 n'expose aucune annulation** : la gateway ne peut que refermer ses
+   * propres portes (lien désactivé, sessions et intentions annulées), ce qui
+   * empêche tout NOUVEAU débit. Une autorisation déjà partie chez l'opérateur et
+   * validée par le payeur ira, elle, à son terme.
+   * ⚠️ La gateway vérifie HUB2 **avant** d'écrire : si une tentative a abouti,
+   * elle n'annule rien et renvoie `canceled: false, reason: 'already_paid'`.
+   * Ce n'est PAS une erreur - c'est l'information à afficher.
+   */
+  async cancelPaymentLink(transactionId: string): Promise<HubCancelResponse> {
+    if (!this.apiKey) {
+      throw new InternalServerErrorException('HUB_API_KEY non configurée');
+    }
+
+    try {
+      const { data } = await axios.post<HubCancelResponse>(
+        `${this.apiUrl}/${encodeURIComponent(transactionId)}/cancel`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+      return data;
+    } catch (error) {
+      const hubError = error.response?.data as HubErrorResponse | undefined;
+
+      if (hubError?.error?.code === 'not_found') {
+        throw new NotFoundException(
+          hubError.error.message ?? 'Lien de paiement introuvable.',
+        );
+      }
+
+      const message =
+        hubError?.error?.message ??
+        hubError?.error?.code ??
+        error.response?.data?.message ??
+        error.message;
+
+      console.error('Erreur Hub annulation :', error.response?.data ?? error.message);
+      throw new BadRequestException(`Erreur Hub : ${message}`);
     }
   }
 

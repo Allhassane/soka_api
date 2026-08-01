@@ -5,6 +5,7 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateCivilityDto } from './dto/create-civility.dto';
 import { UpdateCivilityDto } from './dto/update-civility.dto';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { ReferentialRead } from 'src/auth/decorators/referential-read.decorator';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
 @ApiBearerAuth()
@@ -15,7 +16,7 @@ export class CivilityController {
   constructor(private readonly civilityService: CivilityService) {}
 
   @Get()
-  @RequirePermissions('civilites_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Liste toutes les civilités ' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
@@ -33,7 +34,7 @@ export class CivilityController {
   }
 
   @Get(':uuid')
-  @RequirePermissions('civilites_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Récupérer une civilité par UUID' })
   @ApiResponse({ status: 200, description: 'civilité trouvé.' })
   @ApiResponse({ status: 400, description: 'Civilité non trouvé.' })

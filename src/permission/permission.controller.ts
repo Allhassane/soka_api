@@ -5,9 +5,6 @@ import { UpdatePermissionsDto } from './dto/update-permissions.dto';
 import { PermissionEntity } from './entities/permission.entity';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
-import { SuccessMessage } from 'src/shared/decorators/success-message.decorator';
-import { AssignPermissionToRoleDto } from './dto/assign-permission-to-role.dto';
-import { RevokePermissionFromRoleDto } from './dto/revoke-permission-from-role.dto';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 
@@ -69,39 +66,10 @@ export class PermissionsController {
     return this.permissionsService.remove(uuid);
   }
 
-  
-  @Post('assign-to-role')
-  @RequirePermissions('permissions_creer')
-  @ApiOperation({ summary: 'Assigner une permission à un rôle' })
-  @SuccessMessage('Permission assignée au rôle')
-  assignToRole(@Body() dto: AssignPermissionToRoleDto): Promise<void> {
-    return this.permissionsService.assignToRole(dto);
-  }
-
-  @Post('revoke-from-role')
-  @RequirePermissions('permissions_creer')
-  @ApiOperation({ summary: 'Retirer une permission d’un rôle' })
-  @SuccessMessage('Permission retirée du rôle')
-  revokeFromRole(@Body() dto: RevokePermissionFromRoleDto): Promise<void> {
-    return this.permissionsService.revokeFromRole(dto);
-  }
-
-  @Get('role/:role_uuid')
-  @RequirePermissions('permissions_voir')
-  @ApiOperation({ summary: 'Lister les permissions d’un rôle' })
-  @SuccessMessage('Permissions du rôle récupérées')
-  listForRole(@Param('role_uuid') role_uuid: string): Promise<PermissionEntity[]> {
-    return this.permissionsService.listRolePermissions(role_uuid);
-  }
-
-  @Get('user/:user_uuid')
-  @RequirePermissions('permissions_voir')
-  @ApiOperation({
-    summary:
-      'Lister les permissions effectives d’un utilisateur (via ses rôles)',
-  })
-  @SuccessMessage('Permissions effectives de l’utilisateur récupérées')
-  listForUser(@Param('user_uuid') user_uuid: string): Promise<PermissionEntity[]> {
-    return this.permissionsService.listUserEffectivePermissions(user_uuid);
-  }
+  // Les routes `assign-to-role`, `revoke-from-role`, `role/:role_uuid` et `user/:user_uuid` ont
+  // été SUPPRIMÉES (refonte permissions 2026-08-01) : elles joignaient sur les colonnes
+  // numériques `role_id`/`permission_id`, qui valent 0 sur toutes les lignes - écriture en échec
+  // et lectures toujours vides (audit §B33 + annexe), sans aucun écran vivant pour les appeler.
+  // L'attribution réelle passe par `PUT /roles/permissions/:uuid/toggle` et
+  // `PUT /roles/:roleUuid/modules/:moduleUuid/permissions` (module Rôles).
 }

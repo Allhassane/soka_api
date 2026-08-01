@@ -1,4 +1,8 @@
 import {
+  BadRequestException,
+  ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
@@ -588,33 +592,61 @@ export class AuthService {
     };
   }
 
-  // Anti-spam du « mot de passe oublié » : au plus 1 envoi par numéro toutes les 2 min
-  // (en mémoire ; une relance plus rapprochée renvoie la réponse générique sans réenvoyer de SMS).
-  private readonly resetCooldownMs = 2 * 60 * 1000;
+  // Anti-spam du « mot de passe oublié » : au plus 1 envoi par numéro toutes les 5 min
+  // (en mémoire, donc remis à zéro par un redémarrage - c'est un garde-fou de confort,
+  // pas une protection contre un attaquant).
+  // ⚠️ Cette durée est renvoyée au client (`retry_after`) et pilote le compte à rebours de
+  // la page « Recevoir mon mot de passe » : elle est la SEULE source de vérité du délai.
+  // Ne pas la recopier en dur côté web, les deux divergeraient.
+  static readonly RESET_COOLDOWN_SECONDS = 5 * 60;
+  private readonly resetCooldownMs = AuthService.RESET_COOLDOWN_SECONDS * 1000;
   private readonly lastResetByPhone = new Map<string, number>();
 
   /**
-   * « Mot de passe oublié » (1 étape) : génère un nouveau mot de passe (6 lettres
-   * MAJUSCULES + 3 chiffres), le définit sur le compte et l'envoie en clair par SMS.
-   * Réponse TOUJOURS générique (ne révèle pas si le numéro correspond à un compte).
+   * « Mot de passe oublié » / 1re connexion (1 étape) : génère un nouveau mot de passe
+   * (6 lettres + 3 chiffres), le définit sur le compte et l'envoie en clair par SMS.
+   *
+   * ⚠️ Les réponses ne sont PLUS génériques (demande produit du 2026-07-31) : un numéro
+   * inconnu renvoie **404**, un compte désactivé **403**, une relance trop rapprochée
+   * **429** et un échec d'envoi **503**. Avant, ces quatre cas renvoyaient « SMS envoyé »
+   * et le membre attendait un SMS qui n'arriverait jamais.
+   * **Contrepartie assumée** : l'endpoint est public et permet donc de savoir si un numéro
+   * a un compte (énumération). Le cooldown étant *par numéro*, il ne borne pas un balayage
+   * de l'espace des numéros - un rate-limit par IP reste à poser (cf. CONTEXT §8).
    */
   async requestPasswordReset(phoneNumber: string) {
-    const generic = {
-      message:
-        'Si ce numéro correspond à un compte, un nouveau mot de passe vient de vous être envoyé par SMS.',
-    };
-
     const normalized = (phoneNumber ?? '').replace(/\s+/g, '').trim();
-    if (!normalized) return generic;
-
-    // Anti-spam : ignore silencieusement une relance trop rapprochée (même numéro).
-    const last = this.lastResetByPhone.get(normalized);
-    if (last && Date.now() - last < this.resetCooldownMs) return generic;
+    if (!normalized) {
+      throw new BadRequestException('Entrez votre numéro de téléphone.');
+    }
 
     const user = await this.userRepository.findOne({
       where: { phone_number: normalized },
     });
-    if (!user || !user.is_active) return generic;
+    if (!user) {
+      throw new NotFoundException(
+        "Ce numéro n'est associé à aucun compte. Vérifiez votre saisie ou contactez un administrateur.",
+      );
+    }
+    if (!user.is_active) {
+      throw new ForbiddenException(
+        'Ce compte est désactivé. Contactez un administrateur.',
+      );
+    }
+
+    // Anti-spam : une relance trop rapprochée est refusée EXPLICITEMENT. Elle était
+    // auparavant ignorée en silence, ce qui affichait un faux « SMS envoyé » - le pire
+    // des deux mondes : aucun SMS ne partait et le membre n'en savait rien.
+    const last = this.lastResetByPhone.get(normalized);
+    const remainingMs = last ? this.resetCooldownMs - (Date.now() - last) : 0;
+    if (remainingMs > 0) {
+      throw new HttpException(
+        `Un mot de passe vient d'être envoyé à ce numéro. Patientez encore ${this.formatDelay(
+          Math.ceil(remainingMs / 1000),
+        )} avant de refaire une demande.`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
 
     const newPassword = this.generatePassword();
 
@@ -631,7 +663,11 @@ export class AuthService {
       this.logger.error(
         `requestPasswordReset : SMS non envoyé (${sms.error ?? 'erreur inconnue'}) - mot de passe INCHANGÉ pour ${user.uuid}.`,
       );
-      return generic;
+      // Erreur explicite : le mot de passe n'a pas changé, le membre doit réessayer.
+      // Pas de cooldown posé ici - aucun SMS n'est parti, l'enfermer 5 min serait absurde.
+      throw new ServiceUnavailableException(
+        "L'envoi du SMS a échoué. Réessayez dans un instant ou contactez un administrateur.",
+      );
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -648,7 +684,20 @@ export class AuthService {
     // Marque l'envoi (anti-spam) seulement quand un SMS part réellement.
     this.lastResetByPhone.set(normalized, Date.now());
 
-    return generic;
+    return {
+      message: 'Votre mot de passe vient de vous être envoyé par SMS.',
+      // Délai avant une nouvelle demande : la page en fait un compte à rebours et
+      // désactive son bouton d'envoi pendant ce temps.
+      retry_after: AuthService.RESET_COOLDOWN_SECONDS,
+    };
+  }
+
+  /** « 4 min 32 s », « 45 s » - délai d'attente lisible dans un message d'erreur. */
+  private formatDelay(seconds: number): string {
+    const minutes = Math.floor(seconds / 60);
+    const rest = seconds % 60;
+    if (minutes <= 0) return `${rest} s`;
+    return rest > 0 ? `${minutes} min ${rest} s` : `${minutes} min`;
   }
 
   /** Mot de passe généré : 6 lettres minuscules suivies de 3 chiffres (ex. kdrmqa482). */

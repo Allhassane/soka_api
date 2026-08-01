@@ -39,6 +39,9 @@ package-lock.json*
 
 # dotenv environment variable files
 .env
+# Copies de .env d'autres environnements (secrets de prod) - jamais versionnees
+.env_prod
+.env.prod
 .env.development.local
 .env.test.local
 .env.production.local

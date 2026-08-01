@@ -5,6 +5,7 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { CreateCityDto } from './dto/create-city.dto';
 import { UpdateCityDto } from './dto/update-city.dto';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
+import { ReferentialRead } from 'src/auth/decorators/referential-read.decorator';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 import {
   ReferentialMergeService,
@@ -22,7 +23,7 @@ export class CityController {
   ) {}
 
   @Get()
-  @RequirePermissions('villes_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Liste de toutes les localités ' })
   @ApiResponse({ status: 200, description: 'Liste récupérée avec succès.' })
   findAll(@Request() req) {
@@ -44,7 +45,7 @@ export class CityController {
    * dynamique. Même piège que les routes `/quota` des paiements.
    */
   @Get('merge/usage/:uuid')
-  @RequirePermissions('villes_voir')
+  @ReferentialRead()
   @ApiOperation({
     summary: "Nombre de porteurs d'un élément, avant reversement",
   })
@@ -70,7 +71,7 @@ export class CityController {
   }
 
   @Get(':uuid')
-  @RequirePermissions('villes_voir')
+  @ReferentialRead()
   @ApiOperation({ summary: 'Récupérer une localité par UUID' })
   @ApiResponse({ status: 200, description: 'Localité trouvé.' })
   @ApiResponse({ status: 400, description: 'Localité non trouvé.' })

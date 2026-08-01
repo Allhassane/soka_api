@@ -137,6 +137,26 @@ export class DonatePaymentController {
     );
   }
 
+  /**
+   * Annule une tentative de paiement encore en cours (bouton « Annuler » des
+   * listes Abonnements et Zaimu). Sert les DEUX modules, comme `hub/check/status`.
+   *
+   * ⚠️ **Volontairement NON `@Public()`**, contrairement à la vérification :
+   * annuler est une écriture destructrice. Ouverte, cette route permettrait à
+   * quiconque de refermer les paiements en cours d'autrui en devinant un
+   * `transaction_id`.
+   */
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('paiements_modifier')
+  @Post('hub/cancel/:transaction_id')
+  @ApiOperation({
+    summary: 'Annuler une tentative de paiement Hub encore en cours',
+  })
+  @ApiResponse({ status: 200, description: 'Tentative annulée (ou déjà aboutie)' })
+  async hubCancel(@Param('transaction_id') transaction_id: string) {
+    return this.donatePaymentService.cancelHubPayment(transaction_id);
+  }
+
   @Public()
   @Post('cinetpay/check/status/:transaction_id')
   // Pas de @RequirePermissions : route @Public() (webhook du prestataire, authentifié
