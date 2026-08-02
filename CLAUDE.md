@@ -470,14 +470,27 @@ services) : abonnements et dons.
   `seed:create-missing-user-accounts`. Un membre sans compte ressemble à un membre normal
   jusqu'à sa 1re connexion.
   ⚖️ **Écart `members` ↔ `users` : `npm run seed:reconcile-member-accounts`** (simulation par
-  défaut, `--apply` pour écrire). Décompose l'écart en 7 cas, **corrige** les deux sûrs (membre
-  vivant sans aucun compte → création + ligne `user_roles` ; compte actif sur un membre supprimé →
-  `is_active = 0`) et **signale** les cinq qui demandent un arbitrage. Il **réutilise** ce service
-  plutôt que d'en recopier les règles. ⚠️ Ses candidats sont les membres **sans aucune ligne
-  `users`, soft-deleted comprises** : `reconcileAccount` cherche via `findOne`, qui **ignore les
-  lignes soft-deleted**, donc un membre au compte soft-deleted paraîtrait sans compte et en
-  recevrait un **second sur le même numéro**. ⚠️ Hors contexte Nest, `UserDefaultRoleSubscriber`
-  ne se déclenche pas : tout seed qui crée un compte doit appeler `ensureDefaultRole()` lui-même.
+  défaut, `--apply` pour écrire). Décompose l'écart, **corrige** trois cas sûrs - membre vivant
+  sans aucun compte → **création** ; compte actif sur un membre supprimé → **`is_active = 0`** ;
+  compte sans aucune ligne `user_roles` → **rôle par défaut MEMBRE** (ADMINISTRATEUR si
+  `is_admin`) - et **signale** les six qui demandent un arbitrage. Il **réutilise**
+  `MemberAccountService` et `UserRoleService.ensureDefaultRole()` plutôt que d'en recopier les
+  règles. ⚠️ **Il est PUREMENT ADDITIF** : il n'insère que du manquant et ne corrige, désactive
+  ni supprime **aucune** ligne existante - à la différence de `scripts/seed-user-roles.js`, qui
+  est **convergent** (il supprime les lignes hors population et déplace les rôles). Choisir en
+  connaissance de cause : l'additif pour la prod, le convergent pour remettre la table à plat.
+  ⚠️ Ses candidats sont les membres **sans aucune ligne `users`, soft-deleted comprises** :
+  `reconcileAccount` cherche via `findOne`, qui **ignore les lignes soft-deleted**, donc un membre
+  au compte soft-deleted paraîtrait sans compte et en recevrait un **second sur le même numéro**.
+  Même règle côté rôles : candidats = comptes sans **aucune** ligne `user_roles` ; une ligne
+  seulement inactive ou soft-deletée se **réactive** (aucun index unique sur
+  `(user_uuid, role_uuid)` ⇒ une 2ᵉ ligne passerait et `findUserRoles` rendrait **2 rôles**).
+  ⚠️ Hors contexte Nest, `UserDefaultRoleSubscriber` ne se déclenche pas : tout seed qui crée un
+  compte doit appeler `ensureDefaultRole()` lui-même.
+  ⚠️ **Poser une ligne `user_roles` ne retire jamais de droits** : `EffectivePermissionsService`
+  fait l'**UNION** de `user_roles`, du rôle des **responsabilités** et de celui des **comités**.
+  Un responsable qui reçoit MEMBRE garde ses droits (ils ne passent pas par cette table), et
+  `syncBaseRoleForMember` remplacera la ligne par RESPONSABLE à sa 1re connexion.
   ⚠️ **Le téléphone EST l'identifiant de connexion** : pas de téléphone ⇒ pas de compte, et un
   numéro déjà porté par un autre compte n'est **jamais** réutilisé ni volé (à la création comme à
   la mise à jour). `users.phone_number` n'a **aucun index UNIQUE** en base : rien d'autre
