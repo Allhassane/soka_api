@@ -26,6 +26,12 @@ import { UserRoleService } from '../user-roles/user-roles.service';
  *     Sans ça la personne peut encore demander son mot de passe par SMS et se connecter
  *     (anomalie F1 de la recette du 2026-07-31). **Désactivation, jamais suppression** : la
  *     suppression d'un membre est logique, le compte doit pouvoir suivre une restauration.
+ *  3. **Compte sans aucune ligne `user_roles`** → rôle par défaut **MEMBRE**
+ *     (ADMINISTRATEUR si `is_admin`), via `UserRoleService.ensureDefaultRole()`.
+ *     ⚠️ **Purement additif** : seules des lignes MANQUANTES sont insérées. Aucun rôle existant
+ *     n'est corrigé, désactivé ni supprimé - c'est ce qui distingue ce seed de
+ *     `scripts/seed-user-roles.js`, convergent et donc destructif par construction. Sur une
+ *     base en production, la différence est décisive.
  *
  * ── Ce qui est SEULEMENT SIGNALÉ (jamais corrigé automatiquement) ────────────────────────
  *  Chacun de ces cas demande une décision humaine, et se tromper coûte plus cher que l'écart :
@@ -36,6 +42,9 @@ import { UserRoleService } from '../user-roles/user-roles.service';
  *  - **membre dont le seul compte est soft-deleted** : restaurer ≠ recréer. En recréer un
  *    poserait un **second** compte sur le même numéro (`users.phone_number` n'a AUCUN index
  *    UNIQUE en base) et rendrait la connexion ambiguë ;
+ *  - **compte dont la ligne `user_roles` est inactive ou supprimée** : même raisonnement, à
+ *    **réactiver**. En insérer une seconde passerait (aucun index unique sur
+ *    `(user_uuid, role_uuid)`) et `findUserRoles` renverrait alors **deux rôles** ;
  *  - **membre portant plusieurs comptes** / **numéro partagé par plusieurs comptes** : choisir
  *    lequel survit est un arbitrage métier.
  *
@@ -151,11 +160,29 @@ async function diagnostiquer(ds: DataSource): Promise<Record<string, number>> {
           WHERE deleted_at IS NULL AND phone_number IS NOT NULL AND phone_number <> ''
           GROUP BY phone_number HAVING COUNT(*) > 1) t`,
     ],
+    // « Servi » au sens de `EffectivePermissionsService` : une ligne ne compte que si elle est
+    // `is_active = 1` ET non supprimée. Le total se scinde en deux cas qui n'ont pas le même
+    // remède - d'où deux compteurs plutôt qu'un.
     [
-      'comptes_sans_user_roles',
+      'comptes_sans_role_actif',
       `SELECT COUNT(*) v FROM users u
         WHERE u.deleted_at IS NULL
-          AND NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_uuid = u.uuid AND ur.deleted_at IS NULL)`,
+          AND NOT EXISTS (SELECT 1 FROM user_roles ur
+                           WHERE ur.user_uuid = u.uuid AND ur.deleted_at IS NULL AND ur.is_active = 1)`,
+    ],
+    [
+      'comptes_sans_aucune_ligne_role',
+      `SELECT COUNT(*) v FROM users u
+        WHERE u.deleted_at IS NULL
+          AND NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_uuid = u.uuid)`,
+    ],
+    [
+      'comptes_role_inactif_ou_supprime',
+      `SELECT COUNT(*) v FROM users u
+        WHERE u.deleted_at IS NULL
+          AND EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_uuid = u.uuid)
+          AND NOT EXISTS (SELECT 1 FROM user_roles ur
+                           WHERE ur.user_uuid = u.uuid AND ur.deleted_at IS NULL AND ur.is_active = 1)`,
     ],
   ];
 
@@ -184,7 +211,9 @@ function afficherDiagnostic(d: Record<string, number>, titre: string): void {
   console.log(`[réconciliation]   compte dont le membre est introuvable . ${d.comptes_membre_introuvable}  → signalé`);
   console.log(`[réconciliation]   membre portant plusieurs comptes ...... ${d.membres_multi_comptes}  → signalé`);
   console.log(`[réconciliation]   numéro partagé par plusieurs comptes .. ${d.telephones_partages}  → signalé`);
-  console.log(`[réconciliation]   compte sans ligne user_roles ......... ${d.comptes_sans_user_roles}  → signalé`);
+  console.log(`[réconciliation] rôles (user_roles) - compte sans rôle actif : ${d.comptes_sans_role_actif}`);
+  console.log(`[réconciliation]   dont AUCUNE ligne du tout ............ ${d.comptes_sans_aucune_ligne_role}  → CORRIGÉ (rôle MEMBRE)`);
+  console.log(`[réconciliation]   dont ligne inactive ou supprimée ..... ${d.comptes_role_inactif_ou_supprime}  → signalé`);
 }
 
 // ─────────────────────────────────── collectes ───────────────────────────────────
@@ -201,8 +230,54 @@ async function membresSansAucunCompte(ds: DataSource): Promise<LigneMembre[]> {
   );
 }
 
+/**
+ * Comptes vivants ne portant **aucune** ligne `user_roles` - pas même supprimée.
+ *
+ * Le critère est volontairement « aucune ligne », et non « aucune ligne active » : c'est celui
+ * de `UserRoleService.ensureDefaultRole()`, qui refuse d'écrire dès qu'une ligne existe. Un
+ * compte dont la ligne est seulement inactive ou soft-deleted doit être **réactivé**, pas
+ * doublé - `user_roles` n'a aucun index unique sur `(user_uuid, role_uuid)`, une seconde ligne
+ * passerait, et `findUserRoles` renverrait alors **deux rôles** pour un même compte.
+ */
+async function comptesSansAucuneLigneRole(ds: DataSource): Promise<any[]> {
+  return ds.query(
+    `SELECT u.uuid AS user_uuid, u.is_admin, u.firstname, u.lastname,
+            u.phone_number AS phone, u.email, u.member_uuid AS uuid
+       FROM users u
+      WHERE u.deleted_at IS NULL
+        AND NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_uuid = u.uuid)
+      ORDER BY u.id`,
+  );
+}
+
 async function anomaliesSignalees(ds: DataSource): Promise<LigneRapport[]> {
   const lignes: LigneRapport[] = [];
+
+  const roleInerte: any[] = await ds.query(
+    `SELECT u.uuid AS user_uuid, u.firstname, u.lastname, u.phone_number AS phone,
+            u.member_uuid AS uuid,
+            (SELECT GROUP_CONCAT(CONCAT(r.slug, CASE WHEN ur.deleted_at IS NOT NULL THEN ' (supprimée)'
+                                                     WHEN ur.is_active <> 1 THEN ' (inactive)'
+                                                     ELSE '' END))
+               FROM user_roles ur LEFT JOIN roles r ON r.uuid = ur.role_uuid
+              WHERE ur.user_uuid = u.uuid) AS lignes_existantes
+       FROM users u
+      WHERE u.deleted_at IS NULL
+        AND EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_uuid = u.uuid)
+        AND NOT EXISTS (SELECT 1 FROM user_roles ur
+                         WHERE ur.user_uuid = u.uuid AND ur.deleted_at IS NULL AND ur.is_active = 1)
+      ORDER BY u.id`,
+  );
+  for (const r of roleInerte) {
+    lignes.push({
+      ...r,
+      categorie: 'compte : rôle inactif ou supprimé',
+      decision: 'à arbitrer',
+      motif:
+        `lignes en base : ${r.lignes_existantes ?? '?'} - RÉACTIVER (is_active = 1, deleted_at = NULL) ` +
+        'plutôt qu’en ajouter une seconde : aucun index unique ne l’empêcherait',
+    });
+  }
 
   const compteSupprime: any[] = await ds.query(
     `SELECT m.uuid, m.matricule, m.firstname, m.lastname, m.phone, m.email,
@@ -363,6 +438,85 @@ async function appliquerCreations(
 }
 
 /**
+ * Pose le **rôle par défaut** sur les comptes qui n'ont aucune ligne `user_roles`.
+ *
+ * **MEMBRE pour tous, ADMINISTRATEUR pour un compte `is_admin`** - c'est la précédence de
+ * `UserRoleService.ensureDefaultRole()`, réutilisée telle quelle plutôt que recopiée. Donner
+ * MEMBRE à l'administrateur inverserait l'invariant sur le seul compte qui ne peut pas se le
+ * permettre.
+ *
+ * **Purement additif : le seed n'INSÈRE que des lignes manquantes.** Il ne corrige aucun rôle
+ * existant, n'en désactive ni n'en supprime aucun - contrairement à
+ * `scripts/seed-user-roles.js`, qui est convergent et supprime les lignes hors population.
+ * Sur une base de production, la différence est décisive.
+ *
+ * ⚠️ **Aucun droit n'est retiré au passage.** `EffectivePermissionsService` fait l'**UNION** de
+ * trois sources - `user_roles`, le rôle porté par les **responsabilités**, celui porté par les
+ * **comités** - avant de retomber sur le repli MEMBRE. Ajouter une ligne ne peut donc
+ * qu'élargir : un responsable qui reçoit MEMBRE ici garde ses droits de responsable, qui ne
+ * transitaient pas par cette table. À sa prochaine connexion, `syncBaseRoleForMember` remplacera
+ * cette ligne MEMBRE par RESPONSABLE - la table converge d'elle-même.
+ */
+async function appliquerRolesParDefaut(
+  ds: DataSource,
+  candidats: any[],
+  rapport: LigneRapport[],
+  userRoles: UserRoleService,
+): Promise<number> {
+  let poses = 0;
+
+  for (let debut = 0; debut < candidats.length; debut += TAILLE_LOT) {
+    const lot = candidats.slice(debut, debut + TAILLE_LOT);
+
+    await ds.transaction(async (trx: EntityManager) => {
+      for (const c of lot) {
+        await userRoles.ensureDefaultRole(trx, {
+          uuid: c.user_uuid,
+          is_admin: Number(c.is_admin) === 1,
+        });
+      }
+    });
+
+    // `ensureDefaultRole` est silencieuse par conception (elle ne doit jamais faire échouer une
+    // création de compte) : on recompte en base au lieu de croire à son retour.
+    const uuids = lot.map((c) => c.user_uuid);
+    const rows = await ds.query(
+      `SELECT ur.user_uuid, r.slug
+         FROM user_roles ur JOIN roles r ON r.uuid = ur.role_uuid
+        WHERE ur.deleted_at IS NULL AND ur.is_active = 1 AND ur.user_uuid IN (?)`,
+      [uuids],
+    );
+    const slugParUser = new Map<string, string>(
+      (rows ?? []).map((r: any) => [r.user_uuid, r.slug]),
+    );
+
+    for (const c of lot) {
+      const slug = slugParUser.get(c.user_uuid);
+      rapport.push({
+        uuid: c.uuid,
+        phone: c.phone,
+        firstname: c.firstname,
+        lastname: c.lastname,
+        email: c.email,
+        user_uuid: c.user_uuid,
+        categorie: 'compte : sans ligne user_roles',
+        decision: slug ? `rôle posé : ${slug}` : 'ÉCHEC',
+        motif: slug
+          ? ''
+          : 'aucune ligne écrite - les rôles `membre` / `administrateur` existent-ils en base ?',
+      });
+      if (slug) poses++;
+    }
+
+    console.log(
+      `[réconciliation]   … ${Math.min(debut + lot.length, candidats.length)}/${candidats.length} compte(s) traité(s)`,
+    );
+  }
+
+  return poses;
+}
+
+/**
  * Aligne sur la règle posée par la recette du 2026-07-31 (F1) : un membre supprimé ne doit plus
  * pouvoir se connecter ni recevoir son mot de passe par SMS. `is_active = 0` ferme les deux
  * portes (`validateUser` refuse, `requestPasswordReset` n'envoie rien) et reste réversible.
@@ -489,6 +643,15 @@ async function run(): Promise<void> {
       if (desactives) {
         console.log(`[réconciliation] ${desactives} compte(s) de membre supprimé désactivé(s).`);
       }
+
+      // Après les créations : les comptes qui viennent de naître ont déjà leur ligne, ils ne
+      // seront donc pas repris ici.
+      const sansRole = await comptesSansAucuneLigneRole(ds);
+      if (sansRole.length) {
+        console.log(`\n[réconciliation] Pose du rôle par défaut (${sansRole.length} compte(s) sans ligne user_roles)…`);
+        const poses = await appliquerRolesParDefaut(ds, sansRole, rapport, userRoles);
+        console.log(`[réconciliation] ${poses}/${sansRole.length} rôle(s) posé(s).`);
+      }
     } else {
       // En simulation, on ne rejoue pas les garde-fous du service (ils lisent la base) : on
       // annonce seulement les cas que la règle écartera à coup sûr, pour que le décompte
@@ -517,6 +680,26 @@ async function run(): Promise<void> {
         `\n[réconciliation] Simulation : ${aCreer} compte(s) créable(s), ` +
           `${rapport.length - aCreer} écarté(s) sur ${rapport.length} membre(s) sans compte.`,
       );
+
+      const sansRole = await comptesSansAucuneLigneRole(ds);
+      for (const c of sansRole) {
+        rapport.push({
+          uuid: c.uuid,
+          phone: c.phone,
+          firstname: c.firstname,
+          lastname: c.lastname,
+          email: c.email,
+          user_uuid: c.user_uuid,
+          categorie: 'compte : sans ligne user_roles',
+          decision: `rôle à poser : ${Number(c.is_admin) === 1 ? 'administrateur' : 'membre'}`,
+          motif: '',
+        });
+      }
+      const admins = sansRole.filter((c) => Number(c.is_admin) === 1).length;
+      console.log(
+        `[réconciliation] Simulation : ${sansRole.length} rôle(s) à poser ` +
+          `(membre = ${sansRole.length - admins}, administrateur = ${admins}).`,
+      );
     }
 
     rapport.push(...(await anomaliesSignalees(ds)));
@@ -541,10 +724,21 @@ async function run(): Promise<void> {
           'must_change_password : le vrai mot de passe part par SMS à la 1re connexion. ' +
           'AUCUN SMS n’a été envoyé par ce seed.',
       );
-      if (diagApres.comptes_sans_user_roles > 0) {
+      console.log(
+        '[réconciliation] Rôles posés : effet visible après RECONNEXION côté écran ' +
+          '(`global_permissions` est calculé au login) ; côté API, sous 30 s (cache des droits).',
+      );
+      if (diagApres.comptes_sans_aucune_ligne_role > 0) {
         console.log(
-          `[réconciliation] ⚠️  ${diagApres.comptes_sans_user_roles} compte(s) restent sans ligne ` +
-            '`user_roles` (antérieurs à ce seed) : `node scripts/seed-user-roles.js --apply`.',
+          `[réconciliation] ⚠️  ${diagApres.comptes_sans_aucune_ligne_role} compte(s) restent sans ` +
+            'aucune ligne `user_roles` : vérifier que les rôles `membre` / `administrateur` ' +
+            'existent bien dans `roles` (`node scripts/setup-3-roles.js`).',
+        );
+      }
+      if (diagApres.comptes_role_inactif_ou_supprime > 0) {
+        console.log(
+          `[réconciliation] ⚠️  ${diagApres.comptes_role_inactif_ou_supprime} compte(s) ont une ligne ` +
+            '`user_roles` inactive ou supprimée - à RÉACTIVER (voir le rapport), non traité ici.',
         );
       }
     }
