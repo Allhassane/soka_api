@@ -509,12 +509,34 @@ services) : abonnements et dons.
   qui ne partait pas. ⚠️ **Contrepartie** : l'endpoint est **public** et permet donc de tester si un
   numéro a un compte ; le cooldown étant **par numéro**, il ne borne pas un balayage - **rate-limit
   par IP à poser** (non fait).
-  ⚠️ **`AuthService.RESET_COOLDOWN_SECONDS` (300 s) est la seule source du délai** : il sert à
+  ⚠️ **`AuthService.RESET_COOLDOWN_SECONDS` (86 400 s = 24 h) est la seule source du délai** : il sert à
   l'anti-spam serveur **et** est renvoyé au client, qui en fait son compte à rebours et désactive
   son bouton d'envoi. Le figer en dur côté web ferait diverger l'écran et le refus 429.
   ⚠️ Invariants à ne pas casser : sur échec d'envoi, le mot de passe **n'est pas écrit** (le membre
   ne l'a jamais reçu) **et aucun cooldown n'est posé** (une panne fournisseur ne doit pas enfermer
-  le membre 5 min). Verrouillés par `auth/auth.service.spec.ts`.
+  le membre 24 h). Verrouillés par `auth/auth.service.spec.ts`.
+- **🔢 Le mot de passe envoyé par SMS fait 4 CHIFFRES** (depuis le 2026-08-02 ; avant : 6 lettres +
+  3 chiffres). `AuthService.generatePassword()` tire sur `crypto.randomInt` et **conserve les zéros
+  de tête** (`0482` est valide) : le mot de passe est une **chaîne**, jamais un nombre.
+  ⚠️ **Ne jamais passer le champ de saisie en `<input type="number">`** - il mange le zéro de tête et
+  refuserait les mots de passe **alphanumériques encore en base** (aucun compte n'a été réinitialisé :
+  bcrypt compare, la longueur ne l'intéresse pas). Aucune règle de longueur côté DTO ni côté zod : en
+  ajouter une fermerait la porte à l'une des deux générations de mots de passe.
+  ⚠️ **10 000 valeurs possibles et AUCUNE limitation des tentatives de login** : un balayage complet
+  est à portée de script. Dette assumée le 2026-08-02, à couvrir par un verrou par compte/IP sur
+  `POST /auth/login` (rien de tel n'existe aujourd'hui).
+- **⏳ La fenêtre anti-relance vit en BASE (`users.sending_at`), plus en mémoire** (2026-08-02) : sur
+  24 h, un redémarrage de l'API aurait rouvert la porte à tout le monde. Trois colonnes historiques du
+  schéma, jamais alimentées jusque-là, portent désormais le parcours : **`sending_at`** (date du dernier
+  mot de passe envoyé, écrite dans le MÊME `update()` que le mot de passe), **`is_sent`**, et
+  **`is_connected`** (posée à la 1re session délivrée par `login()`, un seul UPDATE dans la vie du
+  compte). Aucune migration : les colonnes existent depuis l'origine.
+  ⚠️ **Les DEUX portes d'entrée alimentent la même date** - `handleFirstLogin` comme
+  `requestPasswordReset`. Sans ça, une 1re connexion suivie d'une demande immédiate enverrait deux
+  mots de passe (le second annulant le premier) au prix de 4 SMS.
+  ⚠️ Le refus **rappelle le jour et l'heure** de l'envoi précédent (`formatSentAt`, fuseau
+  **`Africa/Abidjan` explicite**) : le but est que le membre retrouve son SMS, pas qu'il patiente.
+  ⚠️ Une `sending_at` **future** (horloge décalée) ne bloque pas - sinon le verrou n'aurait pas de sortie.
 - **Login = phone_number + password**, pas email. Le guard local attend ces champs.
 - **Migrations manuelles.** `synchronize` doit rester **off** ; passer par
   `migration:generate` / `migration:run`. Ne jamais laisser TypeORM modifier `soka_db` en auto.

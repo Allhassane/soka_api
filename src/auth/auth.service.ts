@@ -14,6 +14,7 @@ import { ENFORCED_PERMISSION_SLUGS } from './decorators/require-permissions.deco
 import { AccessScopeService } from 'src/access-scope/access-scope.service';
 import { UserRoleService } from 'src/user-roles/user-roles.service';
 import * as bcrypt from 'bcrypt';
+import { randomInt } from 'crypto';
 import { UserService } from '../users/user.service';
 import { User } from '../users/entities/user.entity';
 import { DecodedJwt, JwtPayload } from './interfaces/auth.interface';
@@ -104,6 +105,17 @@ export class AuthService {
   // mot de passe, on l'envoie par SMS, et le membre se reconnecte avec.
   if ((user as { must_change_password?: boolean }).must_change_password) {
     return this.handleFirstLogin(user);
+  }
+
+  // Trace de connexion : passé ce point, une session est délivrée - le compte a donc
+  // servi au moins une fois. La colonne existe depuis l'origine du schéma mais n'était
+  // alimentée par personne (0 compte marqué sur 7 886 au 2026-08-02).
+  // Écrit UNE seule fois dans la vie du compte : les connexions suivantes ne coûtent
+  // aucun UPDATE. On ne date pas la connexion (aucune colonne pour ça, et en ajouter
+  // une demanderait une migration) - `sending_at` reste la seule date du parcours.
+  if (!user.is_connected) {
+    await this.userRepository.update({ id: user.id }, { is_connected: true });
+    user.is_connected = true;
   }
 
   // Récupération des informations du membre associé AVANT de créer le payload
@@ -580,7 +592,17 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await this.userRepository.update(
       { id: user.id },
-      { password: hashedPassword, must_change_password: false },
+      {
+        password: hashedPassword,
+        must_change_password: false,
+        // Même trace que « mot de passe oublié » : ce membre a reçu un mot de passe,
+        // et c'est cette date qui lui sera opposée s'il en redemande un dans les 24 h.
+        // La marquer ici est ce qui rend la fenêtre cohérente entre les deux portes
+        // d'entrée : sans ça, une 1re connexion suivie d'une demande immédiate enverrait
+        // deux mots de passe (le second annulant le premier) au prix de 4 SMS.
+        is_sent: true,
+        sending_at: new Date(),
+      },
     );
 
     return {
@@ -592,15 +614,15 @@ export class AuthService {
     };
   }
 
-  // Anti-spam du « mot de passe oublié » : au plus 1 envoi par numéro toutes les 5 min
-  // (en mémoire, donc remis à zéro par un redémarrage - c'est un garde-fou de confort,
-  // pas une protection contre un attaquant).
+  // Anti-spam du « mot de passe oublié » : au plus 1 envoi par compte toutes les 24 h.
+  // ⚠️ La fenêtre est PERSISTÉE en base (`users.sending_at`), plus en mémoire : sur 24 h,
+  // un simple redémarrage de l'API aurait remis tout le monde à zéro - et la fenêtre
+  // suivait le NUMÉRO SAISI, alors qu'elle porte désormais sur le COMPTE trouvé.
   // ⚠️ Cette durée est renvoyée au client (`retry_after`) et pilote le compte à rebours de
   // la page « Recevoir mon mot de passe » : elle est la SEULE source de vérité du délai.
   // Ne pas la recopier en dur côté web, les deux divergeraient.
-  static readonly RESET_COOLDOWN_SECONDS = 5 * 60;
+  static readonly RESET_COOLDOWN_SECONDS = 24 * 60 * 60;
   private readonly resetCooldownMs = AuthService.RESET_COOLDOWN_SECONDS * 1000;
-  private readonly lastResetByPhone = new Map<string, number>();
 
   /**
    * « Mot de passe oublié » / 1re connexion (1 étape) : génère un nouveau mot de passe
@@ -634,16 +656,29 @@ export class AuthService {
       );
     }
 
-    // Anti-spam : une relance trop rapprochée est refusée EXPLICITEMENT. Elle était
-    // auparavant ignorée en silence, ce qui affichait un faux « SMS envoyé » - le pire
-    // des deux mondes : aucun SMS ne partait et le membre n'en savait rien.
-    const last = this.lastResetByPhone.get(normalized);
-    const remainingMs = last ? this.resetCooldownMs - (Date.now() - last) : 0;
-    if (remainingMs > 0) {
+    // Anti-spam : une relance dans les 24 h est refusée EXPLICITEMENT, et le refus
+    // RAPPELLE LE JOUR ET L'HEURE de l'envoi précédent - c'est le sens même du blocage :
+    // le membre a déjà son mot de passe, on lui dit où le retrouver plutôt que de lui en
+    // envoyer un autre (qui annulerait le premier et coûterait 2 SMS de plus).
+    // ⚠️ La date vient de la BASE (`sending_at`), pas d'un compteur en mémoire : elle
+    // survit à un redémarrage de l'API, sans quoi la fenêtre de 24 h ne tiendrait pas.
+    const lastSentAt = user.sending_at ? new Date(user.sending_at) : null;
+    const elapsedMs =
+      lastSentAt && !Number.isNaN(lastSentAt.getTime())
+        ? Date.now() - lastSentAt.getTime()
+        : null;
+    // `elapsedMs < 0` = date future (horloge décalée, saisie manuelle en base) : on ne
+    // bloque pas sur une donnée incohérente, ce serait un verrou sans fin de sortie.
+    if (elapsedMs !== null && elapsedMs >= 0 && elapsedMs < this.resetCooldownMs) {
+      const remainingSeconds = Math.ceil(
+        (this.resetCooldownMs - elapsedMs) / 1000,
+      );
       throw new HttpException(
-        `Un mot de passe vient d'être envoyé à ce numéro. Patientez encore ${this.formatDelay(
-          Math.ceil(remainingMs / 1000),
-        )} avant de refaire une demande.`,
+        `Un mot de passe vous a déjà été envoyé par SMS le ${this.formatSentAt(
+          lastSentAt as Date,
+        )}. Reportez-vous à ce SMS pour vous connecter. Vous pourrez faire une nouvelle demande dans ${this.formatDelay(
+          remainingSeconds,
+        )}. Si vous ne l'avez pas reçu, contactez un administrateur.`,
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
@@ -678,11 +713,18 @@ export class AuthService {
       // défaut (must_change_password = true) verrait login() relancer handleFirstLogin, qui
       // régénère un autre mot de passe et ne délivre aucune session → « le mot de passe reçu
       // par SMS ne marche pas ».
-      { password: hashedPassword, must_change_password: false },
+      {
+        password: hashedPassword,
+        must_change_password: false,
+        // Trace de la demande + point de départ de la fenêtre de 24 h, écrits dans le
+        // MÊME update que le mot de passe : les deux ne peuvent pas diverger (un membre
+        // dont le mot de passe a changé sans date de blocage pourrait en redemander un
+        // aussitôt ; l'inverse le bloquerait sur un mot de passe jamais renouvelé).
+        // ⚠️ Écrit seulement APRÈS un envoi réussi - voir le 503 plus haut.
+        is_sent: true,
+        sending_at: new Date(),
+      },
     );
-
-    // Marque l'envoi (anti-spam) seulement quand un SMS part réellement.
-    this.lastResetByPhone.set(normalized, Date.now());
 
     return {
       message: 'Votre mot de passe vient de vous être envoyé par SMS.',
@@ -692,24 +734,53 @@ export class AuthService {
     };
   }
 
-  /** « 4 min 32 s », « 45 s » - délai d'attente lisible dans un message d'erreur. */
+  /**
+   * « 21 h 18 min », « 58 min », « 45 s » - délai d'attente lisible dans un message
+   * d'erreur. Les heures sont indispensables depuis que la fenêtre est passée à 24 h :
+   * « 1 278 min » ne se lit pas.
+   */
   private formatDelay(seconds: number): string {
-    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
     const rest = seconds % 60;
-    if (minutes <= 0) return `${rest} s`;
-    return rest > 0 ? `${minutes} min ${rest} s` : `${minutes} min`;
+    if (hours > 0) return minutes > 0 ? `${hours} h ${minutes} min` : `${hours} h`;
+    if (minutes > 0) return rest > 0 ? `${minutes} min ${rest} s` : `${minutes} min`;
+    return `${rest} s`;
   }
 
-  /** Mot de passe généré : 6 lettres minuscules suivies de 3 chiffres (ex. kdrmqa482). */
+  /**
+   * « dimanche 2 août 2026 à 22:34 » - le repère que le membre doit pouvoir retrouver
+   * dans sa messagerie. Fuseau **explicite** (Abidjan) : le serveur est aujourd'hui en
+   * UTC+0, donc identique, mais un déplacement d'hébergement ne doit pas décaler l'heure
+   * annoncée à un membre qui, lui, ne bouge pas.
+   */
+  private formatSentAt(date: Date): string {
+    return new Intl.DateTimeFormat('fr-FR', {
+      timeZone: 'Africa/Abidjan',
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  }
+
+  /**
+   * Mot de passe généré : **4 chiffres** (ex. 0482), demande produit du 2026-08-02.
+   *
+   * ⚠️ `randomInt` (crypto) et non `Math.random()` : sur un espace de 10 000 valeurs
+   * seulement, un générateur prédictible se devine à partir de quelques tirages observés.
+   * ⚠️ Les zéros de tête sont significatifs (`padStart`) : « 0482 » est un mot de passe
+   * valide, stocké et comparé comme une CHAÎNE. C'est la raison pour laquelle le champ de
+   * saisie ne doit jamais devenir un `<input type="number">` (il mange le zéro de tête,
+   * et refuserait au passage les mots de passe alphanumériques encore en base).
+   * ⚠️ Tirage uniforme, sans filtre des suites « faibles » (0000, 1234…) : retirer des
+   * valeurs réduit l'espace sans gêner un attaquant, qui les essaierait en premier de
+   * toute façon.
+   */
   private generatePassword(): string {
-    const letters = 'abcdefghijklmnopqrstuvwxyz';
-    const digits = '0123456789';
-    let out = '';
-    for (let i = 0; i < 6; i++)
-      out += letters[Math.floor(Math.random() * letters.length)];
-    for (let i = 0; i < 3; i++)
-      out += digits[Math.floor(Math.random() * digits.length)];
-    return out;
+    return randomInt(0, 10_000).toString().padStart(4, '0');
   }
 
 }
