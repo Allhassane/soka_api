@@ -19,6 +19,10 @@ import { AuthService } from './auth.service';
  * Verrouillé aussi : le mot de passe n'est JAMAIS écrit en base si le SMS n'est pas parti
  * (sinon le compte est perdu pour son propriétaire), et le cooldown n'est posé que sur un
  * envoi réel.
+ *
+ * Depuis le 2026-08-02 : le mot de passe fait **4 chiffres** et la fenêtre anti-relance est
+ * de **24 h, lue dans `users.sending_at`** (plus en mémoire) - un redémarrage de l'API ne
+ * doit plus rouvrir la porte, et le refus doit rappeler la date de l'envoi précédent.
  */
 
 const ACTIVE_USER = {
@@ -26,7 +30,11 @@ const ACTIVE_USER = {
   uuid: 'u-1',
   phone_number: '0749326623',
   is_active: true,
+  // Aucun mot de passe encore envoyé : le cas nominal.
+  sending_at: null as Date | null,
 };
+
+const HEURES = (n: number) => new Date(Date.now() - n * 60 * 60 * 1000);
 
 function makeService(
   opts: { user?: any; smsOk?: boolean } = {},
@@ -118,6 +126,39 @@ describe('AuthService.requestPasswordReset', () => {
     expect(typeof update.mock.calls[0][1].password).toBe('string');
   });
 
+  // Timeout élargi : chaque itération hache réellement en bcrypt coût 10 (~65 ms), c'est
+  // le hachage qui coûte, pas le tirage.
+  it('envoie un mot de passe de 4 chiffres, zéros de tête compris', async () => {
+    // 40 tirages : la longueur ne doit jamais varier. Sans `padStart`, un tirage < 1000
+    // partirait à 3 chiffres (« 482 ») - le membre saisirait alors un mot de passe plus
+    // court que celui annoncé et se croirait refusé à tort.
+    const vus = new Set<string>();
+    for (let i = 0; i < 40; i++) {
+      const { service, send } = makeService();
+      await service.requestPasswordReset(ACTIVE_USER.phone_number);
+      const message: string = send.mock.calls[0][0].message;
+      const found = /mot de passe est (\S+)\./.exec(message);
+      expect(found).not.toBeNull();
+      expect(found![1]).toMatch(/^\d{4}$/);
+      vus.add(found![1]);
+    }
+    // Garde-fou contre un mot de passe constant (une régression qui passerait toutes les
+    // autres assertions et donnerait le MÊME code à tous les membres).
+    expect(vus.size).toBeGreaterThan(20);
+  }, 30_000);
+
+  it("marque la demande en base (is_sent + sending_at) dans le même update", async () => {
+    const { service, update } = makeService();
+
+    await service.requestPasswordReset(ACTIVE_USER.phone_number);
+
+    const written = update.mock.calls[0][1];
+    expect(written.is_sent).toBe(true);
+    expect(written.sending_at).toBeInstanceOf(Date);
+    // Même écriture que le mot de passe : les deux ne peuvent pas diverger.
+    expect(typeof written.password).toBe('string');
+  });
+
   it('normalise le numéro saisi avec des espaces', async () => {
     const { service, send } = makeService();
 
@@ -126,17 +167,64 @@ describe('AuthService.requestPasswordReset', () => {
     expect(send.mock.calls[0][0].to).toBe(ACTIVE_USER.phone_number);
   });
 
-  it('refuse une relance trop rapprochée en 429, sans réenvoyer de SMS', async () => {
-    const { service, send } = makeService();
+  it('refuse une relance en 429 quand un envoi date de moins de 24 h', async () => {
+    const { service, send, update } = makeService({
+      user: { ...ACTIVE_USER, sending_at: HEURES(3) },
+    });
+
+    await expect(
+      service.requestPasswordReset(ACTIVE_USER.phone_number),
+    ).rejects.toMatchObject({ status: HttpStatus.TOO_MANY_REQUESTS });
+
+    // Aucun SMS, aucune écriture : le mot de passe déjà envoyé reste valable. Le
+    // régénérer invaliderait celui que le membre est peut-être en train de saisir.
+    expect(send).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('rappelle le jour et l’heure de l’envoi précédent dans le message de refus', async () => {
+    // C'est la demande produit : le membre doit pouvoir retrouver le SMS, pas seulement
+    // apprendre qu'il doit patienter.
+    const envoyeLe = new Date('2026-08-02T14:32:00Z');
+    const { service } = makeService({
+      user: { ...ACTIVE_USER, sending_at: envoyeLe },
+    });
+    jest.spyOn(Date, 'now').mockReturnValue(
+      envoyeLe.getTime() + 3 * 60 * 60 * 1000,
+    );
+
+    try {
+      await service.requestPasswordReset(ACTIVE_USER.phone_number);
+      throw new Error('aurait dû être refusé');
+    } catch (error: any) {
+      const message: string = error?.response ?? error?.message ?? '';
+      expect(message).toContain('2 août 2026');
+      expect(message).toContain('14:32'); // serveur en UTC = heure d'Abidjan
+      expect(message).toContain('21 h'); // délai restant, en heures et non en minutes
+    } finally {
+      jest.restoreAllMocks();
+    }
+  });
+
+  it('laisse passer une demande quand le dernier envoi a plus de 24 h', async () => {
+    const { service, send } = makeService({
+      user: { ...ACTIVE_USER, sending_at: HEURES(25) },
+    });
 
     await service.requestPasswordReset(ACTIVE_USER.phone_number);
-    const second = service.requestPasswordReset(ACTIVE_USER.phone_number);
 
-    await expect(second).rejects.toMatchObject({
-      status: HttpStatus.TOO_MANY_REQUESTS,
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('ne bloque pas sur une date d’envoi future (horloge décalée)', async () => {
+    // Une date future donnerait un délai restant supérieur à 24 h : le membre serait
+    // enfermé sans issue par une donnée incohérente.
+    const { service, send } = makeService({
+      user: { ...ACTIVE_USER, sending_at: HEURES(-5) },
     });
-    // Un seul SMS pour deux demandes : c'est tout l'objet du cooldown (chaque envoi
-    // coûte 2 SMS facturés en mode diffusion).
+
+    await service.requestPasswordReset(ACTIVE_USER.phone_number);
+
     expect(send).toHaveBeenCalledTimes(1);
   });
 
@@ -153,15 +241,17 @@ describe('AuthService.requestPasswordReset', () => {
   });
 
   it("ne pose PAS de cooldown quand l'envoi a échoué", async () => {
-    const { service } = makeService({ smsOk: false });
+    const { service, update } = makeService({ smsOk: false });
 
     await expect(
       service.requestPasswordReset(ACTIVE_USER.phone_number),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
 
-    // La 2e tentative doit repartir immédiatement (elle échoue pour la même raison, pas
-    // en 429) : bloquer 5 min après un envoi qui n'est jamais parti serait une punition
-    // pour une panne côté fournisseur.
+    // `sending_at` n'est pas écrit : c'est ce qui laisse la 2e tentative repartir
+    // immédiatement (elle échoue pour la même raison, pas en 429). Enfermer un membre
+    // 24 h après un envoi qui n'est jamais parti serait une punition pour une panne
+    // côté fournisseur - et, avec cette fenêtre-là, une journée entière sans accès.
+    expect(update).not.toHaveBeenCalled();
     await expect(
       service.requestPasswordReset(ACTIVE_USER.phone_number),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
