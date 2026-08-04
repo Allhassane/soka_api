@@ -370,6 +370,135 @@ export class SubscriptionPaymentService {
   }
 
 
+  /**
+   * SES PROPRES souscriptions : les lignes dont l'appelant est le **bénéficiaire**
+   * (« sa ligne d'abonnement ») ou le **payeur** (ce qu'il a réglé pour un tiers).
+   *
+   * ⚠️ Ne pas confondre avec `findAll`, qui rend les paiements de tout un périmètre
+   * hiérarchique sous `abonnements_paiements_voir` - droit refusé au rôle MEMBRE, d'où
+   * un membre qui souscrivait sans jamais revoir sa souscription. Ici le filtre n'est pas
+   * un périmètre mais **l'identité de l'appelant** : il n'y a donc rien à borner en plus,
+   * et aucune donnée d'un autre membre ne peut sortir - sauf le nom du bénéficiaire d'une
+   * ligne que l'appelant a lui-même payée, qu'il connaît déjà.
+   *
+   * ⚠️ Le membre est identifié par `users.member_uuid`, pas par l'uuid du compte : ce sont
+   * `beneficiary_uuid` / `actor_uuid` (des uuid de MEMBRES) qui portent la liaison. Un compte
+   * sans fiche membre n'a par construction aucune souscription - on rend une page vide plutôt
+   * que de laisser une comparaison sur `NULL` remonter des lignes au hasard.
+   */
+  async findMine(
+    admin_uuid: string,
+    subscription_uuid?: string,
+    page = 1,
+    limit = 10,
+  ) {
+    const user = await this.checkAdmin(admin_uuid);
+
+    const take = Number(limit) > 0 ? Number(limit) : 10;
+    const skip = (Number(page) - 1) * take;
+    const moi = user.member_uuid;
+
+    if (!moi) {
+      return { total: 0, page: Number(page), limit: take, data: [] };
+    }
+
+    /**
+     * Jointures manuelles : `SubscriptionPaymentEntity` n'a aucune relation ORM
+     * (« pattern B » du projet, liaison par uuid - cf. api/CLAUDE.md).
+     * - `payments` porte le statut qui fait foi (voir plus bas) ;
+     * - `members` donne les noms VIVANTS. Les colonnes `beneficiary_name` / `actor_name` de
+     *   la ligne sont un instantané pris au paiement : une fiche renommée depuis (la console
+     *   d'assistance corrige des identités) afficherait l'ancien nom.
+     * `members.uuid` est en utf8mb4 et les colonnes de liaison en latin1 : ce croisement-là
+     * est sans danger (MySQL convertit vers le sur-ensemble), c'est le mélange de DEUX
+     * collations utf8mb4 qui lève « Illegal mix of collations ».
+     */
+    const base = this.subscriptionPaymentRepo
+      .createQueryBuilder('sp')
+      .where('(sp.beneficiary_uuid = :moi OR sp.actor_uuid = :moi)', { moi });
+
+    if (subscription_uuid) {
+      base.andWhere('sp.subscription_uuid = :subscription_uuid', {
+        subscription_uuid,
+      });
+    }
+
+    const total = await base.clone().getCount();
+
+    const lignes = await base
+      .clone()
+      .leftJoin('payments', 'p', 'p.uuid = sp.payment_uuid')
+      .leftJoin('members', 'b', 'b.uuid = sp.beneficiary_uuid')
+      .leftJoin('members', 'a', 'a.uuid = sp.actor_uuid')
+      .select([
+        'sp.uuid AS subscription_payment_uuid',
+        'sp.subscription_uuid AS subscription_uuid',
+        'sp.amount AS amount',
+        'sp.quantity AS quantity',
+        'sp.status AS status',
+        'sp.created_at AS created_at',
+        'sp.beneficiary_uuid AS beneficiary_uuid',
+        'sp.beneficiary_name AS beneficiary_name',
+        'sp.actor_uuid AS actor_uuid',
+        'sp.actor_name AS actor_name',
+        'p.uuid AS payment_uuid',
+        'p.payment_status AS payment_status',
+        'b.firstname AS beneficiary_firstname',
+        'b.lastname AS beneficiary_lastname',
+        'a.firstname AS actor_firstname',
+        'a.lastname AS actor_lastname',
+      ])
+      .orderBy('sp.created_at', 'DESC')
+      .offset(skip)
+      .limit(take)
+      .getRawMany();
+
+    return {
+      total,
+      page: Number(page),
+      limit: take,
+      data: lignes.map((l) => ({
+        subscription_payment_uuid: l.subscription_payment_uuid,
+        subscription_uuid: l.subscription_uuid,
+        payment_uuid: l.payment_uuid ?? null,
+
+        /**
+         * ⚠️ Les DEUX statuts sont rendus, et l'écran affiche `payment_status` en premier.
+         * `subscription_payments.status` peut être en retard sur la réalité de l'argent :
+         * 23 lignes de la base sont restées « pending » alors que le paiement lié est
+         * « failed » (paiements repassés en échec directement en SQL, sans que la ligne
+         * d'abonnement suive). Annoncer « en attente » à un membre dont le paiement a
+         * échoué l'empêcherait de recommencer.
+         */
+        payment_status: l.payment_status ?? null,
+        status: l.status,
+
+        amount: Number(l.amount ?? 0),
+        quantity: Number(l.quantity ?? 1),
+        created_at: l.created_at,
+
+        beneficiary: {
+          uuid: l.beneficiary_uuid,
+          firstname: l.beneficiary_firstname ?? null,
+          lastname: l.beneficiary_lastname ?? null,
+          // Repli sur l'instantané : une fiche supprimée depuis ne doit pas rendre la
+          // ligne anonyme, le membre a bien payé pour quelqu'un.
+          name: l.beneficiary_name ?? null,
+        },
+        actor: {
+          uuid: l.actor_uuid,
+          firstname: l.actor_firstname ?? null,
+          lastname: l.actor_lastname ?? null,
+          name: l.actor_name ?? null,
+        },
+
+        /** Pour l'écran : « ma ligne » vs « souscrit pour un tiers ». */
+        is_beneficiary: l.beneficiary_uuid === moi,
+        is_actor: l.actor_uuid === moi,
+      })),
+    };
+  }
+
   async findAll(
     page = 1,
     limit = 20,
