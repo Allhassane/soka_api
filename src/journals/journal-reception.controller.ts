@@ -33,7 +33,7 @@ export class JournalReceptionController {
   // ⚠️ OU logique. Ce bloc est celui du **tableau de bord**, pas de l'écran Journal : son droit
   // nommé est `dashboard_consulter_actions_prioritaires`, accordé aux 3 rôles et exigé par aucune
   // route (audit §H4). Résultat pour un MEMBRE : « Impossible de charger les actions » en
-  // permanence, **et la requête relancée toutes les 60 s** — un 403 en boucle.
+  // permanence, **et la requête relancée toutes les 60 s** - un 403 en boucle.
   // Élargir le droit n'élargit pas la donnée : le service ne renvoie que le périmètre de
   // l'appelant (`getPriorityActions(req.user.uuid)`), donc pour un membre sa propre réception.
   @Get('priority-actions')

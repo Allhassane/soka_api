@@ -204,8 +204,8 @@ async exportMembersToExcel(
 
 
 // ⚠️ OU logique. Cette route génère un **Excel de tous les membres du périmètre, coordonnées
-// comprises** : la garder sous le seul `exports_voir_menu_exports` — le libellé d'une entrée de
-// NAVIGATION — revenait à faire d'un droit de menu un droit d'extraction (audit §H5). Le droit
+// comprises** : la garder sous le seul `exports_voir_menu_exports` - le libellé d'une entrée de
+// NAVIGATION - revenait à faire d'un droit de menu un droit d'extraction (audit §H5). Le droit
 // nommé est ajouté devant ; il est déjà à 1 pour ADMINISTRATEUR et RESPONSABLE, donc opérant
 // sans migration, et à 0 pour MEMBRE, qui n'y gagne rien.
 @Get('export/my-members/excel')

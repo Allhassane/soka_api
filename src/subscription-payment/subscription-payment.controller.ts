@@ -82,6 +82,44 @@ export class SubscriptionPaymentController {
 
 
   /**
+   * ⚠️ Déclarée AVANT `@Get(':uuid')`, comme « quota » : sinon le segment statique « mine »
+   * serait avalé par la route dynamique, qui chercherait un paiement d'uuid « mine ».
+   *
+   * Permission `..._creer` et non `..._voir` : `abonnements_paiements_voir` ouvre la liste
+   * des paiements de TOUT un périmètre hiérarchique (droit à 0 pour le rôle MEMBRE) ; cette
+   * route-ci ne rend que les lignes de l'appelant lui-même, donc exactement la population
+   * autorisée à souscrire. Réutiliser un slug déjà accordé évite en prime d'attendre une
+   * reconnexion : les droits d'affichage du web sont posés au login.
+   */
+  @Get('mine')
+  @RequirePermissions('abonnements_paiements_creer')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      "Mes souscriptions : les lignes dont je suis bénéficiaire ou payeur (pour un tiers)",
+  })
+  @ApiQuery({
+    name: 'subscription_uuid',
+    required: false,
+    description: 'Limiter à une campagne (fiche campagne). Omis = toutes campagnes.',
+  })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 10 })
+  async findMine(
+    @Request() req,
+    @Query('subscription_uuid') subscription_uuid?: string,
+    @Query('page') page = 1,
+    @Query('limit') limit = 10,
+  ) {
+    return this.subscriptionPaymentService.findMine(
+      req.user.uuid,
+      subscription_uuid,
+      +page,
+      +limit,
+    );
+  }
+
+  /**
    * ⚠️ Déclarée AVANT `@Get(':uuid')` : sinon le segment statique « quota » serait avalé par
    * la route dynamique, qui chercherait un paiement d'uuid « quota ».
    *
