@@ -43,6 +43,7 @@ import { MigrationModule } from './migration/migration.module';
 import { DonatePaymentModule } from './donate-payment/donate-payment.module';
 import { MemberTravelModule } from './member-travel/member-travel.module';
 import { MemberTransferModule } from './member-transfer/member-transfer.module';
+import { MemberRegistrationModule } from './member-registration/member-registration.module';
 import { SubscriptionPaymentModule } from './subscription-payment/subscription-payment.module';
 import { CinetpayCallbackController } from './payments/cinetpay.controller';
 // Module `statistique` supprimé le 2026-08-01 : 6 routes /stats/* sans aucun appelant web,
@@ -133,6 +134,7 @@ import { SokaPayModule } from './sokapay/sokapay.module';
     DonatePaymentModule,
     MemberTravelModule,
     MemberTransferModule,
+    MemberRegistrationModule,
     SubscriptionPaymentModule,
     LocationModule
     ,JournalModule

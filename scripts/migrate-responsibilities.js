@@ -6,7 +6,7 @@
  * 3) Crée les `responsibilities` (dédupliquées par slug du type, niveau mappé, rôle membre).
  * 4) Crée les `member_responsibilities` (lien membre -> responsabilité, priorité 'high').
  *
- * Idempotent (skip existant). Lit l'ancienne base `soka_db_old`, écrit dans `soka_db`.
+ * Idempotent (skip existant). Lit l'ancienne base `soka_db_old`, écrit dans la base active (`DB_NAME`).
  * Usage : node scripts/migrate-responsibilities.js
  */
 const mysql = require('mysql2/promise');
@@ -18,7 +18,7 @@ const slugify = (s) =>
     .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
 
 const DB = { host: 'localhost', port: 3306, user: 'root', password: '' };
-const NEW = process.env.DB_NAME || 'soka_db';
+const NEW = process.env.DB_NAME || 'soka_app';
 const OLD = process.env.OLD_DB_NAME || 'soka_db_old';
 
 (async () => {

@@ -1,16 +1,16 @@
 /**
  * Audit de dérive de schéma - SOKA
  * Compare le schéma ATTENDU par les entités TypeORM (source de vérité, via le dist compilé)
- * au schéma RÉEL de la base `soka_db` (information_schema).
+ * au schéma RÉEL de la base active (`DB_NAME`, défaut `soka_app`) via information_schema.
  *
  * Usage : depuis api/ →  npm run build  &&  node scripts/audit-schema.js
- * Pré-requis : MySQL local (soka_db) accessible avec les identifiants ci-dessous.
+ * Pré-requis : MySQL local (base `DB_NAME`) accessible avec les identifiants ci-dessous.
  */
 require('reflect-metadata');
 const { DataSource } = require('typeorm');
 const mysql = require('mysql2/promise');
 
-const DB = { host: 'localhost', port: 3306, user: 'root', password: '', database: 'soka_db' };
+const DB = { host: 'localhost', port: 3306, user: 'root', password: '', database: process.env.DB_NAME || 'soka_app' };
 
 const ds = new DataSource({
   type: 'mysql',

@@ -208,6 +208,28 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
     ],
   },
   {
+    name: 'Validation des enregistrements',
+    description:
+      'Circuit à deux signatures (district puis chapitre) entre la saisie d’un membre et sa création. Cf. docs/VALIDATION-MEMBRES.md.',
+    permissions: [
+      {
+        name: 'Accéder au menu des dossiers à valider',
+        slug: 'membres_voir_menu_validations',
+        defaults: { RESPONSABLE: true },
+      },
+      {
+        name: 'Valider un enregistrement au niveau district',
+        slug: 'membres_valider_district',
+        defaults: { RESPONSABLE: true },
+      },
+      {
+        name: 'Valider un enregistrement au niveau chapitre',
+        slug: 'membres_valider_chapitre',
+        defaults: { RESPONSABLE: true },
+      },
+    ],
+  },
+  {
     name: 'Importation des membres',
     description: 'Import de membres par fichier Excel : analyse, confirmation, échecs.',
     permissions: [

@@ -9,7 +9,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, In, IsNull, Repository } from 'typeorm';
 import { MemberEntity } from './entities/member.entity';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
@@ -20,6 +20,8 @@ import { MemberResponsibilityEntity } from 'src/member-responsibility/entities/m
 import { ResponsibilityService } from 'src/responsibilities/reponsibility.service';
 import { AccessoryService } from 'src/accessories/accessory.service';
 import { MemberAccessoryEntity } from 'src/member-accessories/entities/member-accessories.entity';
+import { MemberTravelEntity } from 'src/member-travel/entities/member-travel.entity';
+import { CommitteeMemberEntity } from 'src/committees/entities/committee-member.entity';
 import { UserService } from 'src/users/user.service';
 import { MemberAccountService } from 'src/users/member-account.service';
 import { ResponsibilityEntity } from 'src/responsibilities/entities/responsibility.entity';
@@ -121,7 +123,29 @@ export class MemberService {
   ) {}
 
 
-    async store(dto: CreateMemberDto, admin_uuid: string): Promise<MemberEntity> {
+    /**
+     * Crée réellement le membre : matricule, responsabilité, accessoires et **compte de
+     * connexion**, en une transaction.
+     *
+     * ⚠️ Depuis la validation à deux niveaux (`docs/VALIDATION-MEMBRES.md`), cette méthode n'est
+     * plus appelée directement par `POST /members` : le contrôleur passe par
+     * `MemberRegistrationService.submit()`, qui l'appelle soit tout de suite (étapes acquises
+     * d'office, règle R4), soit à la dernière signature. L'import de masse, lui, l'appelle
+     * toujours en direct - décision assumée (règle R12).
+     *
+     * @param options.manager  transaction en cours à réutiliser. Indispensable quand l'appelant
+     *   écrit d'autres lignes dans le même commit (le dossier de validation) : sans lui, un échec
+     *   après coup laisserait un membre créé et un dossier resté « en attente ».
+     * @param options.scopeAlreadyChecked  saute `assertStructureInScope`. **Réservé à la
+     *   validation d'un dossier** : le périmètre du déposant a été vérifié au dépôt et l'autorité
+     *   du signataire vient de l'être par R5 ; le rejouer bloquerait un dossier légitime dont le
+     *   déposant a changé de structure entre-temps.
+     */
+    async store(
+      dto: CreateMemberDto,
+      admin_uuid: string,
+      options: { manager?: EntityManager; scopeAlreadyChecked?: boolean } = {},
+    ): Promise<MemberEntity> {
       // --- Vérification admin ---
       const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
       if (!admin) {
@@ -138,7 +162,9 @@ export class MemberService {
        * reposer sur le formulaire. `assertStructureInScope` refuse aussi une création **sans**
        * structure pour un non-admin, sans quoi le membre échapperait à tout périmètre.
        */
-      await this.assertStructureInScope(dto.structure_uuid, admin_uuid);
+      if (!options.scopeAlreadyChecked) {
+        await this.assertStructureInScope(dto.structure_uuid, admin_uuid);
+      }
 
       // ---- Vérification civilité obligatoire ----
       // ⚠️ Garde explicite indispensable : `findOne({ where: { uuid: undefined } })` ne filtre
@@ -157,8 +183,14 @@ export class MemberService {
       }
 
       //  Génération du matricule unique
+      // ⚠️ `withDeleted()` est INDISPENSABLE : sans lui, TypeORM ajoute `deleted_at IS NULL`
+      // au query builder, donc supprimer (logiquement) le dernier membre créé fait retomber
+      // `lastMember` sur l'avant-dernier → le membre suivant **régénère le matricule du
+      // supprimé**. Et comme `UQ_members_matricule` n'est pas posé en base (cf. CLAUDE.md),
+      // le doublon passerait sans erreur. Une ligne soft-deletée occupe toujours son `id`.
       const lastMember = await this.memberRepo
         .createQueryBuilder('m')
+        .withDeleted()
         .orderBy('m.id', 'DESC')
         .getOne();
 
@@ -261,8 +293,10 @@ export class MemberService {
       }
 
       // ---- Écritures ATOMIQUES (membre + responsabilité + accessoires + compte) ----
+      // Réutilise la transaction de l'appelant quand il y en a une (validation d'un dossier),
+      // sinon en ouvre une. Les écritures elles-mêmes sont identiques dans les deux cas.
       let userCreated = false;
-      const saved = await this.memberRepo.manager.transaction(async (manager) => {
+      const ecrireMembre = async (manager: EntityManager) => {
         const savedMember = await manager.save(member);
 
         if (responsibility) {
@@ -296,7 +330,11 @@ export class MemberService {
           (await this.memberAccounts.reconcileAccount(savedMember, manager)) === 'created';
 
         return savedMember;
-      });
+      };
+
+      const saved = options.manager
+        ? await ecrireMembre(options.manager)
+        : await this.memberRepo.manager.transaction(ecrireMembre);
 
       // ---- Journalisation (hors transaction : uniquement après un commit réussi) ----
       if (userCreated) {
@@ -801,18 +839,43 @@ async findAll(
   }
 
   /**
-   * Suppression logique d’un membre, **et désactivation de son compte de connexion**.
+   * Suppression logique d’un membre : la fiche, **ses liaisons** et **son compte de connexion**.
    *
-   * ⚠️ Sans la seconde partie, supprimer un membre ne coupait pas son accès : le compte `users`
+   * ⚠️ Sans la partie compte, supprimer un membre ne coupait pas son accès : le compte `users`
    * restait `is_active = 1` avec son numéro, donc la personne pouvait encore demander son mot de
    * passe par SMS et se connecter alors que sa fiche n'existait plus (recette du 2026-07-31,
-   * anomalie F1). C'est `is_active` qui referme les deux portes : `validateUser` refuse la
-   * connexion (« Compte désactivé ») et `requestPasswordReset` n'envoie aucun SMS.
+   * anomalie F1).
    *
-   * On **désactive** plutôt que de supprimer le compte : la suppression du membre est elle-même
-   * logique (`softRemove`), le compte doit pouvoir suivre le même chemin si la fiche est
-   * restaurée. Les deux écritures sont dans une transaction - un membre supprimé dont le compte
-   * resterait actif est précisément le défaut qu'on corrige.
+   * ⚠️ **`softRemove(member)` ne touche AUCUNE liaison** : les `@OneToMany` de `MemberEntity`
+   * n'ont pas d'option `cascade` et ne sont de toute façon pas chargées ici. Il faut donc les
+   * soft-deleter explicitement, sinon le membre supprimé **reste responsable** (il continue de
+   * sortir de `structure.service.getCommittee()`, qui lit `member_responsibilities`) et reste
+   * listé dans ses comités. Les quatre tables portent toutes `deleted_at` (`DateTimeEntity`) et
+   * se filtrent sur `member_uuid`.
+   *
+   * ⚠️ Le filtre **`deleted_at: IsNull()`** n'est pas décoratif : `softDelete()` n'ajoute pas
+   * lui-même cette condition et **ré-estamperait** les lignes déjà supprimées avec une date
+   * neuve. On perdrait l'information « cette responsabilité avait déjà été retirée par la règle
+   * d'ancre lors d'un transfert » - et une future restauration la ferait revenir à tort.
+   *
+   * Le compte est **désactivé ET soft-deleté**, les deux ayant un rôle distinct :
+   * - `is_active = false` reste le signal lisible qu'auditent les seeds
+   *   (`seed:reconcile-member-accounts` traque « compte actif sur membre supprimé ») ;
+   * - le `softDelete` **libère le numéro de téléphone**. `MemberAccountService` refuse un numéro
+   *   déjà porté (`skipped_phone_taken`) via un `findOne`, qui **ignore les lignes soft-deletées** :
+   *   sans ça, recréer une fiche avec le même numéro donnait un membre **sans compte de
+   *   connexion, et sans la moindre erreur** - le défaut exact des 360 membres de l'import.
+   *   Il ferme aussi le login en amont de `is_active` (`findByLoginWithPassword` est un query
+   *   builder, donc filtré lui aussi).
+   *
+   * 👉 À reprendre quand la **restauration** sera implémentée : le numéro ayant pu être réattribué
+   * entre-temps et `users.phone_number` n'ayant **aucun index UNIQUE**, un `restore()` aveugle
+   * créerait deux comptes actifs sur le même numéro - donc un login ambigu. La restauration devra
+   * vérifier que le numéro est libre, et repasser par `ResponsibilityAnchorService` pour les
+   * responsabilités plutôt que de les rétablir telles quelles.
+   *
+   * Tout est dans une transaction : un membre supprimé dont le compte ou les responsabilités
+   * survivraient est précisément le défaut qu'on corrige.
    */
   async delete(uuid: string, admin_uuid: string): Promise<void> {
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
@@ -824,10 +887,24 @@ async findAll(
     await this.assertStructureInScope(member.structure_uuid, admin_uuid);
 
     let comptesDesactives = 0;
+    const liaisons = { responsabilites: 0, accessoires: 0, voyages: 0, comites: 0 };
+
     // `memberRepo.manager.transaction` : le même accès que la création de membre plus haut,
     // pour ne pas injecter une `DataSource` de plus dans un constructeur déjà chargé.
     await this.memberRepo.manager.transaction(async (manager) => {
       await manager.softRemove(member);
+
+      // Liaisons : séquentiel et non `Promise.all` - une transaction tient une seule
+      // connexion, des requêtes concurrentes dessus se marchent dessus.
+      const vivantes = { member_uuid: member.uuid, deleted_at: IsNull() };
+      liaisons.responsabilites =
+        (await manager.softDelete(MemberResponsibilityEntity, vivantes)).affected ?? 0;
+      liaisons.accessoires =
+        (await manager.softDelete(MemberAccessoryEntity, vivantes)).affected ?? 0;
+      liaisons.voyages =
+        (await manager.softDelete(MemberTravelEntity, vivantes)).affected ?? 0;
+      liaisons.comites =
+        (await manager.softDelete(CommitteeMemberEntity, vivantes)).affected ?? 0;
 
       const res = await manager.update(
         User,
@@ -835,6 +912,11 @@ async findAll(
         { is_active: false },
       );
       comptesDesactives = res.affected ?? 0;
+
+      await manager.softDelete(User, {
+        member_uuid: member.uuid,
+        deleted_at: IsNull(),
+      });
     });
 
     await this.logService.logAction(
@@ -843,7 +925,10 @@ async findAll(
       `Suppression logique du membre ${member.firstname} ${member.lastname}` +
         (comptesDesactives > 0
           ? ` - compte de connexion désactivé`
-          : ` - aucun compte de connexion rattaché`),
+          : ` - aucun compte de connexion rattaché`) +
+        ` - liaisons retirées : ${liaisons.responsabilites} responsabilité(s),` +
+        ` ${liaisons.accessoires} accessoire(s), ${liaisons.voyages} voyage(s),` +
+        ` ${liaisons.comites} comité(s)`,
     );
   }
 

@@ -53,7 +53,7 @@ export class AppConfigService {
   }
 
   get dbName(): string {
-    return this.config.get<string>('DB_NAME') ?? 'soka_db';
+    return this.config.get<string>('DB_NAME') ?? 'soka_app';
   }
 
   get nodeEnv(): AppEnv {

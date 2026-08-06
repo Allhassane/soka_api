@@ -26,6 +26,7 @@ import { DivisionEntity } from 'src/divisions/entities/division.entity';
 import { StructureEntity } from 'src/structure/entities/structure.entity';
 import { ResponsibilityEntity } from 'src/responsibilities/entities/responsibility.entity';
 import { MemberTransferModule } from 'src/member-transfer/member-transfer.module';
+import { MemberRegistrationModule } from 'src/member-registration/member-registration.module';
 
 @Module({
   imports: [
@@ -58,6 +59,11 @@ import { MemberTransferModule } from 'src/member-transfer/member-transfer.module
     // Règle d'ancre R8 (`ResponsibilityAnchorService`) : `PUT /members/:uuid` doit appliquer
     // la même règle que le workflow de transfert. Cf. `docs/TRANSFERT-MEMBRES.md` §5.
     MemberTransferModule,
+
+    // `POST /members` dépose un dossier de validation au lieu de créer un membre
+    // (`docs/VALIDATION-MEMBRES.md` R1). Cycle assumé : la validation rappelle
+    // `MemberService.store()` à la dernière signature.
+    forwardRef(() => MemberRegistrationModule),
 
     forwardRef(() => MemberResponsibilityModule),
   ],
