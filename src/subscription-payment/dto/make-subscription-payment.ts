@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsUUID,
   IsNotEmpty,
   IsNumber,
@@ -41,4 +42,24 @@ export class MakeSubscriptionPaymentDto {
   @Min(1)
   @IsOptional()
   quantity?: number;
+
+  @ApiPropertyOptional({
+    description:
+      "Referme les tentatives de paiement encore en cours pour ce bénéficiaire avant "
+      + "d'en engager une nouvelle. À n'envoyer qu'après un refus 409 `PENDING_ATTEMPT` "
+      + "portant `can_cancel: true`, et sur confirmation explicite du membre.",
+    example: true,
+    default: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  /**
+   * ⚠️ **Jamais de valeur par défaut à `true`, et jamais d'annulation implicite.** Une
+   * tentative « en cours » peut être un paiement en train d'aboutir : la refermer d'office
+   * ferait perdre au membre un règlement qu'il vient de valider chez son opérateur. Le
+   * drapeau n'existe que pour transporter un « oui » que le membre a réellement donné.
+   * ⚠️ Il ne contourne pas le seuil d'abandon : une tentative de moins de 15 minutes est
+   * refusée même avec ce drapeau (cf. `PendingAttemptService`).
+   */
+  cancel_pending?: boolean;
 }

@@ -16,6 +16,7 @@ import { DonatePaymentEntity } from 'src/donate-payment/entities/donate-payment.
 import { SubscriptionPaymentEntity } from 'src/subscription-payment/entities/subscription-payment.entity';
 import { StructureModule } from 'src/structure/structure.module';
 import { ExportJobModule } from '../export-async/export-job.module';
+import { PendingAttemptService } from './pending-attempt.service';
 
 
 @Module({
@@ -34,7 +35,10 @@ import { ExportJobModule } from '../export-async/export-job.module';
     CinetPayService,
     HubService,
     HubPaymentSyncCronService,
+    PendingAttemptService,
   ],
-  exports: [PaymentService, HubService],
+  // `PendingAttemptService` est exporté pour les DEUX modules qui encaissent (abonnements et
+  // zaimu) : la règle de sortie d'une tentative bloquée doit s'écrire une seule fois.
+  exports: [PaymentService, HubService, PendingAttemptService],
 })
 export class PaymentModule {}

@@ -21,6 +21,7 @@ import { DonateEntity } from 'src/donate/entities/donate.entity';
 import { DonateCategory } from 'src/shared/enums/donate.enum';
 import { SubscriptionPaymentEntity } from 'src/subscription-payment/entities/subscription-payment.entity';
 import { HubService } from 'src/payments/hub.service';
+import { PendingAttemptService } from 'src/payments/pending-attempt.service';
 import { EffectivePermissionsService } from 'src/access-scope/effective-permissions.service';
 
 @Injectable()
@@ -46,6 +47,9 @@ export class DonatePaymentService {
 
     private readonly paymentService: PaymentService,
     private readonly hubService: HubService,
+
+    /** Sortie des tentatives restées « en cours ». Partagé avec les abonnements. */
+    private readonly pendingAttempts: PendingAttemptService,
 
     /** Périmètre hiérarchique du demandeur (service @Global). */
     private readonly accessScopeService: AccessScopeService,
@@ -99,18 +103,55 @@ export class DonatePaymentService {
       );
     }
 
-    // Bloquer si un paiement est déjà en cours pour ce bénéficiaire
-    const inProgressPayment = await this.donateRepo.count({
-      where: {
-        donate_uuid: donate.uuid,
-        beneficiary_uuid: beneficiary.uuid,
-        status: In([GlobalStatus.INIT, GlobalStatus.PENDING]),
-      },
-    });
+    /**
+     * ── Tentative déjà en cours pour ce bénéficiaire ──
+     *
+     * Miroir strict des abonnements (`subscription-payment.service.ts`) : le refus reste,
+     * mais il gagne une **sortie**. Voir le raisonnement complet dans `PendingAttemptService` -
+     * HUB2 ne referme jamais une tentative abandonnée, le membre n'a pas `paiements_modifier`,
+     * et la ligne métier peut mentir sur l'état réel de l'argent.
+     *
+     * ⚠️ Les deux modules doivent rester alignés : c'est le même écran, le même geste et le
+     * même popup côté web. Une divergence ici se traduirait par un zaimu qui bloque là où un
+     * abonnement laisse passer, sans que rien ne l'explique à l'écran.
+     * ⚠️ Placé **avant** le contrôle de quota : la revue peut créditer un paiement dont la
+     * notification s'était perdue, et le quota doit en tenir compte.
+     */
+    const beneficiaryLabel = `${beneficiary.firstname} ${beneficiary.lastname}`;
+    const review = await this.pendingAttempts.review(
+      'donate',
+      donate.uuid,
+      beneficiary.uuid,
+    );
 
-    if (inProgressPayment > 0) {
-      throw new BadRequestException(
-        'Un paiement est déjà en cours pour ce bénéficiaire sur cette campagne.',
+    if (review.settled_paid > 0) {
+      throw this.pendingAttempts.conflictAlreadyPaid(review.settled_paid);
+    }
+
+    if (review.open.length > 0) {
+      if (!dto.cancel_pending || !review.stale) {
+        throw this.pendingAttempts.conflictFor(review, beneficiaryLabel);
+      }
+
+      const outcome = await this.pendingAttempts.cancelAll(
+        'donate',
+        donate.uuid,
+        beneficiary.uuid,
+      );
+
+      if (outcome.paid > 0) {
+        throw this.pendingAttempts.conflictAlreadyPaid(outcome.paid);
+      }
+
+      if (outcome.failed > 0) {
+        throw this.pendingAttempts.conflictCancelFailed(outcome.failed);
+      }
+
+      await this.logService.logAction(
+        'donate-payment-cancel-pending',
+        admin.id,
+        `${outcome.canceled} tentative(s) refermée(s) pour ${beneficiary.uuid} `
+        + `sur la campagne ${donate.uuid}`,
       );
     }
 
@@ -141,7 +182,6 @@ export class DonatePaymentService {
      * `GET /donate-payments/quota` : deux copies de la règle finissent toujours par diverger.
      */
     const maxPerBeneficiary = donate.max_payments_per_beneficiary;
-    const beneficiaryLabel = `${beneficiary.firstname} ${beneficiary.lastname}`;
 
     if (maxPerBeneficiary && maxPerBeneficiary > 0) {
       const alreadyPaid = await this.sumPaidQuantity(
@@ -575,12 +615,20 @@ export class DonatePaymentService {
     const max = campaign.max_payments_per_beneficiary;
     const paid = await this.sumPaidQuantity(donateUuid, beneficiary.uuid);
 
+    // Photographie en base, sans appel au guichet - cf. la note du quota des abonnements.
+    const pendingAttempt = await this.pendingAttempts.snapshot(
+      'donate',
+      donateUuid,
+      beneficiary.uuid,
+    );
+
     return {
       donate_uuid: donateUuid,
       beneficiary_uuid: beneficiary.uuid,
       max_payments_per_beneficiary: max && max > 0 ? max : null,
       paid,
       remaining: max && max > 0 ? Math.max(0, max - paid) : null,
+      pending_attempt: pendingAttempt.count > 0 ? pendingAttempt : null,
     };
   }
 

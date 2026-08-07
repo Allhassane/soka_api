@@ -15,6 +15,7 @@ import { MemberEntity } from 'src/members/entities/member.entity';
 import { MakeSubscriptionPaymentDto } from './dto/make-subscription-payment';
 import { PaymentSource } from 'src/payments/dto/create-payment.dto';
 import { PaymentService } from 'src/payments/payment.service';
+import { PendingAttemptService } from 'src/payments/pending-attempt.service';
 import axios from 'axios';
 import { In } from 'typeorm';
 import { PaymentStatus } from 'src/payments/entities/payment.entity';
@@ -41,6 +42,11 @@ export class SubscriptionPaymentService {
 
     private readonly paymentService: PaymentService,
 
+    /**
+     * Sortie des tentatives restées « en cours ». Partagé avec le zaimu : la règle qui
+     * décide si un membre peut recommencer ne doit exister qu'à un seul endroit.
+     */
+    private readonly pendingAttempts: PendingAttemptService,
 
     /** Périmètre hiérarchique du demandeur (service @Global). */
     private readonly accessScopeService: AccessScopeService,
@@ -95,19 +101,70 @@ export class SubscriptionPaymentService {
       );
     }
 
-    // Bloquer si un paiement est déjà en cours pour ce bénéficiaire
-    const inProgressPayment = await this.subscriptionPaymentRepo.count({
-      where: {
-        subscription_uuid: subscription.uuid,
-        beneficiary_uuid: beneficiary.uuid,
-        status: In([GlobalStatus.INIT, GlobalStatus.PENDING]),
-      },
-    });
+    /**
+     * ── Tentative déjà en cours pour ce bénéficiaire ──
+     *
+     * Le refus lui-même est nécessaire : sans lui, un membre qui rafraîchit sa page
+     * enchaîne les liens de paiement et peut être débité plusieurs fois. Mais il n'avait
+     * **aucune sortie**, et c'est ce qui en faisait un piège :
+     * - HUB2 ne referme jamais une tentative abandonnée, il la remet en attente : le temps
+     *   ne débloque rien, et la synchronisation périodique non plus ;
+     * - le membre n'a ni bouton ni droit pour la refermer (`paiements_modifier` ne lui est
+     *   pas accordé, et le lui donner ouvrirait la modification de tout paiement) ;
+     * - `subscription_payments.status` peut par ailleurs **mentir** (23 lignes `pending`
+     *   dont le paiement est `fail`), et bloquait alors sur un échec avéré.
+     * Au 2026-08-07 : **151 couples (campagne, bénéficiaire)** bloqués sans issue, dont 83
+     * n'avaient jamais réussi un paiement sur la campagne.
+     *
+     * ⚠️ **Chemin rapide préservé** : sans ligne bloquante, `review()` ne fait qu'une
+     * requête et n'appelle pas le guichet. Le coût n'est payé que par ceux qui sont bloqués.
+     * ⚠️ **La revue est placée AVANT le contrôle de quota** : elle peut créditer un paiement
+     * dont la notification s'était perdue, et le quota doit compter ce paiement-là.
+     */
+    const beneficiaryLabel = `${beneficiary.firstname} ${beneficiary.lastname}`;
+    const review = await this.pendingAttempts.review(
+      'subscription',
+      subscription.uuid,
+      beneficiary.uuid,
+    );
 
+    /**
+     * La revue a découvert un paiement **abouti**. On s'arrête là, même si le quota
+     * autoriserait un paiement de plus : le membre a cliqué « payer » en croyant que rien
+     * n'était passé. Il ré-engagera de lui-même s'il le veut vraiment.
+     */
+    if (review.settled_paid > 0) {
+      throw this.pendingAttempts.conflictAlreadyPaid(review.settled_paid);
+    }
 
-    if (inProgressPayment > 0) {
-      throw new BadRequestException(
-        'Un paiement est déjà en cours pour ce bénéficiaire sur cette campagne.',
+    if (review.open.length > 0) {
+      // Le membre n'a pas (encore) demandé à repartir de zéro, ou la tentative est trop
+      // récente pour être un abandon : on refuse en disant quoi faire.
+      if (!dto.cancel_pending || !review.stale) {
+        throw this.pendingAttempts.conflictFor(review, beneficiaryLabel);
+      }
+
+      const outcome = await this.pendingAttempts.cancelAll(
+        'subscription',
+        subscription.uuid,
+        beneficiary.uuid,
+      );
+
+      if (outcome.paid > 0) {
+        throw this.pendingAttempts.conflictAlreadyPaid(outcome.paid);
+      }
+
+      // Une tentative qu'on n'a pas su refermer reste encaissable : ne pas en ouvrir une
+      // seconde par-dessus.
+      if (outcome.failed > 0) {
+        throw this.pendingAttempts.conflictCancelFailed(outcome.failed);
+      }
+
+      await this.logService.logAction(
+        'subscription-payment-cancel-pending',
+        admin.id,
+        `${outcome.canceled} tentative(s) refermée(s) pour ${beneficiary.uuid} `
+        + `sur la campagne ${subscription.uuid}`,
       );
     }
 
@@ -142,7 +199,6 @@ export class SubscriptionPaymentService {
      * membre pour une tentative qu'il n'a jamais menée à bout.
      */
     const maxPerBeneficiary = subscription.max_payments_per_beneficiary;
-    const beneficiaryName = `${beneficiary.firstname} ${beneficiary.lastname}`;
 
     if (maxPerBeneficiary && maxPerBeneficiary > 0) {
       const alreadyPaid = await this.sumPaidQuantity(
@@ -153,13 +209,13 @@ export class SubscriptionPaymentService {
 
       if (remaining <= 0) {
         throw new BadRequestException(
-          `${beneficiaryName} a déjà réglé le maximum de ${maxPerBeneficiary} paiement(s) autorisé(s) pour cette campagne.`,
+          `${beneficiaryLabel} a déjà réglé le maximum de ${maxPerBeneficiary} paiement(s) autorisé(s) pour cette campagne.`,
         );
       }
 
       if (quantity > remaining) {
         throw new BadRequestException(
-          `Il ne reste que ${remaining} paiement(s) possible(s) pour ${beneficiaryName} sur cette campagne (maximum ${maxPerBeneficiary}, déjà réglé ${alreadyPaid}).`,
+          `Il ne reste que ${remaining} paiement(s) possible(s) pour ${beneficiaryLabel} sur cette campagne (maximum ${maxPerBeneficiary}, déjà réglé ${alreadyPaid}).`,
         );
       }
     }
@@ -621,12 +677,25 @@ export class SubscriptionPaymentService {
     const max = subscription.max_payments_per_beneficiary;
     const paid = await this.sumPaidQuantity(subscriptionUuid, beneficiaryUuid);
 
+    /**
+     * ⚠️ **Photographie en base, sans appel au guichet.** Cette route est appelée au
+     * chargement de l'écran : y brancher la vérification ferait partir un appel réseau par
+     * affichage de page pour tout membre bloqué. Elle sert seulement à **prévenir avant le
+     * clic** ; c'est l'initiation qui vérifie et qui tranche.
+     */
+    const pendingAttempt = await this.pendingAttempts.snapshot(
+      'subscription',
+      subscriptionUuid,
+      beneficiaryUuid,
+    );
+
     return {
       subscription_uuid: subscriptionUuid,
       beneficiary_uuid: beneficiaryUuid,
       max_payments_per_beneficiary: max && max > 0 ? max : null,
       paid,
       remaining: max && max > 0 ? Math.max(0, max - paid) : null,
+      pending_attempt: pendingAttempt.count > 0 ? pendingAttempt : null,
     };
   }
 
