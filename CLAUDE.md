@@ -222,8 +222,8 @@ services) : abonnements et dons.
   AUTO_INCREMENT ni DEFAULT** alors que l'entité déclare `@PrimaryGeneratedColumn() id: number` :
   tout INSERT via l'ORM échoue (« Field 'id' doesn't have a default value »). Passer par
   **`RoleService.insertRole()`** (INSERT explicite, `id` = `uuid` généré côté Node - comme les
-  lignes historiques). ⚠️ **Ne pas “corriger” le type de la PK** : `ResponsibilityEntity` et
-  `UserRole` déclarent des `@JoinColumn({ referencedColumnName: 'id' })` dessus. Les lectures, elles,
+  lignes historiques). ⚠️ **Ne pas “corriger” le type de la PK** : `UserRole` déclare encore un
+  `@JoinColumn({ referencedColumnName: 'id' })` dessus. Les lectures, elles,
   fonctionnent déjà (TypeORM rend une string dans un champ typé `number`).
   Corollaire : toute écriture dans `roles_permissions` met **`role_id = permission_id = 0`** et teste
   l'existence sur les `*_uuid` - jamais sur `role.id`, qui est une string.

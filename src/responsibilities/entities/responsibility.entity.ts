@@ -62,11 +62,14 @@ export class ResponsibilityEntity extends DateTimeEntity {
   @Column({ type: 'varchar', length: 36, nullable: true })
   @IsNotEmpty()
   role_uuid?: string;
-  @ManyToOne(() => Role, (role) => role.id, {
+
+  // Lien réel porté par role_uuid (role_id est NULL sur toutes les lignes).
+  // Pas de relation inverse déclarée côté `Role` : on omet le 2e argument.
+  @ManyToOne(() => Role, {
     nullable: true,
     onDelete: 'SET NULL',
   })
-  @JoinColumn({ name: 'role_id', referencedColumnName: 'id' })
+  @JoinColumn({ name: 'role_uuid', referencedColumnName: 'uuid' })
   role?: Role;
 
   @BeforeInsert()
