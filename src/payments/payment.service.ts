@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException,ForbiddenException, ConflictException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException,ForbiddenException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { AccessScopeService } from 'src/access-scope/access-scope.service';
 import { In, Repository } from 'typeorm';
@@ -32,9 +32,15 @@ import {
   HubPaymentSyncBatchResult,
   HubPaymentSyncResult,
 } from './types/hub-payment-sync-result.type';
+import { CRON_ABANDON_AFTER_HOURS } from './abandon.constants';
+
+/** Interrogations du guichet menées de front pendant une synchronisation en masse. */
+const SYNC_CONCURRENCY = 5;
 
 @Injectable()
 export class PaymentService {
+  private readonly logger = new Logger(PaymentService.name);
+
   constructor(
     @InjectRepository(PaymentEntity)
     private paymentRepo: Repository<PaymentEntity>,
@@ -604,8 +610,38 @@ export class PaymentService {
     await this.updateLinkedEntities(payment, GlobalStatus.CANCELED);
   }
 
+  /**
+   * Synchronise les paiements encore en attente auprès du guichet.
+   *
+   * 🚨 **Deux défauts de cette méthode ont coûté 585 000 XOF encaissés et jamais crédités**
+   * (mesuré le 2026-08-07 en croisant `soka_db` et la base du guichet) :
+   *
+   * **① Le tri était `created_at ASC` avec un plafond.** La file comptait **349** paiements
+   * en attente, le plafond en traitait **200** - et les 38 encaissements perdus occupaient
+   * les rangs **202 à 349**. Aucun n'était dans la fenêtre.
+   * **② La tête de file est inextinguible.** Les 200 plus anciens n'avaient **aucune
+   * tentative de paiement** au guichet : le membre a ouvert le lien et n'a rien engagé. HUB2
+   * répond alors `paid: false, payment: null` **indéfiniment**, ce qui se traduit par « en
+   * attente ». Ces 200 lignes monopolisaient donc la fenêtre **pour toujours**, rejouées
+   * toutes les 10 minutes pour rien, pendant que les paiements récents s'empilaient derrière
+   * sans jamais être vus. L'angle mort s'est ouvert le jour où la file a franchi 200, et il
+   * s'élargissait chaque jour (0 % de perte le 01/08, 32 % le 06/08, 7 sur 9 le 07/08).
+   *
+   * Trois changements, dans cet ordre d'importance :
+   * - **Tri du plus RÉCENT au plus ancien.** C'est la correction de fond : un paiement qui
+   *   vient d'être engagé est désormais **toujours en tête**, quelle que soit la longueur de
+   *   la file. Le blocage de tête de file devient structurellement impossible.
+   * - **La file se vide** : une tentative sur laquelle aucun paiement n'a jamais été engagé
+   *   et qui dépasse `CRON_ABANDON_AFTER_HOURS` est refermée (voir `cloreTentativeAbandonnee`).
+   *   Sans ça, la file grossit sans fin et le cron interroge éternellement des liens morts.
+   * - **Plafond porté à 500** : matelas de sécurité, plus la garantie de fond.
+   *
+   * ⚠️ **Ne jamais revenir à un tri ASC.** Le plafond n'est pas le vrai garde-fou : c'est
+   * l'ordre. Avec un tri ASC, il suffit que la file dépasse le plafond pour que l'angle mort
+   * se rouvre - et il se rouvrira, puisque la file grossit avec l'usage.
+   */
   async syncAllPendingHubPayments(
-    limit = 200,
+    limit = 500,
   ): Promise<HubPaymentSyncBatchResult> {
     const pendingPayments = await this.paymentRepo
       .createQueryBuilder('p')
@@ -617,7 +653,8 @@ export class PaymentService {
       })
       .andWhere('p.transaction_id IS NOT NULL')
       .andWhere('p.transaction_id LIKE :prefix', { prefix: 'plink_%' })
-      .orderBy('p.created_at', 'ASC')
+      // 🚨 DESC, et pas ASC : cf. l'explication ci-dessus. Le plus récent d'abord.
+      .orderBy('p.created_at', 'DESC')
       .take(limit)
       .getMany();
 
@@ -626,29 +663,101 @@ export class PaymentService {
       paid: 0,
       failed: 0,
       pending: 0,
+      abandoned: 0,
       errors: 0,
     };
 
-    for (const payment of pendingPayments) {
-      result.processed += 1;
+    // Interrogations menées par petits lots : 500 appels en série, au timeout de 8 s chacun,
+    // pourraient dépasser l'intervalle de 10 min du cron et faire sauter des cycles entiers.
+    for (let i = 0; i < pendingPayments.length; i += SYNC_CONCURRENCY) {
+      const lot = pendingPayments.slice(i, i + SYNC_CONCURRENCY);
 
-      try {
-        const syncResult = await this.syncHubPaymentByTransactionId(
-          payment.transaction_id,
-        );
+      const verdicts = await Promise.all(
+        lot.map((payment) => this.syncOnePendingPayment(payment)),
+      );
 
-        if (syncResult.status === 'not_found') {
-          result.errors += 1;
-          continue;
-        }
-
-        result[syncResult.status] += 1;
-      } catch {
-        result.errors += 1;
+      for (const verdict of verdicts) {
+        result.processed += 1;
+        result[verdict] += 1;
       }
     }
 
     return result;
+  }
+
+  /** Sort d'un paiement en attente : ce qu'il est devenu après interrogation du guichet. */
+  private async syncOnePendingPayment(
+    payment: PaymentEntity,
+  ): Promise<'paid' | 'failed' | 'pending' | 'abandoned' | 'errors'> {
+    try {
+      const syncResult = await this.syncHubPaymentByTransactionId(
+        payment.transaction_id,
+      );
+
+      if (syncResult.status === 'not_found') return 'errors';
+      if (syncResult.status !== 'pending') return syncResult.status;
+
+      /**
+       * Toujours en attente. Deux situations très différentes derrière ce mot :
+       * - `hub_payment` renseigné ⇒ **le guichet connaît une tentative**. On n'y touche pas,
+       *   même vieille : rien ne permet d'exclure qu'elle aboutisse, et la refermer
+       *   autoriserait un second débit.
+       * - `hub_payment === null` ⇒ **aucun paiement n'a jamais été engagé** sur ce lien. Le
+       *   membre a ouvert la page et l'a quittée. Passé le délai, c'est un abandon certain.
+       */
+      const jamaisEngage = !syncResult.hub_payment;
+      if (jamaisEngage && this.depasseLeDelaiDAbandon(payment)) {
+        return (await this.cloreTentativeAbandonnee(payment))
+          ? 'abandoned'
+          : 'pending';
+      }
+
+      return 'pending';
+    } catch {
+      return 'errors';
+    }
+  }
+
+  private depasseLeDelaiDAbandon(payment: PaymentEntity): boolean {
+    const ageMs = Date.now() - new Date(payment.created_at).getTime();
+    return ageMs > CRON_ABANDON_AFTER_HOURS * 3600_000;
+  }
+
+  /**
+   * Referme une tentative abandonnée, **et désactive son lien au guichet**.
+   *
+   * ⚠️ **L'ordre et le couplage sont le point important.** Refermer la seule ligne locale
+   * laisserait le lien **actif** : un membre qui reviendrait dessus plus tard paierait
+   * réellement, sur une ligne que nous aurions déjà classée - c'est-à-dire exactement le
+   * bug qu'on est en train de corriger, par une autre porte. On passe donc par
+   * `cancelHubPaymentByTransactionId`, qui **désactive le lien** : plus aucun débit ne peut
+   * en partir, et il n'y a donc plus rien à rater.
+   *
+   * ⚠️ Cette méthode **ne peut pas effacer un paiement abouti** : la passerelle vérifie
+   * avant d'écrire et, si une tentative a réussi, elle n'annule rien et **enregistre
+   * l'encaissement** à la place. C'est ce qui rend le geste sûr en automatique.
+   */
+  private async cloreTentativeAbandonnee(
+    payment: PaymentEntity,
+  ): Promise<boolean> {
+    try {
+      const resultat = await this.cancelHubPaymentByTransactionId(
+        payment.transaction_id,
+      );
+
+      // La passerelle a découvert un encaissement : ce n'est pas un abandon, c'est un
+      // paiement qui vient d'être enregistré. Le compteur `paid` du cycle suivant le verra.
+      if (resultat.status === 'paid') return false;
+      return true;
+    } catch (error) {
+      // Guichet injoignable : on laisse la tentative en attente. Elle sera reprise au
+      // prochain passage - jamais refermée sur une panne réseau.
+      this.logger.warn(
+        `Abandon non refermé pour ${payment.transaction_id} : `
+        + `${(error as Error)?.message ?? 'erreur inconnue'}`,
+      );
+      return false;
+    }
   }
 
   /**
