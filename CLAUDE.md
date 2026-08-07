@@ -284,6 +284,46 @@ services) : abonnements et dons.
   - Les routes `quota` exposent `pending_attempt` **en lecture base seule** (elles sont appelées
     au chargement de l'écran : y brancher le guichet ferait un appel réseau par affichage).
 
+- **🚨 Cron de synchronisation : l'ORDRE compte plus que le plafond**
+  (`payments/hub-payment-sync.cron.ts` + `PaymentService.syncAllPendingHubPayments`).
+  Le tri était `created_at ASC` avec `take(200)`. Mesuré le 2026-08-07 en croisant `soka_db`
+  et la base du guichet : **585 000 XOF encaissés et jamais crédités**, sur 38 paiements.
+  - **Le mécanisme** : la file des paiements en attente comptait **349** lignes, le cron n'en
+    voyait que **200** - et les 38 encaissements perdus occupaient les rangs **202 à 349**.
+    Surtout, les 200 premiers n'avaient **aucune tentative de paiement** au guichet (le membre
+    a ouvert le lien et n'a rien engagé) : HUB2 répond alors `paid:false, payment:null`
+    **indéfiniment**, donc ils ne quittaient jamais la file et monopolisaient la fenêtre
+    **pour toujours**. L'angle mort s'est ouvert le jour où la file a franchi 200, et il
+    s'élargissait (0 % de perte le 01/08, 32 % le 06/08, 7 sur 9 le 07/08).
+  - ⚠️ **Ne jamais revenir à `ASC`.** Le tri est **`DESC`** : un paiement qui vient d'être
+    engagé est toujours en tête, quelle que soit la longueur de la file. Le plafond (500)
+    n'est qu'un matelas - c'est l'ordre qui rend le blocage de tête de file impossible.
+  - ⚠️ **La file doit DÉCROÎTRE.** Une tentative sans aucun paiement engagé et plus vieille
+    que `CRON_ABANDON_AFTER_HOURS` est refermée via `cancelHubPaymentByTransactionId`, qui
+    **désactive le lien**. Refermer la seule ligne locale laisserait un lien actif sur lequel
+    un paiement tardif serait perdu en silence - le même bug par une autre porte.
+  - ⚠️ **Deux seuils d'abandon, volontairement différents** (`payments/abandon.constants.ts`) :
+    **15 min** quand le membre demande lui-même à recommencer (il est là, il décide), **24 h**
+    quand le cron referme tout seul (personne ne valide, la marge doit être large). Ne pas les
+    fusionner.
+  - ⚠️ **On ne referme jamais une tentative que le guichet CONNAÎT**, même ancienne : rien ne
+    permet d'exclure qu'elle aboutisse. Seul `payment: null` (jamais engagée) autorise la
+    fermeture. Idem sur panne réseau : aucune fermeture.
+  - Le journal du cron porte un **avertissement de saturation** quand la file touche le
+    plafond. Le défaut d'origine était invisible : le cron annonçait fièrement « 200 traités »
+    pendant qu'il rejouait 200 liens morts.
+  - **Le cron vit DANS le processus de l'API** (`ScheduleModule.forRoot()` + `@Cron`), pas dans
+    un crontab système : `pm2 restart` le relance, mais le premier passage attend la prochaine
+    tranche de 10 min. ⚠️ `ecosystem.config.js` déclare `instances: 1` en `fork` - en `cluster`,
+    on aurait **N crons concurrents** sur le même guichet.
+  - **Deux commandes, à ne pas confondre** :
+    `npm run seed:reconcile-hub-payments` = **lecture stricte**, détecte les encaissements non
+    crédités, liste nominative, **code de sortie 1** s'il y en a (utilisable en sonde) ;
+    `npm run seed:sync-hub-payments` = **écrit**, rejoue un passage du cron à la demande (utile
+    juste après un déploiement, pour ne pas attendre 10 min). Le second **désarme les tâches
+    planifiées de son contexte** pour ne pas lancer un balayage concurrent de celui de l'API, et
+    n'embarque **aucune** logique propre : il appelle la méthode du cron.
+
 - **📡 Le filtre d'erreurs global laisse passer `data`, et rien d'autre**
   (`shared/interceptors/error.interceptor.ts`). Toute exception est aplatie en
   `{success, message, data, errors}` : un champ posé ailleurs dans l'exception **n'atteint pas

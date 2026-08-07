@@ -26,8 +26,12 @@ import { SubscriptionPaymentEntity } from 'src/subscription-payment/entities/sub
  * 15 minutes : au-delà, plus personne n'est devant l'écran de son opérateur ; en deçà, le
  * payeur est peut-être en train de saisir son code, et lui proposer d'annuler l'enverrait
  * payer deux fois.
+ *
+ * ⚠️ Le cron, lui, applique un seuil **bien plus large** (`CRON_ABANDON_AFTER_HOURS`) :
+ * il referme sans que personne ne l'ait demandé. Voir `abandon.constants.ts`.
  */
-export const ABANDON_THRESHOLD_MINUTES = 15;
+export { ABANDON_THRESHOLD_MINUTES } from './abandon.constants';
+import { ABANDON_THRESHOLD_MINUTES } from './abandon.constants';
 
 /** Nombre d'interrogations du guichet menées de front pendant une revue. */
 const VERIFY_CONCURRENCY = 5;
