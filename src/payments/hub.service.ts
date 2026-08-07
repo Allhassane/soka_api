@@ -58,6 +58,18 @@ export class HubService {
     process.env.HUB_API_URL ??
     'https://pay-api.sokagakkaici.org/api/v1/payment-links';
 
+  /**
+   * ⚠️ **Aucun appel au guichet ne doit pouvoir pendre indéfiniment.** Ces trois appels
+   * partaient sans `timeout` : par défaut axios attend **sans limite**, et un guichet qui
+   * accepte la connexion sans jamais répondre bloquait la requête HTTP (donc un worker Node)
+   * jusqu'à ce que le client abandonne. Le risque est devenu concret depuis que la
+   * vérification des tentatives en cours est appelée **sur le chemin de l'initiation d'un
+   * paiement** : plusieurs appels y sont enchaînés.
+   * 8 s, valeur déjà retenue par la console d'assistance (`SOKAPAY_TIMEOUT_MS`) face au
+   * même guichet. Un dépassement remonte en `ECONNABORTED`, traité comme une panne guichet.
+   */
+  private readonly timeoutMs = Number(process.env.HUB_TIMEOUT_MS ?? 8000);
+
   async initPayment(
     amount: number,
     title: string,
@@ -89,6 +101,7 @@ export class HubService {
             Authorization: `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
           },
+          timeout: this.timeoutMs,
         },
       );
 
@@ -147,6 +160,7 @@ export class HubService {
             Authorization: `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
           },
+          timeout: this.timeoutMs,
         },
       );
       return data;
@@ -184,6 +198,7 @@ export class HubService {
           headers: {
             Authorization: `Bearer ${this.apiKey}`,
           },
+          timeout: this.timeoutMs,
         },
       );
 
@@ -203,7 +218,23 @@ export class HubService {
         );
       }
 
-      console.error('Erreur Hub status :', error.response?.data ?? error.message);
+      /**
+       * ⚠️ Ce journal rendait `Erreur Hub status : ` **vide** quand le guichet répondait un
+       * corps vide (`?? ` ne se déclenche pas sur `''`) - le cron de synchronisation
+       * empilait donc des lignes muettes, 200 erreurs par passage sans jamais dire
+       * laquelle. On nomme systématiquement le code réseau et le statut HTTP, qui suffisent
+       * à trancher entre guichet éteint (`ECONNREFUSED`), guichet muet (`ECONNABORTED`,
+       * dépassement du timeout) et clé refusée (401).
+       */
+      const cause =
+        error.response?.data && error.response.data !== ''
+          ? JSON.stringify(error.response.data).slice(0, 300)
+          : error.message;
+
+      console.error(
+        `Erreur Hub status [${error.code ?? 'sans code'}]`
+        + `[HTTP ${error.response?.status ?? '-'}] ${transactionId} : ${cause}`,
+      );
 
       throw new InternalServerErrorException(
         `Erreur Hub : ${error.response?.data?.message ?? error.message}`,

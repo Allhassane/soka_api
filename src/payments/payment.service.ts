@@ -417,7 +417,17 @@ export class PaymentService {
     // C'est ce qui produisait le bug du 2026-08-01 - deuxième appareil (ou simple
     // F5) sur l'écran de résultat : `hub_payment` à null, et le web déclarait
     // « paiement non abouti » un paiement pourtant encaissé.
+    //
+    // 🚨 Elles doivent AUSSI réparer la ligne métier avant de répondre. Le statut du
+    // paiement est définitif ici, mais la ligne d'abonnement, elle, peut être restée en
+    // arrière : 23 lignes de la base sont `pending` alors que leur paiement est `fail`
+    // (paiements repassés en échec directement en SQL). Sans cette réparation, la synchro
+    // annonçait « échoué » tout en laissant la ligne bloquer indéfiniment une nouvelle
+    // souscription - le membre voyait son échec ET ne pouvait pas recommencer.
+    // `updateLinkedEntities` est idempotente : elle n'écrit que s'il y a un écart.
     if (payment.payment_status === PaymentStatus.PAID) {
+      await this.updateLinkedEntities(payment, GlobalStatus.SUCCESS);
+
       return this.buildHubPaymentSyncResult(
         'paid',
         payment,
@@ -429,6 +439,11 @@ export class PaymentService {
       payment.payment_status === PaymentStatus.FAILED
       || payment.payment_status === PaymentStatus.CANCELLED
     ) {
+      await this.updateLinkedEntities(
+        payment,
+        this.globalStatusFromPaymentStatus(payment.payment_status),
+      );
+
       return this.buildHubPaymentSyncResult(
         'failed',
         payment,
@@ -563,6 +578,30 @@ export class PaymentService {
       )),
       message: 'Tentative annulée : aucun débit ne peut plus partir de ce lien.',
     };
+  }
+
+  /**
+   * Referme un paiement dont **le guichet ne connaît plus le lien** (404 à l'annulation),
+   * sans le rappeler.
+   *
+   * ⚠️ Referme le paiement **ET** la ligne métier. Ne fermer que la ligne laissait un état
+   * bâtard, constaté en recette : l'abonnement passait `canceled` pendant que le paiement
+   * restait `pending` - le membre était débloqué, mais le cron de synchronisation
+   * continuait d'interroger le guichet pour ce lien à chaque passage, et la console
+   * d'assistance affichait toujours un ticket « paiement non abouti » sur une tentative
+   * refermée.
+   *
+   * ⚠️ Un 404 peut aussi trahir un guichet **mal configuré** (les liens de production sont
+   * inconnus d'un guichet sandbox, et réciproquement). On l'assume : laisser la tentative
+   * ouverte bloquerait le membre pour toujours sur un lien qui n'existe pas, et le geste
+   * n'est posé qu'à sa demande explicite d'annulation.
+   */
+  async closeUnknownPaymentLink(payment: PaymentEntity): Promise<void> {
+    await this.updatePayment(payment.uuid, {
+      status: GlobalStatus.CANCELED,
+      payment_status: PaymentStatus.CANCELLED,
+    });
+    await this.updateLinkedEntities(payment, GlobalStatus.CANCELED);
   }
 
   async syncAllPendingHubPayments(
@@ -1355,36 +1394,63 @@ async findTransactionsForSubGroupsExport(
   }
 
 
+  /**
+   * Reporte le statut d'un paiement sur la ligne métier qui le porte (abonnement ou zaimu).
+   *
+   * ⚠️ **Idempotente.** Elle n'écrit que si la ligne dit autre chose que le paiement. C'est
+   * ce qui permet de l'appeler sur des chemins de simple lecture (la synchro répond depuis la
+   * base à chaque F5 de l'écran de résultat) sans pousser un `UPDATE` ni faire bouger
+   * `updated_at` à chaque affichage.
+   */
   private async updateLinkedEntities(payment: PaymentEntity, status) {
+    let repaired = 0;
+
     const donation = await this.donatePaymentRepo.findOne({
       where: { payment_uuid: payment.uuid },
     });
 
-    if (donation) {
+    if (donation && donation.status !== status) {
       donation.status = status;
       await this.donatePaymentRepo.save(donation);
-
-      console.log(`Don mis à jour pour paiement ${payment.uuid}`);
-      //return { updated: 'donation', uuid: donation.uuid };
+      repaired += 1;
     }
 
     const subscription = await this.subscriptionPaymentRepo.findOne({
       where: { payment_uuid: payment.uuid },
     });
 
-    if (subscription) {
+    if (subscription && subscription.status !== status) {
       subscription.status = status;
       await this.subscriptionPaymentRepo.save(subscription);
-
-      console.log(`Abonnement mis à jour pour paiement ${payment.uuid}`);
-      //return { updated: 'subscription', uuid: subscription.uuid };
+      repaired += 1;
     }
 
-    console.warn(
-      ` Aucun Don ou Abonnement trouvé pour le paiement ${payment.uuid}`,
-    );
+    if (!donation && !subscription) {
+      console.warn(
+        `Aucun Don ou Abonnement trouvé pour le paiement ${payment.uuid}`,
+      );
+    }
 
-    //return { updated: null };
+    return repaired;
+  }
+
+  /**
+   * Statut métier correspondant à l'état d'argent d'un paiement.
+   * Point unique : la correspondance était réécrite à chaque appel de `updateLinkedEntities`.
+   */
+  private globalStatusFromPaymentStatus(
+    paymentStatus: PaymentStatus,
+  ): GlobalStatus | null {
+    switch (paymentStatus) {
+      case PaymentStatus.PAID:
+        return GlobalStatus.SUCCESS;
+      case PaymentStatus.FAILED:
+        return GlobalStatus.FAILED;
+      case PaymentStatus.CANCELLED:
+        return GlobalStatus.CANCELED;
+      default:
+        return null;
+    }
   }
 
 

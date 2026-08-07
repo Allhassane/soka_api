@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsUUID,
   IsNotEmpty,
   IsNumber,
@@ -58,4 +59,17 @@ export class MakeDonationPaymentDto {
   @Min(1)
   @IsOptional()
   quantity?: number;
+
+  @ApiPropertyOptional({
+    description:
+      "Referme les tentatives de paiement encore en cours pour ce bénéficiaire avant "
+      + "d'en engager une nouvelle. À n'envoyer qu'après un refus 409 `PENDING_ATTEMPT` "
+      + "portant `can_cancel: true`, et sur confirmation explicite du membre.",
+    example: true,
+    default: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  /** Mêmes garde-fous que côté abonnements - cf. `MakeSubscriptionPaymentDto`. */
+  cancel_pending?: boolean;
 }

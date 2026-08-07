@@ -29,6 +29,7 @@ describe('DonatePaymentService.confirmHubPayment - libellés de statut (contrat 
     null as never, // memberRepo
     paymentService as never, // paymentService
     null as never, // hubService
+    null as never, // pendingAttempts (jamais atteint : la revue n'a lieu qu'à l'initiation)
     null as never, // accessScopeService
     null as never, // effectivePermissions (jamais atteint : confirmHubPayment ne contrôle pas de tiers)
   );

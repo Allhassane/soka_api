@@ -234,6 +234,69 @@ services) : abonnements et dons.
   `SubscriptionPaymentEntity` / `DonatePaymentEntity` sur `beneficiary_uuid` (ou `actor_uuid`) -
   il n'y a pas de `@OneToMany` à charger via `relations:`.
 
+- **🚨 `subscription_payments.status` PEUT MENTIR : la vérité de l'argent est dans `payments`**
+  (relevé le 2026-08-04 sur `soka_db`). **23 lignes sont `pending` alors que le paiement lié est
+  `failed`** - les chemins applicatifs synchronisent bien les deux (`updateLinkedEntities`, appelé
+  par `syncHubPaymentByTransactionId`, l'annulation et `confirmPayment`), mais des paiements ont été
+  repassés en échec **directement en SQL** sans que la ligne d'abonnement suive (signature :
+  `payments.updated_at` sans microsecondes, `subscription_payments.updated_at` = `created_at`).
+  ⇒ **Tout affichage de statut lit `payments.payment_status` en premier**, la ligne d'abonnement ne
+  servant que de repli. Annoncer « en attente » sur un paiement échoué empêche le membre de refaire.
+
+- **👤 Self-service : `GET /subscription-payments/mine`** (2026-08-04) rend les lignes dont l'appelant
+  est **bénéficiaire OU payeur**. ⚠️ Son filtre n'est pas un périmètre hiérarchique mais une
+  **identité** : `beneficiary_uuid = moi OR actor_uuid = moi`, « moi » étant **`users.member_uuid`
+  résolu côté serveur** - ne jamais accepter d'uuid de membre en paramètre ici, ce serait la seule
+  façon d'en faire une fuite. Elle est sous **`abonnements_paiements_creer`** (et non `..._voir`, qui
+  ouvre la liste de toute l'organisation et reste refusée au MEMBRE) : même motif que la route
+  `quota` voisine - c'est l'écran de souscription, donc la population autorisée à payer.
+  ⚠️ Comme `quota`, elle est **déclarée avant `@Get(':uuid')`** : sinon le segment « mine » est avalé
+  par la route dynamique et l'appel finit en **403** (constaté).
+
+- **⏳ Tentative de paiement « en cours » : le refus a une SORTIE, et une seule mécanique**
+  (`payments/pending-attempt.service.ts`, 2026-08-07). Abonnements **et** zaimu refusent un
+  nouveau paiement tant qu'une ligne est `init`/`pending` pour le couple (campagne,
+  bénéficiaire). Ce refus reste nécessaire (sans lui, un F5 enchaîne les liens de paiement),
+  mais il n'avait aucune issue : au 2026-08-07, **477 lignes bloquaient 151 couples**, dont 83
+  n'avaient **jamais** réussi un paiement.
+  - **🚨 HUB2 ne referme JAMAIS une tentative abandonnée** : il remet l'intention en attente.
+    Ni le temps, ni le cron de synchronisation ne peuvent donc débloquer quoi que ce soit -
+    c'est l'**ancienneté** qui tranche. `ABANDON_THRESHOLD_MINUTES = 15` est la seule source du
+    seuil (repris dans le message, dans `retry_after_minutes` et dans `can_cancel`).
+  - **Chemin rapide intact** : sans ligne bloquante, `review()` fait **une** requête et
+    n'appelle pas le guichet. Le coût réseau n'est payé que par ceux qui sont bloqués.
+  - **Ordre imposé : vérifier AVANT de proposer d'annuler.** La revue interroge le guichet,
+    crédite ce qui a été encaissé (webhook perdu) et referme ce qui a échoué ; seules les
+    tentatives réellement ouvertes déclenchent la question. Elle est **placée avant le contrôle
+    de quota**, sinon un paiement crédité par la revue ne serait pas compté.
+  - **Jamais d'annulation implicite** : `cancel_pending` n'est honoré qu'au-delà du seuil, et
+    ne doit être envoyé qu'après un 409 `PENDING_ATTEMPT` avec `can_cancel: true`.
+    ⚠️ Côté web, ne jamais écrire `onClick={handlePayment}` : React passerait l'événement en 1er
+    argument, donc `cancelPending = true` au premier clic.
+  - **On referme TOUTES les lignes du couple, pas la plus ancienne** : 73 des 151 bénéficiaires
+    bloqués en portaient plusieurs (jusqu'à 39).
+  - **Une panne du guichet ne referme rien** (`unknown` ≠ `open`) : conclure à l'échec sur un
+    timeout autoriserait un second débit pendant qu'un paiement aboutit. La revue se déclare
+    alors `partial` et la tentative `verified: false`.
+  - **404 du guichet = lien inexistant** ⇒ `PaymentService.closeUnknownPaymentLink` referme la
+    ligne **et** le paiement. Ne fermer que la ligne laissait le cron réinterroger ce lien à
+    chaque passage et la console d'assistance afficher un ticket déjà résolu.
+  - Les routes `quota` exposent `pending_attempt` **en lecture base seule** (elles sont appelées
+    au chargement de l'écran : y brancher le guichet ferait un appel réseau par affichage).
+
+- **📡 Le filtre d'erreurs global laisse passer `data`, et rien d'autre**
+  (`shared/interceptors/error.interceptor.ts`). Toute exception est aplatie en
+  `{success, message, data, errors}` : un champ posé ailleurs dans l'exception **n'atteint pas
+  le navigateur** (c'est ce qui avait fait disparaître le `retry_after` de « Recevoir mon mot de
+  passe »). Un refus qui veut être traité par l'écran s'écrit donc
+  `throw new ConflictException({ message, data: { code: '…', … } })`, et le web le reconnaît à son
+  **`code`**, jamais à son message.
+
+- **⏱️ `HubService` a un timeout** (`HUB_TIMEOUT_MS`, 8 s par défaut) sur ses trois appels. Il
+  n'en avait aucun : axios attend **sans limite** par défaut, et un guichet qui accepte la
+  connexion sans répondre bloquait la requête HTTP. Devenu critique depuis que la vérification
+  des tentatives est appelée **pendant l'initiation d'un paiement**.
+
 - **🔎 Listes de campagnes : filtrées sur `started` PAR DÉFAUT** (depuis le 2026-07-31).
   `GET /subscriptions` et `GET /donate` **sans paramètre `status` ne renvoient que les campagnes
   en cours** - c'est vrai pour tout le monde, `is_admin` compris. Une campagne archivée absente
