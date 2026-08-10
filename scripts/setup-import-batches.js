@@ -12,7 +12,7 @@
  */
 const mysql = require('mysql2/promise');
 
-const DB = 'soka_db';
+const DB = process.env.DB_NAME || 'soka_app';
 const DRY = process.argv.includes('--dry');
 
 const CREATE_BATCHES = `

@@ -51,7 +51,7 @@ const MEMBRE_ACTIVE = ['dashboard_voir_menu_dashboard'];
 
 const DB = {
   host: '127.0.0.1', port: 3306, user: 'root', password: '',
-  database: process.env.DB_NAME || 'soka_db',
+  database: process.env.DB_NAME || 'soka_app',
 };
 
 (async () => {

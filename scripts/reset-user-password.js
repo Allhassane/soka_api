@@ -16,7 +16,7 @@
  *   PHONE=0151645214 NEW_PASSWORD='MonMotDePasse123' node scripts/reset-user-password.js
  *
  * Surcharges DB (défauts = mêmes que les autres scripts) :
- *   DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=root DB_PASSWORD='' DB_NAME=soka_db
+ *   DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=root DB_PASSWORD='' DB_NAME=soka_app
  */
 const fs = require('fs');
 const path = require('path');
@@ -53,7 +53,7 @@ const DB = {
   port: Number(process.env.DB_PORT || 3306),
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'soka_db',
+  database: process.env.DB_NAME || 'soka_app',
 };
 
 (async () => {

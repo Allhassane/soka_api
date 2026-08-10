@@ -14,7 +14,7 @@
 const mysql = require('mysql2/promise');
 
 const ADMIN_PHONE = process.env.ADMIN_PHONE || '0151645214';
-const DB = { host: '127.0.0.1', port: 3306, user: 'root', password: '', database: process.env.DB_NAME || 'soka_db' };
+const DB = { host: '127.0.0.1', port: 3306, user: 'root', password: '', database: process.env.DB_NAME || 'soka_app' };
 
 (async () => {
   const c = await mysql.createConnection(DB);

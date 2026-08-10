@@ -37,7 +37,7 @@ DB_HOST=localhost
 DB_PORT=5432
 DB_USER=root
 DB_PASSWORD=
-DB_NAME=soka_db
+DB_NAME=soka_app
 
 JWT_SECRET=changeme
 JWT_EXPIRES_IN=3600

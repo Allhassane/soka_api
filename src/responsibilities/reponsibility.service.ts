@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
@@ -27,6 +31,7 @@ export class ResponsibilityService {
   async findAll(admin_uuid: string) {
     const responsibility = await this.responsibilityRepo.find({
       order: { name: 'ASC' },
+      relations: ['level'],
     });
 
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
@@ -69,24 +74,47 @@ export class ResponsibilityService {
       throw new NotFoundException('Role introuvable');
     }
 
+    // ⚠️ `name` fait partie de la clé de dédoublonnage : plusieurs responsabilités
+    // partagent volontairement le même (niveau, rôle, genre) et ne diffèrent que par
+    // le libellé (9 combinaisons en base en portent 2 à 5). Une faute de frappe ici
+    // (`payload.nname`) rendait la clé aveugle au libellé - TypeORM ignore un
+    // `undefined` dans un `where` - et toute création sur une combinaison déjà
+    // utilisée renvoyait la responsabilité existante sans rien créer.
     const check_responsibility = await this.responsibilityRepo.findOne({
       where: {
-        name: payload.nname,
+        name: payload.name,
         gender: payload.gender,
         level_uuid: level.uuid,
-        role_uuid: role.uuid
-      }
+        role_uuid: role.uuid,
+      },
     });
 
-    if(check_responsibility){
+    if (check_responsibility) {
       //console.log('responsibility existe');
       return check_responsibility;
+    }
+
+    // `responsibilities.slug` porte un index UNIQUE qui, lui, ignore `deleted_at` :
+    // sans ce contrôle, un libellé déjà pris - y compris par une responsabilité
+    // supprimée - remonte une erreur MySQL 1062 brute, donc un 500.
+    const slug = slugify(payload.name);
+    const slug_owner = await this.responsibilityRepo.findOne({
+      where: { slug },
+      withDeleted: true,
+    });
+
+    if (slug_owner) {
+      throw new ConflictException(
+        slug_owner.deleted_at
+          ? 'Une responsabilité supprimée porte déjà ce libellé.'
+          : 'Une responsabilité porte déjà ce libellé.',
+      );
     }
 
     const newJob = this.responsibilityRepo.create({
       uuid: payload.uuid ?? uuidv4(),
       name: payload.name,
-      slug: slugify(payload.name),
+      slug,
       admin_uuid: admin_uuid ?? null,
       level_uuid: level.uuid,
       level,

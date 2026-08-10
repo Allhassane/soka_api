@@ -18,7 +18,7 @@ const REF_SLUG = 'membres_ajouter_un_membre'; // permission de référence (modu
 (async () => {
   const c = await mysql.createConnection({
     host: '127.0.0.1', port: 3306, user: 'root', password: '',
-    database: process.env.DB_NAME || 'soka_db',
+    database: process.env.DB_NAME || 'soka_app',
   });
   const q = (s, p) => c.query(s, p).then((r) => r[0]);
   const one = async (s, p) => (await q(s, p))[0] || null;

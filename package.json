@@ -41,6 +41,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "check:permissions": "node scripts/check-route-permissions.js",
+    "export:structures": "node scripts/export-structures-tree.js",
     "seed:shared-phone-audit": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-shared-phone-audit.ts",
     "seed:align-member-phone": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-align-member-phone-with-account.ts",
     "seed:normalize-phones": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-normalize-phone-numbers.ts",

@@ -24,6 +24,263 @@ Une entrée par session significative, la plus récente en haut.
 
 ---
 
+## 2026-08-05 — Suppression logique d'un membre : cascade, matricule, téléphone — module `membres`
+**Contexte :** demande d'« implémenter le soft delete des membres ». Relevé préalable : il était
+**déjà là** — `deleted_at` hérité de `DateTimeEntity`, `MemberService.delete()` en `softRemove` +
+désactivation du compte, route `DELETE /members/:uuid` sous `membres_supprimer_un_membre`
+(3 liens `roles_permissions`), et toutes les lectures filtrées. Mais **jamais exercé** (0 ligne
+supprimée sur 8 002 en base) et **pas exposé** côté web. L'audit du chemin a sorti trois défauts
+réels, corrigés ici.
+- **Fait — cascade sur les liaisons (`member.service.ts`, `delete()`).** `softRemove(member)` ne
+  touchait **aucune** liaison : les `@OneToMany` de `MemberEntity` n'ont pas d'option `cascade` et
+  ne sont de toute façon pas chargées par le `findOne` du `delete()`. Ajout du soft-delete explicite
+  de `member_responsibilities`, `member_accessories`, `member_travels` et `committee_members`, dans
+  la transaction existante.
+- **Décision — filtre `deleted_at: IsNull()` sur chaque `softDelete`.** `softDelete()` n'ajoute pas
+  cette condition lui-même : sans elle, il **ré-estampe** les lignes déjà supprimées avec une date
+  neuve. On perdrait l'information « cette responsabilité avait déjà été retirée par la règle
+  d'ancre lors d'un transfert », et une future restauration la ferait revenir à tort.
+- **Décision — séquentiel, pas `Promise.all`.** Une transaction tient une seule connexion ;
+  des requêtes concurrentes dessus se marchent dessus.
+- **Fait — matricule (`member.service.ts`, `store()`).** `.withDeleted()` ajouté à la requête du
+  dernier membre. TypeORM ajoutait `deleted_at IS NULL` au query builder, donc supprimer le dernier
+  membre créé faisait retomber `lastMember` sur l'avant-dernier → le membre suivant **régénérait le
+  matricule du supprimé**. Et `UQ_members_matricule` n'étant pas posé en base, le doublon passait
+  **sans erreur**. Une ligne soft-deletée occupe toujours son `id`.
+- **Fait — le compte est désormais désactivé ET soft-deleté.** `is_active = false` reste le signal
+  lisible qu'auditent les seeds (`seed:reconcile-member-accounts` traque « compte actif sur membre
+  supprimé ») ; le `softDelete` **libère le numéro de téléphone**.
+- **Décision — pourquoi les deux.** `MemberAccountService` refuse un numéro déjà porté
+  (`skipped_phone_taken`) via un `findOne`, qui **ignore les lignes soft-deletées** : sans ça,
+  recréer une fiche avec le même numéro donnait un membre **sans compte de connexion et sans la
+  moindre erreur** — exactement l'angle mort des 360 membres de l'import. Le `softDelete` ferme
+  aussi le login en amont d'`is_active` (`findByLoginWithPassword` est un query builder, donc
+  filtré lui aussi).
+- **Fait :** le log d'audit `members-delete` détaille maintenant le nombre de liaisons retirées
+  par table.
+- **Vérifié en conditions réelles** (protocole instantané → scénario → restauration → recontrôle,
+  sur `soka_app`, cible : *Bi Drigone Jonas Toboe* `21cc3b45…`, 1 responsabilité + 1 comité +
+  1 compte). `DELETE /api/members/:uuid` → **200**, puis `deleted_at` posé au même horodatage sur
+  `members`, `member_responsibilities`, `committee_members` et `users` ; `users.is_active` à 0 ;
+  `GET` de la fiche → **404** ; connexion avec son numéro → **401**. Log d'audit rendu :
+  « … compte de connexion désactivé - liaisons retirées : 1 responsabilité(s), 0 accessoire(s),
+  0 voyage(s), 1 comité(s) ». Correctif matricule vérifié sur données réelles : sur la fenêtre
+  `id <= 1045`, l'ancienne requête retombait sur l'id 1044 et aurait régénéré `26-1045` — le
+  matricule du supprimé ; avec `.withDeleted()` elle rend 1045 → `26-1046`. **Tout a été
+  restauré** et recontrôlé (0 membre supprimé en base, ligne de log de l'action annulée retirée).
+- **⚠️ Dérive résiduelle assumée du test :** `updated_at` de ces 4 lignes porte désormais
+  `2026-08-06` — la colonne est en `ON UPDATE CURRENT_TIMESTAMP`, la valeur d'origine n'était pas
+  dans l'instantané et n'a pas été inventée. Par ailleurs la connexion de vérification a basculé
+  `users.is_connected` de 0 à 1 sur ce compte (`login()` n'écrit que si le drapeau est faux) :
+  **remis à 0**, l'effectif global est revenu de 451 à 450. 👉 Leçon pour le prochain test :
+  l'instantané doit inclure `updated_at` et les drapeaux de parcours (`is_connected`, `is_sent`,
+  `sending_at`), pas seulement `deleted_at`.
+- **TODO — restauration (chantier C, non fait).** `GET /members/deleted` + `POST
+  /members/:uuid/restore`, avec deux pièges déjà identifiés : (1) chercher le membre en
+  `withDeleted: true`, sinon on ne le trouve pas (même piège que `committee.service.ts:538`) ;
+  (2) `users.phone_number` n'a **aucun index UNIQUE** et le numéro a pu être réattribué entre-temps
+  — un `restore()` aveugle créerait deux comptes actifs sur le même numéro, donc un login ambigu.
+  Pour les responsabilités, repasser par `ResponsibilityAnchorService` plutôt que les rétablir
+  telles quelles (la structure a pu bouger). Prévoir les permissions
+  `membres_voir_membres_supprimes` / `membres_restaurer_un_membre` — migration écrivant dans
+  **`permissions` ET `roles_permissions`**, sinon les cases sont incochables.
+- **TODO — à trancher côté métier :** les paiements (`subscription_payments`, `donate_payments`)
+  référencent `beneficiary_uuid` **sans filtre `deleted_at`** → ils restent comptés dans les
+  campagnes (probablement voulu, comptabilité) ; et `import-reference.service.ts:111` liste les
+  membres **sans filtrer les supprimés** → un ré-import « mettrait à jour » un membre supprimé sans
+  le restaurer, il resterait invisible.
+- **⚠️ Coordination :** `member.service.ts` importe désormais `CommitteeMemberEntity`
+  (module `committees`, hors périmètre `membres`). Le changement est **contenu dans mon fichier**
+  — aucune modification du module `committees` — mais laisser un membre supprimé dans ses comités
+  était un trou de cohérence assumé nulle part. À signaler au merge global.
+
+---
+
+## 2026-08-05 — Bascule de la base de travail : `soka_db` → `soka_app` — **transverse (tous modules)**
+**Contexte :** la base locale `soka_db` avait dérivé de l'environnement serveur — il lui manquait
+toute la série de migrations `1782800000000 → 1782902000000` (dont `SyncPermissionCatalogV2`), d'où
+**53 permissions au lieu de 185** et une table `user_roles` **vide**, alors que le code, lui, attend
+le catalogue refondu. Récupération du dump serveur du **05/08 14:18** (`soka_app`, 51 tables) et
+bascule de toute l'équipe dessus.
+- **Fait :** import du dump dans une base **`soka_app`** neuve (utf8mb4, `utf8mb4_0900_ai_ci`).
+  `soka_db` **n'a pas été supprimée** — conservée comme filet, mais périmée.
+- **Fait :** `migration:run` a joué les **2 migrations manquantes** du dump
+  (`CreateMemberRegistration`, `AddMemberRegistrationPermissions`) → 52 tables, 185 permissions,
+  `typeorm_migrations` aligné sur le repo (`1783000100000`). Démarrage vérifié : compilation sans
+  erreur et `Nest application successfully started`, aucune erreur de schéma.
+- **Fait — bascule documentée et outillée :** `DB_NAME=soka_app` dans `.env` ; `.env.example`
+  corrigé (il décrivait encore **PostgreSQL / `despes_db`**, hérité d'un autre projet) ; `README.md`,
+  `CLAUDE.md` (racine + api) mis à jour ; **défaut `soka_db` → `soka_app`** dans `src/data-source.ts`,
+  `src/config/config.service.ts` et les **14 scripts** de `scripts/`.
+- **Décision — nouvelle base plutôt qu'écrasement de `soka_db`.** *Pourquoi* : `soka_db` est
+  partagée et le retour arrière tient alors en **une ligne de `.env`**, sans restauration de dump.
+  Corollaire assumé : deux bases cohabitent, d'où l'insistance sur les défauts corrigés ci-dessus —
+  un script lancé sans `DB_NAME` aurait sinon écrit dans la base périmée **sans rien signaler**.
+- **Décision — aligner les défauts codés en dur plutôt que les supprimer.** *Pourquoi* : trois
+  scripts (`audit-schema`, `fix-members-collation`, `setup-import-batches`) ignoraient carrément
+  `DB_NAME` ; ils le lisent désormais. Les autres gardent un défaut, mais qui pointe la bonne base.
+- **⚠️ Le contenu métier diffère, pas seulement le schéma.** `soka_app` porte **4 régions et
+  17 centres régionaux** (contre 3 et 3 dans `soka_db`) — le palier CENTRE_REGIONAL y a enfin son
+  vrai découpage —, 336 districts, 1 095 groupes, 2 104 sous-groupes, 8 002 membres.
+  **Tout chiffre relevé avant ce jour sur `soka_db` est à re-mesurer**, y compris ceux cités dans
+  les entrées précédentes de ce journal.
+- **Fait :** `scripts/export-structures-tree.js` + `npm run export:structures` — export JSON
+  **imbriqué** de l'arbre des structures (lecture seule), profondeur réglable via `--jusqu-a=`,
+  sortie via `--out=`. Il charge `../.env` comme `data-source.ts`, donc il suit la base active sans
+  nom en dur. Il **signale** les structures hors arbre plutôt que de les omettre silencieusement —
+  contrôle passé : 3 740 nœuds exportés = 3 740 en base, **aucun orphelin**.
+- **TODO :** `UQ_members_matricule` **non posé** — `CreateMemberRegistration` a sauté l'index car
+  **10 lignes portent un libellé de formulaire en guise de matricule** (`"Nouveau membre ou non
+  digitalisé"` ×8, `"Ancien membre venu d'autre centre"` ×2). Dédoublonner, puis
+  `CREATE UNIQUE INDEX UQ_members_matricule ON members (matricule);`.
+- **TODO :** chacun doit **redémarrer son API** après avoir mis `DB_NAME=soka_app` — une instance
+  déjà lancée continue de servir `soka_db` sans le dire.
+
+---
+
+## 2026-08-05 — Cadrage : validation à deux niveaux des enregistrements de membres — module `membres`
+**Contexte :** aujourd'hui, qui porte `membres_ajouter_un_membre` crée un membre **immédiatement et
+définitivement** dans son périmètre — matricule et compte de connexion compris, dans la même
+transaction (`member.service.ts:167` et `:296`). Demande : intercaler **deux signatures** entre la
+saisie et l'existence du membre — **district** puis **chapitre**. Session de cadrage uniquement,
+**aucune ligne de code**.
+- **Fait :** `docs/VALIDATION-MEMBRES.md` (spécification complète, dupliquée dans `web/docs/`) —
+  besoin, contraintes du code existant, machine à états, 14 règles de gestion, modèle de données,
+  8 endpoints, plan en 5 étapes, pièges, jeu de test.
+- **Fait — relevés en base** (lecture seule) pour ancrer la spec : `levels.order`
+  (CHAPITRE = 4, DISTRICT = 5, l'`order` **croît** en descendant) · MySQL **8.0.30** (colonne JSON
+  disponible) · porteurs de responsabilité par niveau (928 DISTRICT, 368 CHAPITRE, **104 à
+  `level_uuid` NULL**) · **14 districts sur 334** et **3 chapitres sur 129** sans responsable de leur
+  niveau résoluble · `members.matricule` **sans aucun index** (seul `IDX_members_phone` existe, non
+  unique ; 0 doublon aujourd'hui).
+- **Décision structurante — le dossier est une entité à part, `members` n'est pas touchée.** Un
+  dossier en attente ne crée **aucune ligne** dans `members` : le formulaire est stocké en JSON dans
+  `member_registrations`, et `MemberService.store()` n'est appelé qu'à la seconde signature.
+  *Pourquoi* : l'alternative (colonne `validation_status` sur `members`) obligerait à auditer tous
+  les chemins de lecture — listes, stats par structure, exports, bénéficiaires payables, journal,
+  comités, activités — donc du code **appartenant à d'autres développeurs**, et un seul `SELECT`
+  oublié afficherait un membre non validé dans les effectifs de quelqu'un d'autre. Bénéfice
+  collatéral : **aucune reprise** des 7 950 membres existants. Contrepartie assumée : les contrôles
+  de saisie tournent **deux fois** (à la soumission, puis à la validation finale car la base a pu
+  bouger).
+- **Décision — signature stricte, sans « ou tout supérieur ».** Contrairement au transfert, un
+  responsable de chapitre ne peut **pas** signer l'étape district d'un dossier d'autrui : deux
+  signatures doivent rester deux regards distincts. *Prix du choix, mesuré* : 14 districts et
+  3 chapitres sans responsable → leurs dossiers ne sont signables que par un `is_admin`, d'où le
+  secours `is_admin` **obligatoire** (R13) et l'affichage explicite du niveau vacant.
+- **Décision — une étape est acquise d'office si le déposant est de niveau ≥ celui de l'étape** :
+  un dossier ne **redescend** jamais la hiérarchie. Asymétrie volontaire avec la règle précédente
+  (qui, elle, gouverne le dossier d'autrui) ; l'inverser = une comparaison à changer dans
+  `RegistrationAuthorityService`. Le niveau se calcule sur les **responsabilités seules**, pas sur
+  le `max_level` d'`AccessScopeService` : un comité donne des **permissions**, pas l'autorité de se
+  porter garant.
+- **Décision — refus définitif.** Le dossier est clos, pas renvoyé pour correction ; un refus au
+  chapitre **annule** la signature district (conservée pour l'audit, sans effet). Reprendre la
+  personne = nouveau dossier. Corollaire : la modification d'un dossier en attente devient inutile
+  (hors périmètre v1, `cancel` + nouveau dépôt).
+- **Décision — l'import Excel contourne le circuit** (lignes importées nées validées) : un fichier
+  de 300 lignes créerait 300 dossiers à signer un par un.
+- **Décision — étape district `SANS_OBJET` sous un chapitre** : les ~108 membres rattachés
+  directement à un CHAPITRE n'ont pas de district au-dessus d'eux ; le chapitre signe seul plutôt
+  que d'immobiliser le dossier ou de fermer un cas que la base pratique déjà.
+- **Décision — pas de notification en v1** : l'écran « à valider » + badge suffisent, et le SMS part
+  en mode diffusion (2 SMS facturés par envoi).
+- **Quatre arbitrages ajoutés en fin de cadrage**, après relecture — le risque de cette
+  fonctionnalité n'étant pas technique mais **humain** (deux personnes sur le chemin critique de
+  l'enregistrement : tant qu'elles n'ont pas signé, la personne n'existe pas et ne peut pas se
+  connecter), le critère retenu est « **aucun dossier ne s'arrête en silence** » :
+  1. **Suppléance automatique (R5b)** au lieu du seul secours `is_admin` : si le niveau d'une étape
+     est **vacant**, le niveau au-dessus signe, avec mention « par suppléance ». *Subie, jamais
+     choisie* — tant que le district a un responsable, le chapitre reçoit un 403 sur l'étape
+     district. Une vacance n'a rien d'exceptionnel ; sans ça, 17 structures dépendraient d'un
+     administrateur national.
+  2. **« Reprendre ce dossier » (R7b)** : un dossier refusé pré-remplit un dossier **neuf** (lien
+     `resumed_from_uuid`). R7 tient — ce n'est pas une ré-ouverture. Sans ça, une date de naissance
+     erronée fait tout ressaisir au maillon le plus bas de la chaîne.
+  3. **Ancienneté du dossier visible et triable dès la v1** : sans notification **et** sans
+     ancienneté, un dossier oublié ne se distingue de rien. Coût nul (date déjà stockée, pas de
+     cron). Corollaire : `submitted_at` → `validated_at` donnera le **délai médian réel**, et la
+     question des notifications se re-tranchera sur ce chiffre plutôt que sur une intuition.
+  4. **Index unique sur `members.matricule` dans la migration de l'étape 1**, au lieu de « dette à
+     traiter séparément » : c'est cette fonctionnalité qui rend la collision atteignable (les
+     validations arrivent en rafale là où les saisies s'étalaient), la migration est de toute façon
+     à coordonner — la reporter reviendrait à livrer le bug.
+- **Fait — étape 1 (socle domaine), dans la foulée du cadrage :**
+  - `src/migrations/1783000000000-CreateMemberRegistration.ts` — table `member_registrations`
+    (aucune donnée existante touchée) **+ index unique sur `members.matricule`**. L'index n'est posé
+    que si la colonne est déjà cohérente : un doublon préexistant est **tracé et ignoré** plutôt que
+    de faire échouer tout un déploiement pour une dette qui n'est pas la nôtre.
+  - `src/member-registration/entities/member-registration.entity.ts` — dossier + 3 enums
+    (`RegistrationStatus`, `StepDecision`, `ValidationLevel`).
+  - `src/member-registration/registration-authority.service.ts` — **le cœur des règles**, avec deux
+    fonctions **pures** (`hasAuthorityOver`, `planSteps`) que les tests couvrent sans base.
+  - `registration-authority.service.spec.ts` — **27 tests verts**. `tsc --noEmit` : 0 erreur sur ces
+    fichiers.
+- **Décision d'implémentation — l'autorité se compare par ANCRE, pas par niveau.** Être responsable
+  de district ne suffit pas : il faut être responsable **de ce district-là**
+  (`ancêtre(structure_du_dossier, L) === ancre_du_déposant`). Sans cette comparaison, un responsable
+  de district pouvait acquérir d'office l'étape district d'un dossier déposé **dans un district
+  voisin**. On ne s'est pas reposé sur `assertStructureInScope` pour fermer ce trou : ce garde-là
+  dérive le périmètre de la structure **où habite** le demandeur, pas de ses responsabilités - deux
+  notions différentes (asymétrie déjà relevée dans `TRANSFERT-MEMBRES.md` §9, étape 5).
+- **Décision d'implémentation — un responsable sans compte actif ne « pourvoit » pas son niveau.**
+  `signerUserUuids` joint `users` (`is_active = 1`, non soft-deleté) : un responsable qui ne peut pas
+  se connecter ne peut pas signer, et le compter comme présent rendrait le niveau **faussement
+  pourvu**, donc le dossier bloqué sans recours (360 membres étaient sans compte jusqu'au
+  2026-08-01).
+- **Fait — étape 2 (service + API), même session :** `member-registration.service.ts`,
+  `member-registration.controller.ts` (7 routes sous `/api/member-registrations`),
+  `dto/decide-member-registration.dto.ts`, module « Validation des enregistrements » au
+  `permission-catalog.ts`, migration `1783000100000-AddMemberRegistrationPermissions`.
+  `MemberController.store` délègue à `submit()` : **`POST /members` reste l'unique porte d'entrée**
+  et répond `{ mode: 'dossier_depose' | 'membre_cree' }`. `MemberService.store()` accepte un
+  `options { manager?, scopeAlreadyChecked? }`. Cycle `MemberModule` ↔ `MemberRegistrationModule`
+  assumé en `forwardRef` : c'est le prix de garder une seule URL de création.
+- **🚨 Découverte majeure — la base de dev est désynchronisée du code, et deux commandes
+  « normales » propageraient le travail en cours des autres :**
+  1. **`npm run migration:run` : 14 migrations pendantes** avant la mienne (`AddRoleStatus`,
+     `BackfillUserRoles`, `SeedPermissionCatalog`, `CleanupPermissionCatalog`,
+     `SyncPermissionCatalogV2`, réglages SMS…). Mes deux migrations ont donc été jouées **seules**,
+     via un DataSource dont le glob `migrations` ne pointe que mes fichiers — TypeORM écrit
+     lui-même la ligne de suivi dans `typeorm_migrations`, rien n'est inséré à la main.
+  2. **`npm run seed:permissions` : son `--dry-run` annonce +146 permissions, −11 slugs,
+     +29/−9 modules, +450 liens.** C'est toute la refonte du 2026-08-01, jamais appliquée ici.
+     D'où une **migration additive** pour mes 3 seules permissions.
+  ⇒ Le schéma courant a été construit **en partie par des seeds**, pas seulement par les
+  migrations : `typeorm_migrations` ne raconte pas l'état réel. **À re-synchroniser en équipe** ;
+  d'ici là, ne lancer ni `migration:run` ni `seed:permissions` sur cette base.
+- **Décision — `roles_permissions` : un lien par rôle, y compris décoché.** Les 3 permissions
+  reçoivent 9 liens (ADMINISTRATEUR et RESPONSABLE à `status = 1`, MEMBRE à `0`). Sans ligne, la
+  case de Paramètres → Rôles est **incochable** (« Aucun élément trouvé ») : c'est exactement la
+  dette laissée par `AddMemberTransferPermissions`, on ne la rejoue pas.
+- **Décision — écart assumé sur R9.** Le cadrage voulait un **409** si le membre validé n'aurait pas
+  de compte. Vérification faite, `CreateMemberDto.phone` est **optionnel** côté API (seul le
+  formulaire web l'impose) et le produit tolère déjà des membres sans compte (bloc
+  `accounts_skipped` de l'écran d'import). Refuser aurait donc ajouté un refus **nouveau** sur un cas
+  accepté ailleurs. Retenu : le membre est créé, l'absence de compte est **signalée** et jamais tue
+  (`account_skipped` dans la réponse + `WARN [VALIDATION]`). Le cas « téléphone déjà pris » reste
+  un 409.
+- **Décision — `member_registrations.structure_uuid` est NULLABLE.** Un `is_admin` peut aujourd'hui
+  créer un membre sans structure (`assertStructureInScope` ne l'exige que des non-admins) ; mettre
+  la colonne en NOT NULL aurait transformé ce cas en erreur 500. Migration annulée puis rejouée
+  (table vide, `down()` exercé au passage).
+- **Vérifié :** `nest build` OK · `tsc --noEmit` **0 erreur** · `check:permissions` ✅ (47
+  contrôleurs) · **46 tests verts** (`member-registration` + `member-transfer`, aucune régression) ·
+  **démarrage réel** : les 7 routes sont mappées (donc le cycle `forwardRef` se résout) et répondent
+  **401** sans jeton. Base après migrations : 7 939 membres intacts, `UQ_members_matricule` posé,
+  `member_registrations` à 29 colonnes en `utf8mb4_unicode_ci`.
+- **TODO :** étape 3 (web) · étape 4 (élargir `verify/phone-number` aux dossiers en attente, revue
+  des appelants de `store()`) · étape 5 (doc + `graphify update .`). **Recette fonctionnelle non
+  faite** : aucun dossier n'a encore été déposé ni signé contre l'API réelle (protocole instantané /
+  restauration à appliquer). ⚠️ `docs/` est **git-ignoré** dans les deux repos (`.gitignore:62` api,
+  `:47` web) : `VALIDATION-MEMBRES.md` a besoin d'un `git add -f` pour exister pour l'équipe.
+- **⚠️ Dette d'environnement, hors périmètre :** `npm run build` échoue sur **`@nestjs/schedule`**,
+  déclaré dans `package.json` (^6.1.3) mais **absent de `node_modules`** ; il est importé par
+  `app.module.ts` et `payments/hub-payment-sync.cron.ts`. Un `npm install` suffit — sans rapport
+  avec cette fonctionnalité.
+
+---
+
 ## 2026-07-28 — Référentiel de permissions rechargé depuis `permissions-soka-digital.md` — module `permission`
 **Contexte :** le document fonctionnel `permissions/permissions-soka-digital.md` (racine du dépôt)
 liste les permissions attendues module par module. Demande : vider `modules` / `permissions` /

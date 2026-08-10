@@ -1,7 +1,11 @@
 # SOKA API - Contexte (back-end)
 
-Back-end REST de la plateforme SOKA. **NestJS 11 · TypeORM 0.3 · MySQL `soka_db` · JWT/Passport · Bull.**
+Back-end REST de la plateforme SOKA. **NestJS 11 · TypeORM 0.3 · MySQL `soka_app` · JWT/Passport · Bull.**
 Voir la vue d'ensemble dans `../CLAUDE.md`. Journal de travail : `docs/JOURNAL.md`.
+
+> ⚠️ **La base de travail est `soka_app` depuis le 2026-08-05** (avant : `soka_db`, désormais
+> obsolète). Chacun doit poser `DB_NAME=soka_app` dans son `.env` — voir le gotcha « bascule de
+> base » plus bas.
 
 > **📄 À quoi sert ce fichier - `CLAUDE.md` (fichier de contexte).** Lu automatiquement par Claude
 > Code au début de chaque session dans ce repo, et point d'entrée pour tout développeur. Il contient
@@ -24,6 +28,8 @@ npm test                 # jest (unitaires) ; test:e2e, test:cov
 npm run migration:generate -- src/migrations/<Nom>   # générer une migration TypeORM
 npm run migration:run    # appliquer les migrations
 npm run migration:revert # annuler la dernière
+npm run export:structures # arbre des structures en JSON (lecture seule) -> ../structures-hierarchie.json
+                          # --jusqu-a=DISTRICT|SOUS_GROUPE… pour descendre plus bas, --out=<chemin>
 ```
 
 Data source TypeORM : `src/data-source.ts`. Doc API Swagger via `@nestjs/swagger`.
@@ -40,7 +46,7 @@ périodique. Rester dans son module ; prévenir avant de toucher aux fichiers pa
 - `src/shared/enums/` (`GlobalStatus`, `DonateCategory`… partagés par paiements/abonnements/dons).
 - `src/auth/` (guards, stratégies Passport, JWT), `src/app.module.ts`, helpers de pagination
   (`PaginationAPI`), `src/data-source.ts`.
-- Toute **migration TypeORM** : coordonner (une migration touche `soka_db` pour tout le monde).
+- Toute **migration TypeORM** : coordonner (une migration touche `soka_app` pour tout le monde).
 
 **Périmètre du module `membres`** (mon focus) : `src/members` + `src/member-responsibility`,
 `src/member-accessories`, `src/member-travel`, `src/member-transfer`.
@@ -216,8 +222,8 @@ services) : abonnements et dons.
   AUTO_INCREMENT ni DEFAULT** alors que l'entité déclare `@PrimaryGeneratedColumn() id: number` :
   tout INSERT via l'ORM échoue (« Field 'id' doesn't have a default value »). Passer par
   **`RoleService.insertRole()`** (INSERT explicite, `id` = `uuid` généré côté Node - comme les
-  lignes historiques). ⚠️ **Ne pas “corriger” le type de la PK** : `ResponsibilityEntity` et
-  `UserRole` déclarent des `@JoinColumn({ referencedColumnName: 'id' })` dessus. Les lectures, elles,
+  lignes historiques). ⚠️ **Ne pas “corriger” le type de la PK** : `UserRole` déclare encore un
+  `@JoinColumn({ referencedColumnName: 'id' })` dessus. Les lectures, elles,
   fonctionnent déjà (TypeORM rend une string dans un champ typé `number`).
   Corollaire : toute écriture dans `roles_permissions` met **`role_id = permission_id = 0`** et teste
   l'existence sur les `*_uuid` - jamais sur `role.id`, qui est une string.
@@ -382,6 +388,31 @@ services) : abonnements et dons.
   👉 Corollaire - **règle d'ancre** : quand un membre change de structure, une responsabilité de
   niveau L est conservée **ssi** `ancêtre(structure_nouvelle, L) == ancêtre(structure_ancienne, L)`.
   Détail et cas de référence dans `docs/TRANSFERT-MEMBRES.md` §5.
+
+- **🗑️ Supprimer un membre = `MemberService.delete()`, et rien d'autre.** Toute suppression est
+  **logique** (`deleted_at`, hérité de `DateTimeEntity` par ~toutes les entités). Trois pièges,
+  tous déjà payés :
+  - **`softRemove(entity)` ne cascade PAS.** Les `@OneToMany` de `MemberEntity` n'ont pas d'option
+    `cascade` et ne sont pas chargées : `member_responsibilities`, `member_accessories`,
+    `member_travels` et `committee_members` doivent être soft-deletés **explicitement**, sinon le
+    membre supprimé **reste responsable** (il continue de sortir de `structure.service.getCommittee()`).
+  - **Toujours filtrer `deleted_at: IsNull()` dans un `softDelete()`** : la méthode n'ajoute pas
+    cette condition et **ré-estampe** les lignes déjà supprimées avec une date neuve — on perd
+    l'historique (ex. responsabilité retirée par la règle d'ancre) et une restauration la ferait
+    revenir à tort.
+  - **Le compte `users` est désactivé (`is_active`) ET soft-deleté.** Les deux ont un rôle
+    distinct : `is_active` est le signal qu'auditent les seeds, le `softDelete` **libère le
+    numéro de téléphone**. `MemberAccountService` refuse un numéro déjà porté via un `findOne`,
+    qui **ignore les lignes soft-deletées** : sans ça, recréer une fiche avec le même numéro donne
+    un membre **sans compte de connexion, sans aucune erreur**.
+  ⚠️ **Corollaire pour toute génération de numéro de série** : `store()` calcule le matricule
+  depuis le dernier `id`, avec **`.withDeleted()` obligatoire** — un query builder filtre
+  `deleted_at IS NULL` par défaut, donc supprimer le dernier membre créé ferait **régénérer son
+  matricule** au suivant, et `UQ_members_matricule` n'est pas posé pour l'attraper.
+  ⚠️ **La restauration n'existe pas encore.** Quand elle sera écrite : chercher le membre en
+  `withDeleted: true`, **vérifier que le numéro est libre** (`users.phone_number` n'a aucun index
+  UNIQUE ⇒ deux comptes actifs sur un numéro = login ambigu), et repasser par
+  `ResponsibilityAnchorService` pour les responsabilités.
 
 - **🚨 Déplacer un membre : deux chemins, une seule règle.** `members.structure_uuid` ne se
   réécrit que par le workflow de transfert **ou** par `PUT /members/:uuid`. Les deux appellent
@@ -647,8 +678,22 @@ services) : abonnements et dons.
   **`Africa/Abidjan` explicite**) : le but est que le membre retrouve son SMS, pas qu'il patiente.
   ⚠️ Une `sending_at` **future** (horloge décalée) ne bloque pas - sinon le verrou n'aurait pas de sortie.
 - **Login = phone_number + password**, pas email. Le guard local attend ces champs.
+- **🔄 Bascule de base : `soka_db` → `soka_app` (2026-08-05).** La base de travail est désormais
+  **`soka_app`**, importée du dump serveur du 05/08 14:18. Poser **`DB_NAME=soka_app`** dans son
+  `.env` (le défaut codé dans `data-source.ts` et dans les scripts reste `soka_db` — il ne s'applique
+  qu'à un `.env` muet). `soka_db` n'a pas été supprimée mais elle est **périmée** : il lui manque
+  toute la série `1782800000000 → 1782902000000` (dont `SyncPermissionCatalogV2`), d'où **53
+  permissions au lieu de 185** et une table `user_roles` **vide**. Ne plus s'en servir comme
+  référence, y compris pour un relevé « en base ».
+  ⚠️ **Le contenu métier diffère, pas seulement le schéma** : `soka_app` porte **4 régions et
+  17 centres régionaux** (contre 3 et 3 dans `soka_db`), 336 districts, 1 095 groupes, 2 104
+  sous-groupes. Un chiffre relevé avant cette date sur `soka_db` est à re-mesurer.
+  ⚠️ **Index `UQ_members_matricule` non posé** : `CreateMemberRegistration` l'a volontairement
+  sauté, 10 lignes portant un libellé de formulaire en guise de matricule (`"Nouveau membre ou non
+  digitalisé"` ×8, `"Ancien membre venu d'autre centre"` ×2). Dédoublonner puis
+  `CREATE UNIQUE INDEX UQ_members_matricule ON members (matricule);`.
 - **Migrations manuelles.** `synchronize` doit rester **off** ; passer par
-  `migration:generate` / `migration:run`. Ne jamais laisser TypeORM modifier `soka_db` en auto.
+  `migration:generate` / `migration:run`. Ne jamais laisser TypeORM modifier `soka_app` en auto.
 - **Slug/uuid dupliqués selon les modules.** Certaines entités ont `.generateUUID()` vs
   `.generateUuid()` (casse différente) - vérifier le hook réel de l'entité avant de s'y fier.
 - **`.sql` non indexés par Graphify** (dépendance `tree_sitter_sql` absente) : les dumps

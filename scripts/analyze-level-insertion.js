@@ -9,7 +9,7 @@ const padL = (s, n) => String(s ?? '').padStart(n);
 
 (async () => {
   const c = await mysql.createConnection({
-    host: 'localhost', port: 3306, user: 'root', password: '', database: process.env.DB_NAME || 'soka_db',
+    host: 'localhost', port: 3306, user: 'root', password: '', database: process.env.DB_NAME || 'soka_app',
   });
   const q = (s, p) => c.query(s, p).then((r) => r[0]);
 

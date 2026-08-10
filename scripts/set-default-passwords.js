@@ -53,7 +53,7 @@ const EXCLUDE = `(is_admin = 1 OR (email IS NOT NULL AND email LIKE '%@soka.com'
     port: Number(process.env.DB_PORT || 3306),
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'soka_db',
+    database: process.env.DB_NAME || 'soka_app',
   });
 
   try {

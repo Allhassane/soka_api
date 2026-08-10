@@ -22,8 +22,10 @@ export class Role extends DateTimeEntity {
   /**
    * ⚠️ En base, `roles.id` est un **CHAR(36) égal à `uuid`** (héritage Laravel), sans
    * AUTO_INCREMENT ni DEFAULT : TypeORM renvoie donc une string dans ce champ typé `number`.
-   * Le type n'est PAS corrigé volontairement - `ResponsibilityEntity` et `UserRole` déclarent
-   * des `@JoinColumn({ referencedColumnName: 'id' })` dessus, le changer casserait le boot.
+   * Le type n'est PAS corrigé volontairement - `UserRole` déclare encore un
+   * `@JoinColumn({ referencedColumnName: 'id' })` dessus, le changer casserait le boot.
+   * (`ResponsibilityEntity` joint désormais sur `roles.uuid` : sa colonne `role_id` est NULL
+   * sur toutes les lignes, seule `role_uuid` porte le lien réel.)
    * Conséquence : les LECTURES fonctionnent, mais tout `save()` d'un rôle neuf échoue
    * (« Field 'id' doesn't have a default value ») ⇒ la création passe par un INSERT explicite
    * qui fournit `id` (cf. `RoleService.insertRole`).
