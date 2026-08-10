@@ -47,7 +47,8 @@
     "seed:lock-passwords": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-lock-passwords.ts",
     "seed:campaign-status-filter": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-campaign-status-filter-permissions.ts",
     "seed:reconcile-hub-payments": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-reconcile-hub-payments.ts",
-    "seed:sync-hub-payments": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-sync-hub-payments.ts"
+    "seed:sync-hub-payments": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-sync-hub-payments.ts",
+    "seed:backfill-hub-details": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-backfill-hub-payment-details.ts"
   },
   "dependencies": {
     "@nestjs-modules/mailer": "^2.0.2",

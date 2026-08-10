@@ -32,6 +32,7 @@ import {
   HubPaymentSyncBatchResult,
   HubPaymentSyncResult,
 } from './types/hub-payment-sync-result.type';
+import { HubPaymentDetails } from './types/hub-payment-details.type';
 import { CRON_ABANDON_AFTER_HOURS } from './abandon.constants';
 
 /** Interrogations du guichet menées de front pendant une synchronisation en masse. */
@@ -402,6 +403,90 @@ export class PaymentService {
     return await this.paymentRepo.save(payment);
   }
 
+  /**
+   * **Conserve le détail rendu par le guichet** : opérateur, motif d'échec, horodatage
+   * d'encaissement. C'est la seule écriture de ces quatre colonnes.
+   *
+   * Le guichet renvoyait déjà ces champs à chaque vérification et l'API les jetait : aucune
+   * statistique « par opérateur » ni « par motif d'échec » n'était calculable, alors que
+   * c'est précisément ce qui permet de comprendre les échecs.
+   *
+   * Trois garde-fous, tous délibérés :
+   *
+   * ⚠️ **Un `null` n'écrase jamais une valeur déjà connue.** Une tentative abandonnée fait
+   * répondre `payment: null` au guichet indéfiniment : sans cette règle, la première
+   * synchronisation postérieure effacerait l'opérateur d'un paiement pourtant abouti.
+   *
+   * ⚠️ **Aucune écriture s'il n'y a rien de nouveau.** Le cron balaie jusqu'à 500 lignes
+   * toutes les 10 minutes ; écrire à chaque passage produirait 72 000 UPDATE par jour pour
+   * réécrire les mêmes valeurs, et ferait mentir `updated_at`.
+   *
+   * 🚨 **Une erreur ici n'interrompt JAMAIS la synchronisation.** Ces colonnes sont de la
+   * donnée d'analyse : laisser leur écriture faire échouer l'appel transformerait un
+   * problème de statistiques en paiement non crédité. On journalise et on continue.
+   */
+  private async captureHubPaymentDetails(
+    payment: PaymentEntity,
+    details: HubPaymentDetails | null,
+  ): Promise<void> {
+    if (!details) return;
+
+    const patch: Partial<PaymentEntity> = {};
+
+    const provider = details.provider?.trim().toLowerCase();
+    if (provider && provider !== payment.provider) {
+      patch.provider = provider;
+    }
+
+    const failureCode = details.failureCode?.trim();
+    if (failureCode && failureCode !== payment.failure_code) {
+      patch.failure_code = failureCode;
+    }
+
+    const failureMessage = details.failureMessage?.trim();
+    if (failureMessage && failureMessage !== payment.failure_message) {
+      patch.failure_message = failureMessage;
+    }
+
+    // Une date illisible est ignorée plutôt que stockée en `Invalid Date`, qui ferait
+    // échouer l'INSERT et emporterait la synchronisation avec elle.
+    if (details.paidAt) {
+      const paidAt = new Date(details.paidAt);
+      if (!Number.isNaN(paidAt.getTime())
+        && paidAt.getTime() !== payment.paid_at?.getTime()) {
+        patch.paid_at = paidAt;
+      }
+    }
+
+    if (Object.keys(patch).length === 0) return;
+
+    try {
+      // 🚨 `updated_at` est réaffectée à SA PROPRE VALEUR, et ce n'est pas une coquetterie :
+      // sans elle, la ligne se retrouve datée d'aujourd'hui alors qu'aucun élément métier n'a
+      // bougé. Deux mécanismes concourent, il faut neutraliser les deux, et une seule écriture
+      // suffit à le faire — MySQL n'applique `ON UPDATE CURRENT_TIMESTAMP(6)` que si la colonne
+      // n'est pas affectée explicitement, et TypeORM n'ajoute son `= CURRENT_TIMESTAMP` que si
+      // elle est absente du SET (`UpdateQueryBuilder.createUpdateExpression`, garde
+      // `updatedColumns.indexOf(metadata.updateDateColumn) === -1`).
+      //
+      // L'enjeu est concret : le rattrapage écrit ces colonnes sur ~1 200 paiements clos depuis
+      // des semaines. Sans cette ligne, tous porteraient la date du rattrapage, la vraie date
+      // serait perdue sans retour possible, et la console d'assistance afficherait « modifié
+      // aujourd'hui » sur chaque ticket d'un paiement ancien.
+      await this.paymentRepo
+        .createQueryBuilder()
+        .update(PaymentEntity)
+        .set({ ...patch, updated_at: () => '`updated_at`' })
+        .where('uuid = :uuid', { uuid: payment.uuid })
+        .execute();
+      Object.assign(payment, patch);
+    } catch (e) {
+      this.logger.warn(
+        `[HUB][DETAIL] Détail non conservé pour ${payment.transaction_id} : ${e?.message ?? e}`,
+      );
+    }
+  }
+
   async syncHubPaymentByTransactionId(
     transaction_id: string,
   ): Promise<HubPaymentSyncResult> {
@@ -458,6 +543,14 @@ export class PaymentService {
     }
 
     const hubStatus = await this.hubService.checkPaymentStatus(transaction_id);
+
+    // 🎯 UNIQUE point de capture du détail rendu par le guichet (opérateur, motif d'échec,
+    // horodatage d'encaissement). Il est placé ICI, juste après l'appel, et pas dans les
+    // branches ci-dessous : les trois issues (payé / échoué / en attente) mènent au même
+    // besoin, et trois copies finiraient par diverger. Tous les chemins de synchronisation
+    // de l'application - écran de résultat, revue des tentatives en cours, cron - passent
+    // par cette méthode, donc par cette ligne.
+    await this.captureHubPaymentDetails(payment, hubStatus.payment ?? null);
 
     if (hubStatus.paid === true) {
       await this.updatePayment(payment.uuid, {
@@ -683,6 +776,83 @@ export class PaymentService {
     }
 
     return result;
+  }
+
+  /**
+   * **Rattrape le détail guichet des paiements antérieurs** aux colonnes `provider` /
+   * `failure_code` / `failure_message` / `paid_at`. Alimente `npm run seed:backfill-hub-details`.
+   *
+   * 🚨 **Ce balayage ne touche AUCUN statut, et c'est tout l'intérêt.** Il n'emprunte
+   * délibérément **pas** `syncHubPaymentByTransactionId` : celle-ci crédite, referme et
+   * annule. La rejouer sur 1 800 lignes historiques serait une seconde route vers l'argent -
+   * exactement la duplication qui a produit les écarts de début août. Ici, une seule lecture
+   * (`checkPaymentStatus` est un GET) et une écriture bornée aux quatre colonnes d'analyse.
+   *
+   * ⚠️ **Reprise naturelle** : seuls les paiements dont `provider` est encore NULL sont
+   * candidats. Une exécution interrompue se relance sans rien refaire, et une ligne pour
+   * laquelle le guichet ne connaît aucune tentative restera candidate à jamais - c'est
+   * voulu, elle ne coûte qu'un appel et rien ne permet de la distinguer d'une non-traitée.
+   *
+   * @param apply `false` (défaut) = simulation : le guichet est interrogé, rien n'est écrit.
+   */
+  async backfillHubPaymentDetails(
+    { apply = false, limit = 5000 }: { apply?: boolean; limit?: number } = {},
+  ): Promise<{
+    candidats: number;
+    interroges: number;
+    renseignes: number;
+    sans_detail: number;
+    erreurs: number;
+  }> {
+    const candidats = await this.paymentRepo
+      .createQueryBuilder('p')
+      .where('p.transaction_id IS NOT NULL')
+      .andWhere('p.transaction_id LIKE :prefix', { prefix: 'plink_%' })
+      .andWhere('p.provider IS NULL')
+      // Le plus récent d'abord : même raison qu'au cron, une exécution écourtée doit avoir
+      // traité ce qui compte le plus.
+      .orderBy('p.created_at', 'DESC')
+      .take(limit)
+      .getMany();
+
+    const resultat = {
+      candidats: candidats.length,
+      interroges: 0,
+      renseignes: 0,
+      sans_detail: 0,
+      erreurs: 0,
+    };
+
+    for (let i = 0; i < candidats.length; i += SYNC_CONCURRENCY) {
+      const lot = candidats.slice(i, i + SYNC_CONCURRENCY);
+
+      const verdicts = await Promise.all(
+        lot.map(async (payment) => {
+          try {
+            const statut = await this.hubService.checkPaymentStatus(
+              payment.transaction_id,
+            );
+            const detail = statut.payment ?? null;
+
+            if (!detail?.provider) return 'sans_detail' as const;
+            if (apply) await this.captureHubPaymentDetails(payment, detail);
+            return 'renseignes' as const;
+          } catch (e) {
+            this.logger.warn(
+              `[HUB][RATTRAPAGE] ${payment.transaction_id} : ${e?.message ?? e}`,
+            );
+            return 'erreurs' as const;
+          }
+        }),
+      );
+
+      for (const verdict of verdicts) {
+        resultat.interroges += 1;
+        resultat[verdict] += 1;
+      }
+    }
+
+    return resultat;
   }
 
   /** Sort d'un paiement en attente : ce qu'il est devenu après interrogation du guichet. */

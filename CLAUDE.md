@@ -239,7 +239,13 @@ services) : abonnements et dons.
   `failed`** - les chemins applicatifs synchronisent bien les deux (`updateLinkedEntities`, appelé
   par `syncHubPaymentByTransactionId`, l'annulation et `confirmPayment`), mais des paiements ont été
   repassés en échec **directement en SQL** sans que la ligne d'abonnement suive (signature :
-  `payments.updated_at` sans microsecondes, `subscription_payments.updated_at` = `created_at`).
+  `subscription_payments.updated_at` = `created_at`, la ligne métier n'ayant jamais bougé).
+  ⚠️ **Correction du 2026-08-09 : `payments.updated_at` SANS microsecondes ne signe RIEN** et ne doit
+  pas servir à repérer ces lignes. Ce n'est pas la marque d'une correction manuelle mais celle de
+  **toute** écriture TypeORM : `UpdateQueryBuilder` émet le littéral `CURRENT_TIMESTAMP`, sans
+  précision. Vérifié sur le dump du 01/08, **avant** toute intervention : **380 lignes** en portaient
+  déjà la marque (244 `paid`, 136 `failed`) - c'est-à-dire à peu près toutes celles ayant changé de
+  statut une fois - contre 623 `pending` avec microsecondes, jamais mises à jour depuis leur insertion.
   ⇒ **Tout affichage de statut lit `payments.payment_status` en premier**, la ligne d'abonnement ne
   servant que de repli. Annoncer « en attente » sur un paiement échoué empêche le membre de refaire.
 
