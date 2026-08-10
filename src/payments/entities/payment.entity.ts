@@ -104,4 +104,34 @@ export class PaymentEntity extends DateTimeEntity {
     default: PaymentStatus.PENDING,
   })
   payment_status: PaymentStatus;
+
+  // -----------------------------------------------------------
+  // Détail rendu par le guichet (SOKA Pay → HUB2)
+  //
+  // Ces quatre colonnes sont alimentées par `PaymentService.captureHubPaymentDetails`,
+  // à l'unique endroit où la réponse du guichet est lue. Elles n'ont AUCUN rôle dans le
+  // parcours de paiement : elles existent pour que les statistiques puissent répondre
+  // « par quel opérateur » et « pourquoi ça a échoué », deux questions auxquelles la
+  // base était muette (le guichet renvoyait déjà l'information, l'API la jetait).
+  //
+  // ⚠️ Toutes nullables, et elles le restent : un paiement jamais engagé au guichet
+  // n'a ni opérateur ni motif. Une valeur déjà capturée n'est jamais écrasée par un
+  // `null` d'une synchronisation ultérieure.
+  // -----------------------------------------------------------
+
+  /** Opérateur Mobile Money ayant traité la tentative : `wave`, `orange`, `mtn`, `moov`. */
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  provider: string | null;
+
+  /** Code d'échec du guichet (`wave_payment_expired`, `timeout`, `authentication_failed`…). */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  failure_code: string | null;
+
+  /** Message d'échec en clair, tel que rendu par le guichet. */
+  @Column({ type: 'text', nullable: true })
+  failure_message: string | null;
+
+  /** Horodatage d'encaissement chez l'opérateur (≠ `updated_at`, qui est celui de l'API). */
+  @Column({ type: 'datetime', nullable: true })
+  paid_at: Date | null;
 }
