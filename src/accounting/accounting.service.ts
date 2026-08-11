@@ -1,8 +1,19 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
+import { DonateEntity } from 'src/donate/entities/donate.entity';
 import { PaymentEntity } from 'src/payments/entities/payment.entity';
-import { HubGatewayPayment, HubService } from 'src/payments/hub.service';
+import { SubscriptionEntity } from 'src/subscriptions/entities/subscription.entity';
+import {
+  HubBalanceAccount,
+  HubGatewayPayment,
+  HubService,
+} from 'src/payments/hub.service';
 import { AccHubSnapshotEntity, SnapshotKind } from './entities/acc-hub-snapshot.entity';
 import { AccHubSnapshotLineEntity, MatchStatus } from './entities/acc-hub-snapshot-line.entity';
 import { parseHub2Export } from './hub2-export.parser';
@@ -12,6 +23,18 @@ export interface ConcordanceFiltres {
   to?: Date;
   campaign_uuid?: string;
 }
+
+/**
+ * Les deux sources de paiement que le tableau de bord sait filtrer : les valeurs sont celles de
+ * `payments.source` (`PaymentSource`). `shop_item` existe dans l'enum mais ne porte aucune
+ * campagne - il n'a pas sa place ici.
+ */
+export type SourceStats = 'subscription' | 'donation';
+const SOURCES_STATS: SourceStats[] = ['subscription', 'donation'];
+
+/** Les seaux d'une carte KPI : `all` + les quatre valeurs de `payments.payment_status`. */
+export type BucketStats = 'all' | 'paid' | 'pending' | 'failed' | 'cancelled';
+const BUCKETS_STATS: BucketStats[] = ['all', 'paid', 'pending', 'failed', 'cancelled'];
 
 /** Ce que l'application dit avoir encaissé sur le périmètre. */
 interface CoteApplication {
@@ -54,6 +77,10 @@ export class AccountingService {
     private readonly lineRepo: Repository<AccHubSnapshotLineEntity>,
     @InjectRepository(PaymentEntity)
     private readonly paymentRepo: Repository<PaymentEntity>,
+    @InjectRepository(SubscriptionEntity)
+    private readonly subscriptionRepo: Repository<SubscriptionEntity>,
+    @InjectRepository(DonateEntity)
+    private readonly donateRepo: Repository<DonateEntity>,
     private readonly hubService: HubService,
   ) {}
 
@@ -86,8 +113,174 @@ export class AccountingService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
+  // Statistiques par campagne (Abonnements / Zaimu)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  private verifierType(type: string): SourceStats {
+    if (!SOURCES_STATS.includes(type as SourceStats)) {
+      throw new BadRequestException({
+        message: 'Type inconnu : attendu `subscription` (abonnements) ou `donation` (zaimu).',
+        data: { code: 'TYPE_INVALIDE' },
+      });
+    }
+    return type as SourceStats;
+  }
+
+  /**
+   * Campagnes du type demandé, TOUS statuts confondus : l'argent d'une campagne archivée reste
+   * de l'argent, une liste bornée aux campagnes en cours ferait « disparaître » des recettes.
+   * (Les campagnes soft-supprimées restent exclues : leurs lignes ont été rapatriées le 10/08.)
+   */
+  async listStatsCampaigns(type: string) {
+    const t = this.verifierType(type);
+    if (t === 'subscription') {
+      const rows = await this.subscriptionRepo.find({ order: { created_at: 'DESC' } });
+      return rows.map((c) => ({
+        uuid: c.uuid,
+        name: c.name,
+        amount: Number(c.amount ?? 0),
+        status: c.status,
+        year: c.year,
+        starts_at: c.starts_at,
+        stops_at: c.stops_at,
+      }));
+    }
+    const rows = await this.donateRepo.find({ order: { created_at: 'DESC' } });
+    return rows.map((c) => ({
+      uuid: c.uuid,
+      name: c.name,
+      amount: Number(c.amount ?? 0),
+      status: c.status,
+      category: c.category,
+      starts_at: c.starts_at,
+      stops_at: c.stops_at,
+    }));
+  }
+
+  /**
+   * Compteurs par statut + montants, en UNE requête agrégée.
+   *
+   * ⚠️ On compte des **liens de paiement** (une ligne `payments` = un lien) - le bon
+   * dénominateur pour « paiements de la campagne ». Le guichet, lui, compte des TENTATIVES :
+   * comparer les deux dénominateurs terme à terme n'a pas de sens.
+   *
+   * La somme doit tomber juste : Total = paid + pending + failed + cancelled. C'est la raison
+   * d'être de la carte « Annulés » à l'écran - sans elle, l'écran additionnerait faux.
+   */
+  async campaignKpi(f: { type: string; campaign_uuid?: string; from?: Date; to?: Date }) {
+    const type = this.verifierType(f.type);
+    const qb = this.paymentRepo
+      .createQueryBuilder('p')
+      .select('p.payment_status', 'statut')
+      .addSelect('COUNT(*)', 'nombre')
+      .addSelect('COALESCE(SUM(p.total_amount), 0)', 'montant')
+      .where('p.source = :source', { source: type })
+      .groupBy('p.payment_status');
+    if (f.campaign_uuid) qb.andWhere('p.source_uuid = :campagne', { campagne: f.campaign_uuid });
+    if (f.from) qb.andWhere('p.created_at >= :from', { from: f.from });
+    if (f.to) qb.andWhere('p.created_at <= :to', { to: f.to });
+
+    const rows = await qb.getRawMany<{ statut: string; nombre: string; montant: string }>();
+    const vide = () => ({ count: 0, amount: 0 });
+    const kpi = {
+      total: vide(),
+      paid: vide(),
+      pending: vide(),
+      failed: vide(),
+      cancelled: vide(),
+    };
+    for (const r of rows) {
+      const seau = kpi[r.statut as 'paid' | 'pending' | 'failed' | 'cancelled'];
+      if (!seau) continue; // statut hors enum : ne pas inventer de carte
+      seau.count = Number(r.nombre);
+      seau.amount = arrondi(Number(r.montant));
+      kpi.total.count += seau.count;
+      kpi.total.amount = arrondi(kpi.total.amount + seau.amount);
+    }
+    return { type, campaign_uuid: f.campaign_uuid ?? null, ...kpi };
+  }
+
+  /**
+   * Les lignes qui composent une carte KPI - ce que la modale affiche. Paginé : un seau peut
+   * porter plus d'un millier de lignes. ⚠️ Le `total` rendu DOIT être le chiffre de la carte
+   * (même filtre, même source) : c'est le contrat de cohérence carte ↔ modale.
+   */
+  async campaignPayments(f: {
+    type: string;
+    campaign_uuid?: string;
+    bucket?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const type = this.verifierType(f.type);
+    const bucket = (f.bucket ?? 'all') as BucketStats;
+    if (!BUCKETS_STATS.includes(bucket)) {
+      throw new BadRequestException({
+        message: 'Catégorie inconnue : attendu all, paid, pending, failed ou cancelled.',
+        data: { code: 'BUCKET_INVALIDE' },
+      });
+    }
+    const limit = Math.min(Math.max(Number(f.limit ?? 50) || 50, 1), 200);
+    const page = Math.max(Number(f.page ?? 1) || 1, 1);
+
+    const qb = this.paymentRepo
+      .createQueryBuilder('p')
+      .where('p.source = :source', { source: type })
+      .orderBy('p.created_at', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+    if (f.campaign_uuid) qb.andWhere('p.source_uuid = :campagne', { campagne: f.campaign_uuid });
+    if (bucket !== 'all') qb.andWhere('p.payment_status = :statut', { statut: bucket });
+
+    const [rows, total] = await qb.getManyAndCount();
+    return {
+      items: rows.map((p) => ({
+        uuid: p.uuid,
+        created_at: p.created_at,
+        paid_at: p.paid_at,
+        beneficiary_name: p.beneficiary_name,
+        actor_name: p.actor_name,
+        total_amount: Number(p.total_amount),
+        provider: p.provider,
+        payment_status: p.payment_status,
+        failure_code: p.failure_code,
+        failure_message: p.failure_message,
+        transaction_id: p.transaction_id,
+        hub_payment_id: p.hub_payment_id,
+      })),
+      total,
+      page,
+      limit,
+      pages: Math.max(1, Math.ceil(total / limit)),
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
   // Côté guichet
   // ─────────────────────────────────────────────────────────────────────────────
+
+  /** Compte XOF d'une liste de comptes de solde ; null si absent — jamais un zéro inventé. */
+  private compteXof(comptes: HubBalanceAccount[] | undefined): number | null {
+    const compte = (comptes ?? []).find((c) => (c.currency ?? '').toLowerCase() === 'xof');
+    if (!compte) return null;
+    return Number(compte.availableBalance ?? compte.amount);
+  }
+
+  /**
+   * **Solde HUB2 constaté à l'instant T**, relayé par le guichet (compte de collecte).
+   *
+   * C'est la preuve opposable au « solde net attendu » du décompte : les deux doivent
+   * concorder, et leur écart éventuel se chiffre — il ne se devine pas.
+   */
+  async liveBalance() {
+    const solde = await this.hubService.getGatewayBalance();
+    return {
+      environment: solde.environment,
+      collection_xof: this.compteXof(solde.collection),
+      transfer_xof: this.compteXof(solde.transfer),
+      at: new Date(),
+    };
+  }
 
   /**
    * Construit le pont **guichet → application** : `linkId` de la liste marchande est exactement
@@ -173,8 +366,31 @@ export class AccountingService {
       to: filtres.to,
     });
 
+    // 🚨 Sonde de pureté : le guichet borne sa liste à SON environnement (correctif du
+    // 2026-08-11 - avant lui, 47 250 XOF d'essais sandbox passaient pour des encaissements
+    // réels). Si des environnements mélangés réapparaissent ici, le filtre du guichet a
+    // régressé : on le dit au journal plutôt que d'afficher un écart imaginaire sans indice.
+    const environnements = new Set(
+      transactions.map((t) => t.environment).filter((e): e is string => !!e),
+    );
+    if (environnements.size > 1) {
+      this.logger.warn(
+        `[CONCORDANCE] Liste du guichet MÉLANGÉE (${[...environnements].join(', ')}) : `
+        + 'le filtre d\'environnement du guichet a régressé.',
+      );
+    }
+
     const pont = await this.pontVersApplication(transactions);
     const app = await this.computeAppSide(filtres);
+
+    // Le solde constaté est une preuve EN PLUS : sa panne ne doit pas priver l'écran de la
+    // liste (l'essentiel). On la signale, on n'échoue pas.
+    let soldeConstate: number | null = null;
+    try {
+      soldeConstate = this.compteXof((await this.hubService.getGatewayBalance()).collection);
+    } catch (e) {
+      this.logger.warn(`[CONCORDANCE] Relevé de solde impossible : ${e?.message ?? e}`);
+    }
 
     let brut = 0;
     let reussis = 0;
@@ -234,6 +450,7 @@ export class AccountingService {
       label: `Guichet SOKA Pay${complet ? '' : ' (lecture TRONQUÉE)'}`,
       filtres,
       auteurUuid,
+      soldeConstate,
       hubTotal: transactions.length,
       hubSucces: reussis,
       hubBrut: brut,
@@ -396,6 +613,8 @@ export class AccountingService {
     hubSucces: number;
     hubBrut: number;
     hubFrais: number;
+    /** Solde HUB2 relevé au même instant ; absent = pas de relevé (import, panne). */
+    soldeConstate?: number | null;
     app: CoteApplication;
     compteurs: Record<MatchStatus, number>;
     appNonApparies: number;
@@ -419,6 +638,10 @@ export class AccountingService {
       hub_gross: String(arrondi(p.hubBrut)),
       hub_fees: String(arrondi(p.hubFrais)),
       hub_net: String(hubNet),
+      gateway_balance:
+        p.soldeConstate === null || p.soldeConstate === undefined
+          ? null
+          : String(arrondi(p.soldeConstate)),
       app_success_count: p.app.count,
       app_gross: String(arrondi(p.app.gross)),
       app_fees_theoretical: String(appFrais),
@@ -474,7 +697,14 @@ export class AccountingService {
       total_count: s.hub_total_count,
       gross: brut,
       fees: frais,
+      // Relevé d'audit du 11/08 : la réponse doit se décrire elle-même. Un instantané
+      // `gateway` ne connaît que des frais THÉORIQUES (2 %) ; seul un export HUB2 porte les
+      // frais réellement prélevés (mesuré : 232 907 réels vs 232 906,02 estimés).
+      fees_estimated: s.kind === SnapshotKind.GATEWAY,
       net: Number(s.hub_net),
+      // Le solde relevé au moment de l'instantané — null si le relevé n'a pas eu lieu
+      // (`!= null` couvre aussi les instantanés antérieurs à la colonne).
+      gateway_balance: s.gateway_balance != null ? Number(s.gateway_balance) : null,
       // Le décompte, ligne à ligne : c'est la forme sous laquelle il doit s'afficher.
       decompte: {
         solde_ouverture: ouverture,

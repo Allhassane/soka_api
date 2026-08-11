@@ -73,6 +73,12 @@ export interface HubGatewayPayment {
   currency: string;
   failureCode?: string | null;
   hub2PaymentId?: string | null;
+  /**
+   * `live` ou `sandbox` — exposé par le guichet depuis le correctif du 2026-08-11. Absent sur
+   * un guichet antérieur. 🚨 Avant ce correctif, la liste marchande MÉLANGEAIT les deux :
+   * 47 250 XOF d'essais sandbox comptés comme encaissements réels par la concordance.
+   */
+  environment?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -80,6 +86,23 @@ export interface HubGatewayPayment {
 interface HubPaymentsPage {
   data: HubGatewayPayment[];
   meta: { page: number; perPage: number; total: number; totalPages: number };
+}
+
+/** Un compte de solde tel que le guichet le relaie depuis HUB2 (`GET /balance`). */
+export interface HubBalanceAccount {
+  currency: string;
+  amount: number;
+  availableBalance?: number;
+}
+
+/**
+ * Solde marchand relayé par le guichet : `collection` est le compte de COLLECTE (celui que les
+ * encaissements alimentent), `transfer` celui des reversements.
+ */
+export interface HubGatewayBalance {
+  environment: string;
+  collection: HubBalanceAccount[];
+  transfer: HubBalanceAccount[];
 }
 
 @Injectable()
@@ -170,6 +193,30 @@ export class HubService {
     // annoncerait un écart imaginaire. L'appelant doit pouvoir le signaler plutôt que de
     // présenter un chiffre faux avec assurance.
     return { payments, total, complet: payments.length >= total };
+  }
+
+  /**
+   * **Relais du solde HUB2** (compte de collecte + compte de reversement) exposé par le guichet.
+   *
+   * ⚠️ Lecture seule, comme `listGatewayPayments` : mêmes clé, racine d'API et timeout — jamais
+   * une seconde variable d'environnement, qui finirait par diverger de la première.
+   */
+  async getGatewayBalance(): Promise<HubGatewayBalance> {
+    if (!this.apiKey) {
+      throw new InternalServerErrorException('HUB_API_KEY non configurée');
+    }
+
+    const { data } = await axios.get<HubGatewayBalance>(`${this.apiRoot}/balance`, {
+      headers: { Authorization: `Bearer ${this.apiKey}` },
+      timeout: this.timeoutMs,
+    });
+
+    if (!data || !Array.isArray(data.collection)) {
+      throw new InternalServerErrorException(
+        'Réponse du guichet invalide : `collection` absent du solde',
+      );
+    }
+    return data;
   }
 
   async initPayment(

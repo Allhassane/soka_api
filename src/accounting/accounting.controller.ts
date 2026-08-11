@@ -18,25 +18,11 @@ import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
 import { PermissionsGuard } from 'src/auth/guards/permissions.guard';
 import { RequirePermissions } from 'src/auth/decorators/require-permissions.decorator';
 import { AccountingService, ConcordanceFiltres } from './accounting.service';
+import { COMPTABILITE, versDate } from './accounting.helpers';
 import { MatchStatus } from './entities/acc-hub-snapshot-line.entity';
-
-/** Permission UNIQUE du module : elle commande le menu et tout ce qu'il contient. */
-const COMPTABILITE = 'comptabilite_voir_menu_comptabilite';
 
 /** Taille maximale d'un export accepté. Au-delà, ce n'est pas un export HUB2. */
 const TAILLE_MAX_EXPORT = 15 * 1024 * 1024;
-
-function versDate(valeur?: string, champ = 'date'): Date | undefined {
-  if (!valeur) return undefined;
-  const d = new Date(valeur);
-  if (Number.isNaN(d.getTime())) {
-    throw new BadRequestException({
-      message: `Le paramètre « ${champ} » n'est pas une date valide.`,
-      data: { code: 'DATE_INVALIDE', champ },
-    });
-  }
-  return d;
-}
 
 /**
  * **Concordance « Solde HUB2 = Solde App ».**

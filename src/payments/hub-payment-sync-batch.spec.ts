@@ -1,7 +1,38 @@
 import { PaymentService } from './payment.service';
+import { HubPaymentSyncCronService } from './hub-payment-sync.cron';
 import { PaymentEntity, PaymentStatus } from './entities/payment.entity';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 import { CRON_ABANDON_AFTER_HOURS } from './abandon.constants';
+
+describe('HubPaymentSyncCronService - interrupteur de poste de test', () => {
+  it('🚨 HUB_SYNC_CRON_ENABLED=false désarme le cron - indispensable pour brancher une API locale sur le guichet de PRODUCTION sans rien pouvoir y écrire', async () => {
+    process.env.HUB_SYNC_CRON_ENABLED = 'false';
+    try {
+      const paymentService = { syncAllPendingHubPayments: jest.fn() };
+      const cron = new HubPaymentSyncCronService(paymentService as never);
+
+      await cron.syncPendingHubPayments();
+
+      expect(paymentService.syncAllPendingHubPayments).not.toHaveBeenCalled();
+    } finally {
+      delete process.env.HUB_SYNC_CRON_ENABLED;
+    }
+  });
+
+  it('reste armé par défaut (variable absente)', async () => {
+    delete process.env.HUB_SYNC_CRON_ENABLED;
+    const paymentService = {
+      syncAllPendingHubPayments: jest.fn().mockResolvedValue({
+        processed: 0, paid: 0, failed: 0, abandoned: 0, pending: 0, errors: 0,
+      }),
+    };
+    const cron = new HubPaymentSyncCronService(paymentService as never);
+
+    await cron.syncPendingHubPayments();
+
+    expect(paymentService.syncAllPendingHubPayments).toHaveBeenCalledTimes(1);
+  });
+});
 
 /**
  * RÉGRESSION MESURÉE EN PRODUCTION (2026-08-07) : **585 000 XOF encaissés par le guichet et

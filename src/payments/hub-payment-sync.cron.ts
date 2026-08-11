@@ -19,6 +19,16 @@ export class HubPaymentSyncCronService {
   /** Toutes les 10 minutes : synchronise les paiements Hub encore en attente. */
   @Cron('0 */10 * * * *')
   async syncPendingHubPayments() {
+    // 🚨 Interrupteur de POSTE DE TEST : une API locale branchée sur le guichet de PRODUCTION
+    // ne doit rien pouvoir y écrire, or ce cron referme des liens abandonnés
+    // (`cancelHubPaymentByTransactionId` désactive le lien au guichet). Défaut : armé —
+    // seule la valeur littérale 'false' désarme, pour qu'aucune faute de frappe ne puisse
+    // éteindre la synchronisation de production en silence.
+    if (process.env.HUB_SYNC_CRON_ENABLED === 'false') {
+      this.logger.warn('Cron de synchronisation Hub DÉSARMÉ (HUB_SYNC_CRON_ENABLED=false).');
+      return;
+    }
+
     if (this.isRunning) {
       this.logger.warn('Synchronisation Hub déjà en cours, exécution ignorée.');
       return;

@@ -134,21 +134,39 @@ async function main() {
     }
 
     // ── 2. Ce que le guichet connaît réellement ─────────────────────────────────────────
-    // Une seule lecture paginée : elle donne le statut de chaque tentative ET son lien. C'est
-    // aussi ce qui exclut structurellement le `sandbox` - la clé marchande de production ne
-    // voit que le `live`.
+    // Une seule lecture paginée : elle donne le statut de chaque tentative ET son lien.
     console.log('Lecture du guichet (liste marchande, lecture seule)…');
     const { payments: transactions, complet } = await hub.listGatewayPayments({});
     if (!complet) {
       console.error('\n❌ Lecture du guichet TRONQUÉE : restaurer sur cette base serait arbitraire.');
       process.exit(2);
     }
+
+    // 🚨 L'exclusion du sandbox est PORTÉE PAR CE FILTRE, pas par la clé marchande. La croyance
+    // « la clé de prod ne voit que le live » était FAUSSE : mesuré le 2026-08-11, la liste
+    // marchande mélangeait les environnements et ce seed a restauré 45 000 XOF d'essais
+    // sandbox comme du vrai argent. Le guichet filtre désormais côté serveur ET expose
+    // `environment` ; ce seed refuse de tourner contre un guichet trop ancien pour le rendre.
+    if (transactions.length > 0 && transactions.every((t) => t.environment === undefined)) {
+      console.error(
+        '\n❌ Le guichet ne rend pas l\'environnement des tentatives : déployer d\'abord le'
+        + ' correctif SOKA Pay (filtre + exposition d\'`environment` dans la liste marchande).'
+        + ' Sans lui, des encaissements SANDBOX passeraient pour du vrai argent.',
+      );
+      process.exit(2);
+    }
+    const transactionsLive = transactions.filter((t) => (t.environment ?? 'live') === 'live');
+    const horsLive = transactions.length - transactionsLive.length;
+    if (horsLive > 0) {
+      console.log(`  ⚠️ ${horsLive} tentative(s) hors \`live\` écartée(s) d'office.`);
+    }
+
     const liensEncaisses = new Set(
-      transactions.filter((t) => t.status === 'successful').map((t) => t.linkId),
+      transactionsLive.filter((t) => t.status === 'successful').map((t) => t.linkId),
     );
-    const liensConnus = new Set(transactions.map((t) => t.linkId));
+    const liensConnus = new Set(transactionsLive.map((t) => t.linkId));
     console.log(
-      `  ${transactions.length} tentatives · ${liensConnus.size} liens connus · ${liensEncaisses.size} encaissés`,
+      `  ${transactionsLive.length} tentatives live · ${liensConnus.size} liens connus · ${liensEncaisses.size} encaissés`,
     );
 
     // ── 3. Le périmètre ─────────────────────────────────────────────────────────────────

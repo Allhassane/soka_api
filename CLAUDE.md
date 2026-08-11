@@ -342,6 +342,16 @@ services) : abonnements et dons.
     un crontab système : `pm2 restart` le relance, mais le premier passage attend la prochaine
     tranche de 10 min. ⚠️ `ecosystem.config.js` déclare `instances: 1` en `fork` - en `cluster`,
     on aurait **N crons concurrents** sur le même guichet.
+  - **`HUB_SYNC_CRON_ENABLED=false` désarme le cron** (seule la valeur littérale `'false'` - une
+    faute de frappe n'éteint rien). Raison d'être : une API **locale** pointée sur le guichet de
+    **production** (recette temps réel) ne doit rien pouvoir y écrire, or ce cron referme des
+    liens. Défaut : armé. Ne jamais poser cette variable en production.
+  - **🚨 La liste marchande du guichet rend `environment` depuis le 2026-08-11 - et il faut le
+    déployer.** Avant ce correctif (`soka-pay/api/src/server/payments.ts`), la liste MÉLANGEAIT
+    sandbox et live sans l'indiquer : 47 250 XOF d'essais sandbox comptés comme encaissements
+    réels par la concordance en prod. Tout consommateur de `listGatewayPayments` qui filtre ou
+    additionne de l'argent doit tenir compte de ce champ (le seed de restauration REFUSE un
+    guichet qui ne le rend pas).
   - **Deux commandes, à ne pas confondre** :
     `npm run seed:reconcile-hub-payments` = **lecture stricte**, détecte les encaissements non
     crédités, liste nominative, **code de sortie 1** s'il y en a (utilisable en sonde) ;

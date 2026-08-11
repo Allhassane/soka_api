@@ -25,6 +25,8 @@ function makeService(options: {
   gatewayPayments?: any[];
   appPayments?: any[];
   dernierSnapshot?: any;
+  campagnesAbonnements?: any[];
+  campagnesDons?: any[];
 } = {}) {
   const lignesEcrites: any[] = [];
   const snapshotsEcrits: any[] = [];
@@ -47,13 +49,27 @@ function makeService(options: {
     addSelect: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
+    groupBy: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    skip: jest.fn().mockReturnThis(),
+    take: jest.fn().mockReturnThis(),
     getRawOne: jest.fn().mockResolvedValue({
       count: String(options.appCount ?? 0),
       gross: String(options.appGross ?? 0),
     }),
+    getRawMany: jest.fn().mockResolvedValue([]),
     getMany: jest.fn().mockResolvedValue(options.appPayments ?? []),
+    getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
   };
   const paymentRepo = { createQueryBuilder: jest.fn().mockReturnValue(paymentQb) };
+
+  // Lecture seule, comme `payments` : ces simulacres n'exposent délibérément aucune écriture.
+  const subscriptionRepo = {
+    find: jest.fn().mockResolvedValue(options.campagnesAbonnements ?? []),
+  };
+  const donateRepo = {
+    find: jest.fn().mockResolvedValue(options.campagnesDons ?? []),
+  };
 
   const hubService = {
     listGatewayPayments: jest.fn().mockResolvedValue({
@@ -61,16 +77,26 @@ function makeService(options: {
       total: (options.gatewayPayments ?? []).length,
       complet: true,
     }),
+    getGatewayBalance: jest.fn().mockResolvedValue({
+      environment: 'live',
+      collection: [{ currency: 'xof', amount: 100, availableBalance: 100 }],
+      transfer: [],
+    }),
   };
 
   const service = new AccountingService(
     snapshotRepo as never,
     lineRepo as never,
     paymentRepo as never,
+    subscriptionRepo as never,
+    donateRepo as never,
     hubService as never,
   );
 
-  return { service, snapshotRepo, lineRepo, paymentRepo, hubService, lignesEcrites, snapshotsEcrits };
+  return {
+    service, snapshotRepo, lineRepo, paymentRepo, subscriptionRepo, donateRepo,
+    hubService, lignesEcrites, snapshotsEcrits, paymentQb,
+  };
 }
 
 describe('Concordance - lecture de l\'export HUB2', () => {
@@ -322,6 +348,141 @@ describe('Concordance - le décompte affiché', () => {
     expect(vue.equality.evaluated).toBe(false);
     expect(vue.equality.gap_gross).toBeNull();
     expect(vue.reference_source).toBeNull();
+  });
+});
+
+describe('Tableau de bord - solde HUB2 constaté', () => {
+  it('extrait le compte de collecte XOF, insensible à la casse', async () => {
+    const { service, hubService } = makeService();
+    hubService.getGatewayBalance.mockResolvedValue({
+      environment: 'live',
+      collection: [{ currency: 'XOF', amount: 11397890, availableBalance: 11397890 }],
+      transfer: [],
+    });
+
+    const solde = await service.liveBalance();
+
+    expect(solde.collection_xof).toBe(11397890);
+    expect(solde.environment).toBe('live');
+  });
+
+  it('rend null - jamais zéro - quand aucun compte XOF n\'existe', async () => {
+    // Un zéro affirmerait un compte vide là où on n'a simplement rien pu lire.
+    const { service, hubService } = makeService();
+    hubService.getGatewayBalance.mockResolvedValue({ environment: 'live', collection: [], transfer: [] });
+
+    const solde = await service.liveBalance();
+    expect(solde.collection_xof).toBeNull();
+  });
+
+  it('stocke le solde constaté sur l\'instantané du rafraîchissement', async () => {
+    const { service, snapshotsEcrits, hubService } = makeService();
+    hubService.getGatewayBalance.mockResolvedValue({
+      environment: 'live',
+      collection: [{ currency: 'xof', amount: 11397890, availableBalance: 11397890 }],
+      transfer: [],
+    });
+
+    await service.refreshFromGateway();
+    expect(snapshotsEcrits[0].gateway_balance).toBe('11397890');
+  });
+
+  it('🚨 une panne du relevé de solde ne fait PAS échouer le rafraîchissement', async () => {
+    // La liste du guichet est l'essentiel ; le solde est une preuve en plus. Échouer tout le
+    // rafraîchissement parce que le relevé est en panne priverait l'écran de sa matière.
+    const { service, snapshotsEcrits, hubService } = makeService();
+    hubService.getGatewayBalance.mockRejectedValue(new Error('guichet muet'));
+
+    await service.refreshFromGateway();
+
+    expect(snapshotsEcrits).toHaveLength(1);
+    expect(snapshotsEcrits[0].gateway_balance).toBeNull();
+  });
+});
+
+describe('Tableau de bord - KPI par campagne', () => {
+  it('agrège par statut ; collecté = montant des `paid` ; Total = somme des cartes', async () => {
+    // La somme doit tomber juste : Total = Réussis + En cours + Échoués + Annulés. C'est la
+    // raison d'être de la carte « Annulés » - sans elle, l'écran additionne faux.
+    const { service, paymentQb } = makeService();
+    paymentQb.getRawMany.mockResolvedValue([
+      { statut: 'paid', nombre: '640', montant: '10170000' },
+      { statut: 'pending', nombre: '99', montant: '1485000' },
+      { statut: 'failed', nombre: '134', montant: '44500' },
+      { statut: 'cancelled', nombre: '273', montant: '820000' },
+    ]);
+
+    const kpi = await service.campaignKpi({ type: 'subscription' });
+
+    expect(kpi.paid).toEqual({ count: 640, amount: 10170000 });
+    expect(kpi.pending).toEqual({ count: 99, amount: 1485000 });
+    expect(kpi.failed).toEqual({ count: 134, amount: 44500 });
+    expect(kpi.cancelled).toEqual({ count: 273, amount: 820000 });
+    expect(kpi.total.count).toBe(640 + 99 + 134 + 273);
+    expect(kpi.total.amount).toBe(10170000 + 1485000 + 44500 + 820000);
+  });
+
+  it('filtre par campagne quand un uuid est donné', async () => {
+    const { service, paymentQb } = makeService();
+    await service.campaignKpi({ type: 'donation', campaign_uuid: 'camp-1' });
+    expect(paymentQb.andWhere).toHaveBeenCalledWith('p.source_uuid = :campagne', {
+      campagne: 'camp-1',
+    });
+  });
+
+  it('refuse un type inconnu - le contrat est subscription|donation', async () => {
+    const { service } = makeService();
+    await expect(service.campaignKpi({ type: 'boutique' })).rejects.toMatchObject({
+      response: { data: { code: 'TYPE_INVALIDE' } },
+    });
+  });
+
+  it('refuse un seau inconnu sur la liste des lignes', async () => {
+    const { service } = makeService();
+    await expect(
+      service.campaignPayments({ type: 'subscription', bucket: 'gagnants' }),
+    ).rejects.toMatchObject({ response: { data: { code: 'BUCKET_INVALIDE' } } });
+  });
+
+  it('pagine les lignes d\'une carte et rend le total - la modale doit afficher LE chiffre de la carte', async () => {
+    const { service, paymentQb } = makeService();
+    paymentQb.getManyAndCount.mockResolvedValue([
+      [{
+        uuid: 'p1', created_at: new Date('2026-08-01T05:00:00Z'), paid_at: null,
+        beneficiary_name: 'AKA Marie', actor_name: 'AKA Marie', total_amount: 15000,
+        provider: 'wave', payment_status: 'pending', failure_code: null,
+        failure_message: null, transaction_id: 'plink_1', hub_payment_id: null,
+      }],
+      151,
+    ]);
+
+    const page = await service.campaignPayments({
+      type: 'subscription', bucket: 'pending', page: 2, limit: 50,
+    });
+
+    expect(paymentQb.andWhere).toHaveBeenCalledWith('p.payment_status = :statut', {
+      statut: 'pending',
+    });
+    expect(paymentQb.skip).toHaveBeenCalledWith(50);
+    expect(paymentQb.take).toHaveBeenCalledWith(50);
+    expect(page.total).toBe(151);
+    expect(page.pages).toBe(4);
+    expect(page.items[0].beneficiary_name).toBe('AKA Marie');
+  });
+
+  it('liste les campagnes du bon type (zaimu → donates), tous statuts', async () => {
+    const { service, donateRepo, subscriptionRepo } = makeService({
+      campagnesDons: [{
+        uuid: 'd1', name: 'Zaimu 2026', amount: 0, status: 'started', category: 'libre',
+        starts_at: new Date('2026-01-01'), stops_at: new Date('2026-12-31'),
+      }],
+    });
+
+    const liste = await service.listStatsCampaigns('donation');
+
+    expect(liste[0]).toMatchObject({ uuid: 'd1', name: 'Zaimu 2026', category: 'libre' });
+    expect(donateRepo.find).toHaveBeenCalled();
+    expect(subscriptionRepo.find).not.toHaveBeenCalled();
   });
 });
 
