@@ -24,9 +24,17 @@ import {
  * ⚠️ Effet visible : côté API < 30 s (cache `EffectivePermissionsService`) ; côté web à la
  * RECONNEXION (les permissions d'affichage sont chargées au login).
  *
+ * 🚨 **Garde-fou de suppression (2026-08-11).** La synchronisation fait un
+ * `DELETE FROM permissions` sur tout slug absent du catalogue, **et ses liens de rôles avec**.
+ * En déploiement non supervisé, c'est le seul geste de ce lot qui puisse retirer des droits à
+ * des gens sans que personne le voie passer. Le seed **refuse donc d'écrire** dès qu'une
+ * suppression est prévue, et rend la liste ; il faut alors la lire et confirmer par
+ * `--allow-deletions`. Un déploiement normal n'en supprime aucune.
+ *
  * Exécution (depuis api/) :
  *   npm run seed:permissions
- *   npm run seed:permissions -- --dry-run    # joue tout puis annule, pour voir les compteurs
+ *   npm run seed:permissions -- --dry-run           # joue tout puis annule, pour voir les compteurs
+ *   npm run seed:permissions -- --allow-deletions   # exigé SI des slugs doivent disparaître
  *   npm run seed:permissions -- --no-backup
  */
 
@@ -69,6 +77,7 @@ function controlerCouvertureDuCode(): boolean {
 async function run(): Promise<void> {
   const dryRun = process.argv.includes('--dry-run');
   const backup = !process.argv.includes('--no-backup');
+  const allowDeletions = process.argv.includes('--allow-deletions');
 
   const ds: DataSource = await AppDataSource.initialize();
   console.log(`[seed] Base cible : ${ds.options.database as string}`);
@@ -99,6 +108,19 @@ async function run(): Promise<void> {
     if (dryRun) {
       await runner.rollbackTransaction();
       console.log('\n[seed] --dry-run : transaction annulée, la base est inchangée.');
+    } else if (rapport.permissionsSupprimees.length > 0 && !allowDeletions) {
+      // 🚨 Supprimer une permission emporte ses liens de rôles : des utilisateurs perdent un
+      // droit sans que rien ne le signale. On refuse plutôt que de le faire en silence.
+      await runner.rollbackTransaction();
+      console.error(
+        `\n[seed] ❌ ${rapport.permissionsSupprimees.length} permission(s) seraient SUPPRIMÉES `
+        + `(avec leurs liens de rôles). Transaction annulée, la base est inchangée.`,
+      );
+      console.error(
+        '        Relire la liste ci-dessus. Si ces suppressions sont voulues :\n'
+        + '        npm run seed:permissions -- --allow-deletions',
+      );
+      process.exit(2);
     } else if (!couvertureOk) {
       await runner.rollbackTransaction();
       console.error('\n[seed] ❌ Couverture incomplète côté API : transaction annulée.');

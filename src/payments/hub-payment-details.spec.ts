@@ -134,9 +134,10 @@ describe('PaymentService - capture du détail guichet', () => {
       payment_status: PaymentStatus.PENDING,
       provider: 'orange',
       failure_code: 'timeout',
+      hub_payment_id: 'pay_deja_connu',
     });
 
-    enAttente({ status: 'pending', provider: null, failureCode: null });
+    enAttente({ status: 'pending', provider: null, failureCode: null, id: null });
 
     await service.syncHubPaymentByTransactionId('plink_abc');
 
@@ -152,6 +153,8 @@ describe('PaymentService - capture du détail guichet', () => {
       failure_code: 'timeout',
       failure_message: 'Délai dépassé',
       paid_at: new Date('2026-08-09T16:37:30.000Z'),
+      hub_payment_id: 'pay_abc',
+      hub_created_at: new Date('2026-08-09T16:30:00.000Z'),
     });
 
     enAttente({
@@ -160,6 +163,8 @@ describe('PaymentService - capture du détail guichet', () => {
       failureCode: 'timeout',
       failureMessage: 'Délai dépassé',
       paidAt: '2026-08-09T16:37:30.000Z',
+      id: 'pay_abc',
+      createdAt: '2026-08-09T16:30:00.000Z',
     });
 
     await service.syncHubPaymentByTransactionId('plink_abc');
@@ -181,6 +186,50 @@ describe('PaymentService - capture du détail guichet', () => {
     const patch = patchEcrit();
     expect(patch.provider).toBe('mtn');
     expect(patch).not.toHaveProperty('paid_at');
+  });
+
+  /**
+   * L'identité HUB2 (`pay_…` + date de création chez HUB2) est la condition de la concordance
+   * « Solde HUB2 = Solde App » : sans elle, le rapprochement avec l'export du guichet retombe
+   * sur des heuristiques montant + date. Et la fenêtre pour l'obtenir est étroite - une fois le
+   * rattrapage joué en production, une colonne ajoutée après coup imposerait un second balayage
+   * complet du guichet.
+   */
+  it('conserve l\'identité HUB2 : `pay_…` et la date de création chez HUB2', async () => {
+    const { service, patchEcrit } = makeService({
+      uuid: 'pay-uuid',
+      transaction_id: 'plink_abc',
+      payment_status: PaymentStatus.PENDING,
+    });
+
+    enAttente({
+      status: 'pending',
+      provider: 'wave',
+      id: 'pay_01K2ABCDEF',
+      createdAt: '2026-08-09T16:30:00.000Z',
+    });
+
+    await service.syncHubPaymentByTransactionId('plink_abc');
+
+    const patch = patchEcrit();
+    expect(patch.hub_payment_id).toBe('pay_01K2ABCDEF');
+    expect(patch.hub_created_at).toEqual(new Date('2026-08-09T16:30:00.000Z'));
+  });
+
+  it('ignore une date de création HUB2 illisible plutôt que de la stocker', async () => {
+    const { service, patchEcrit } = makeService({
+      uuid: 'pay-uuid',
+      transaction_id: 'plink_abc',
+      payment_status: PaymentStatus.PENDING,
+    });
+
+    enAttente({ status: 'pending', provider: 'mtn', createdAt: 'pas-une-date' });
+
+    await service.syncHubPaymentByTransactionId('plink_abc');
+
+    const patch = patchEcrit();
+    expect(patch.provider).toBe('mtn');
+    expect(patch).not.toHaveProperty('hub_created_at');
   });
 
   it('🚨 une écriture en échec n\'interrompt PAS la synchronisation', async () => {

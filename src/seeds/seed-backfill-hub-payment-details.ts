@@ -9,9 +9,11 @@ import { PaymentService } from '../payments/payment.service';
  * ajoutées par la migration `AddHubPaymentDetails1782903000000`.
  *
  * Depuis cette migration, chaque vérification au guichet conserve `provider`,
- * `failure_code`, `failure_message` et `paid_at`. Les paiements plus anciens, eux, sont
- * restés à NULL : sans ce rattrapage, les statistiques « par opérateur » et « motifs
- * d'échec » ne porteraient que sur les paiements postérieurs au déploiement.
+ * `failure_code`, `failure_message` et `paid_at` - et, depuis `AddHubPaymentIdentity`,
+ * `hub_payment_id` et `hub_created_at`. Les paiements plus anciens, eux, sont restés à NULL :
+ * sans ce rattrapage, les statistiques « par opérateur » et « motifs d'échec » ne porteraient
+ * que sur les paiements postérieurs au déploiement, et le rapprochement ligne à ligne avec
+ * l'export HUB2 (concordance « Solde HUB2 = Solde App ») serait impossible sur l'historique.
  *
  * 🚨 **Ce script ne modifie AUCUN statut de paiement.** Il ne crédite rien, ne referme
  * rien, n'annule aucun lien. Il lit le guichet (`checkPaymentStatus` est un GET) et
@@ -27,7 +29,9 @@ import { PaymentService } from '../payments/payment.service';
  * ⚠️ Il démarre l'application complète, donc **les migrations en attente s'appliquent**.
  *
  * ⚠️ Un appel réseau par paiement (par lots de 5). Sur ~1 800 lignes, compter quelques
- * minutes. Le script est **reprenable** : seules les lignes sans opérateur sont candidates.
+ * minutes. Le script est **reprenable** : sont candidates les lignes sans opérateur **ou**
+ * sans identifiant HUB2 (une base où le rattrapage a déjà tourné doit pouvoir récupérer
+ * l'identité HUB2 sans repartir de zéro).
  *
  * Exécution (depuis api/) :
  *   npm run seed:backfill-hub-details                          # simulation, tout le stock
@@ -87,7 +91,7 @@ async function main() {
   const secondes = Math.round((Date.now() - debut) / 1000);
 
   console.log(`Terminé en ${secondes} s.`);
-  console.log(`  candidats (sans opérateur) : ${r.candidats}`);
+  console.log(`  candidats (sans opérateur ou sans id HUB2) : ${r.candidats}`);
   console.log(`  interrogés au guichet      : ${r.interroges}`);
   console.log(`  ${apply ? 'renseignés' : 'renseignables'}${apply ? '                 ' : '              '}: ${r.renseignes}`);
   console.log(`  sans tentative au guichet  : ${r.sans_detail}`);

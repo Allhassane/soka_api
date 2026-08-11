@@ -108,7 +108,7 @@ export class PaymentEntity extends DateTimeEntity {
   // -----------------------------------------------------------
   // Détail rendu par le guichet (SOKA Pay → HUB2)
   //
-  // Ces quatre colonnes sont alimentées par `PaymentService.captureHubPaymentDetails`,
+  // Ces six colonnes sont alimentées par `PaymentService.captureHubPaymentDetails`,
   // à l'unique endroit où la réponse du guichet est lue. Elles n'ont AUCUN rôle dans le
   // parcours de paiement : elles existent pour que les statistiques puissent répondre
   // « par quel opérateur » et « pourquoi ça a échoué », deux questions auxquelles la
@@ -134,4 +134,27 @@ export class PaymentEntity extends DateTimeEntity {
   /** Horodatage d'encaissement chez l'opérateur (≠ `updated_at`, qui est celui de l'API). */
   @Column({ type: 'datetime', nullable: true })
   paid_at: Date | null;
+
+  /**
+   * Identifiant de la transaction au guichet HUB2 (`pay_…`) - LA clé de rapprochement avec
+   * l'export HUB2 (concordance « Solde HUB2 = Solde App »). Sans elle, le rapprochement retombe
+   * sur des heuristiques montant + date et laisse des écarts inexplicables.
+   *
+   * ⚠️ **Volontairement NON UNIQUE en base.** Une ligne `payments` est un LIEN, pas une
+   * transaction : sur un lien jamais abouti, le guichet peut rendre une tentative différente
+   * d'un appel à l'autre (il privilégie la réussie, sinon la dernière). Un index unique
+   * ferait échouer la synchronisation sur un cas parfaitement normal.
+   */
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  hub_payment_id: string | null;
+
+  /**
+   * Création de la transaction chez HUB2 = vrai départ de la tentative.
+   *
+   * ⚠️ À ne pas confondre avec `created_at`, qui date la création du **lien** de paiement. Un
+   * membre qui reçoit son lien à 9 h, l'ouvre à 12 h et paie en 40 s doit compter ~40 s, pas
+   * 3 h : c'est la seule base saine du « délai de confirmation ».
+   */
+  @Column({ type: 'datetime', nullable: true })
+  hub_created_at: Date | null;
 }

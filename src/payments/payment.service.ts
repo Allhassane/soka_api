@@ -405,7 +405,7 @@ export class PaymentService {
 
   /**
    * **Conserve le détail rendu par le guichet** : opérateur, motif d'échec, horodatage
-   * d'encaissement. C'est la seule écriture de ces quatre colonnes.
+   * d'encaissement, identité de la transaction HUB2. C'est la seule écriture de ces six colonnes.
    *
    * Le guichet renvoyait déjà ces champs à chaque vérification et l'API les jetait : aucune
    * statistique « par opérateur » ni « par motif d'échec » n'était calculable, alors que
@@ -455,6 +455,22 @@ export class PaymentService {
       if (!Number.isNaN(paidAt.getTime())
         && paidAt.getTime() !== payment.paid_at?.getTime()) {
         patch.paid_at = paidAt;
+      }
+    }
+
+    // L'identité HUB2 : `pay_…` est la seule clé fiable de rapprochement avec l'export du
+    // guichet, et `createdAt` le seul départ de tentative exploitable (`created_at` date le
+    // LIEN, pas la tentative).
+    const hubPaymentId = details.id?.trim();
+    if (hubPaymentId && hubPaymentId !== payment.hub_payment_id) {
+      patch.hub_payment_id = hubPaymentId;
+    }
+
+    if (details.createdAt) {
+      const hubCreatedAt = new Date(details.createdAt);
+      if (!Number.isNaN(hubCreatedAt.getTime())
+        && hubCreatedAt.getTime() !== payment.hub_created_at?.getTime()) {
+        patch.hub_created_at = hubCreatedAt;
       }
     }
 
@@ -780,18 +796,25 @@ export class PaymentService {
 
   /**
    * **Rattrape le détail guichet des paiements antérieurs** aux colonnes `provider` /
-   * `failure_code` / `failure_message` / `paid_at`. Alimente `npm run seed:backfill-hub-details`.
+   * `failure_code` / `failure_message` / `paid_at` / `hub_payment_id` / `hub_created_at`.
+   * Alimente `npm run seed:backfill-hub-details`.
    *
    * 🚨 **Ce balayage ne touche AUCUN statut, et c'est tout l'intérêt.** Il n'emprunte
    * délibérément **pas** `syncHubPaymentByTransactionId` : celle-ci crédite, referme et
    * annule. La rejouer sur 1 800 lignes historiques serait une seconde route vers l'argent -
    * exactement la duplication qui a produit les écarts de début août. Ici, une seule lecture
-   * (`checkPaymentStatus` est un GET) et une écriture bornée aux quatre colonnes d'analyse.
+   * (`checkPaymentStatus` est un GET) et une écriture bornée aux six colonnes d'analyse.
    *
-   * ⚠️ **Reprise naturelle** : seuls les paiements dont `provider` est encore NULL sont
-   * candidats. Une exécution interrompue se relance sans rien refaire, et une ligne pour
-   * laquelle le guichet ne connaît aucune tentative restera candidate à jamais - c'est
-   * voulu, elle ne coûte qu'un appel et rien ne permet de la distinguer d'une non-traitée.
+   * ⚠️ **Reprise naturelle** : sont candidats les paiements dont `provider` **ou**
+   * `hub_payment_id` est encore NULL. Une exécution interrompue se relance sans rien refaire,
+   * et une ligne pour laquelle le guichet ne connaît aucune tentative restera candidate à
+   * jamais - c'est voulu, elle ne coûte qu'un appel et rien ne permet de la distinguer d'une
+   * non-traitée.
+   *
+   * ⚠️ Le `OR hub_payment_id IS NULL` n'est pas cosmétique : il rend candidates les lignes
+   * qu'un passage antérieur avait déjà renseignées en `provider`, sans quoi les bases où le
+   * rattrapage a déjà tourné n'obtiendraient JAMAIS l'identité HUB2 - et le rapprochement
+   * ligne à ligne avec l'export du guichet resterait impossible sur tout l'historique.
    *
    * @param apply `false` (défaut) = simulation : le guichet est interrogé, rien n'est écrit.
    */
@@ -808,7 +831,7 @@ export class PaymentService {
       .createQueryBuilder('p')
       .where('p.transaction_id IS NOT NULL')
       .andWhere('p.transaction_id LIKE :prefix', { prefix: 'plink_%' })
-      .andWhere('p.provider IS NULL')
+      .andWhere('(p.provider IS NULL OR p.hub_payment_id IS NULL)')
       // Le plus récent d'abord : même raison qu'au cron, une exécution écourtée doit avoir
       // traité ce qui compte le plus.
       .orderBy('p.created_at', 'DESC')

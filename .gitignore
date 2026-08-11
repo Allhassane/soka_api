@@ -51,6 +51,14 @@ package-lock.json*
 .temp
 .tmp
 
+# Sorties generees par les seeds et le script de deploiement : donnees de production, parfois
+# volumineuses. Volontairement cible : le reste de backups/ est deja versionne, tout ignorer
+# changerait le comportement des autres seeds sans le dire.
+/backups/rollback-*.sql
+/backups/base-avant-deploiement-*.sql
+/backups/deploiement-*.log
+/backups/permissions-avant-sync-*.json
+
 # Runtime data
 pids
 *.pid

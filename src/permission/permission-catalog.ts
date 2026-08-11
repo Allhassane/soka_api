@@ -886,6 +886,27 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
       },
     ],
   },
+  {
+    name: 'Comptabilité',
+    description:
+      'Concordance « Solde HUB2 = Solde App » : rapprochement des encaissements du guichet '
+      + 'et de l’application, solde d’ouverture inclus.',
+    permissions: [
+      // ⚠️ UNE SEULE permission pour tout le module, et c'est une décision, pas un raccourci :
+      // le module est en LECTURE SEULE sur les paiements (il ne crédite, ne referme ni ne
+      // recopie aucun statut), si bien qu'il n'y a pas de geste dangereux à isoler derrière un
+      // droit distinct. Y voir la concordance, la rafraîchir ou l'exporter relèvent du même
+      // besoin : savoir si les comptes tombent juste. Découper aurait produit des rôles
+      // capables de voir un écart sans pouvoir le rafraîchir - une fausse finesse.
+      // Le jour où le module écrira (écritures SYCEBNL, phase C), c'est là qu'un second slug
+      // aura un sens.
+      {
+        name: 'Accéder au menu Comptabilité',
+        slug: 'comptabilite_voir_menu_comptabilite',
+        defaults: { ADMINISTRATEUR: true },
+      },
+    ],
+  },
 ];
 
 /** Toutes les permissions du catalogue à plat, avec leur module d'appartenance. */

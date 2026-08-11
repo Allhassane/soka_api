@@ -240,6 +240,20 @@ services) : abonnements et dons.
   `SubscriptionPaymentEntity` / `DonatePaymentEntity` sur `beneficiary_uuid` (ou `actor_uuid`) -
   il n'y a pas de `@OneToMany` à charger via `relations:`.
 
+- **🚨 `payments.source_uuid` porte LA CAMPAGNE, pas la ligne d'abonnement** (vérifié le
+  2026-08-10 sur les 1 850 lignes de `soka_db` : `source_uuid = subscription_payments
+  .subscription_uuid` sur 1 850, jamais `= subscription_payments.uuid`). Conséquence : **changer
+  la campagne d'un paiement, c'est DEUX écritures dans UNE transaction** -
+  `subscription_payments.subscription_uuid` **et** `payments.source_uuid`. N'en faire qu'une fait
+  diverger l'abonnement et l'argent **en silence** : aucun contrôle existant ne rattrape ce cas.
+  Les deux autres colonnes `subscription_uuid` du schéma (`sokapay_transactions`,
+  `journal_editions`) sont vides à ce jour.
+  ⚠️ Corollaire pour tout requêtage : **`subscription_payments.amount` porte DÉJÀ le total**
+  (`prix unitaire × quantity`). Le tarif d'un abonnement est donc `amount / quantity`, jamais
+  `amount` - une ligne à 30 000 pour 2 unités est un abonnement à 15 000, et une ligne à 15 000
+  pour 150 unités est un abonnement à 100. Filtrer sur `amount` se trompe **dans les deux sens**.
+  Modèle à copier : `seeds/seed-merge-subscription-campaigns.ts`.
+
 - **🚨 `subscription_payments.status` PEUT MENTIR : la vérité de l'argent est dans `payments`**
   (relevé le 2026-08-04 sur `soka_db`). **23 lignes sont `pending` alors que le paiement lié est
   `failed`** - les chemins applicatifs synchronisent bien les deux (`updateLinkedEntities`, appelé
