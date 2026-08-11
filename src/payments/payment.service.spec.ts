@@ -1,3 +1,4 @@
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PaymentService } from './payment.service';
 import { PaymentEntity, PaymentStatus } from './entities/payment.entity';
 
@@ -84,6 +85,55 @@ describe('PaymentService.syncHubPaymentByTransactionId - réponses servies depui
     const result = await service.syncHubPaymentByTransactionId('plink_inconnu');
 
     expect(result.status).toBe('not_found');
+    expect(hubService.checkPaymentStatus).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Bouton « Vérifier le paiement » du tableau Comptabilité.
+ *
+ * La méthode n'a AUCUNE logique propre : elle résout l'uuid puis délègue à
+ * `syncHubPaymentByTransactionId` (le chemin du cron). Les tests verrouillent la
+ * résolution et les deux refus - pas la synchronisation, déjà couverte ci-dessus.
+ */
+describe('PaymentService.verifyHubPaymentByUuid - vérification à la demande', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('délègue au chemin éprouvé : un paiement PAYÉ répond « paid » sans rappeler HUB', async () => {
+    const service = makeService({
+      uuid: 'pay-uuid',
+      transaction_id: 'plink_abc',
+      total_amount: 15000,
+      payment_status: PaymentStatus.PAID,
+    });
+
+    const result = await service.verifyHubPaymentByUuid('pay-uuid');
+
+    expect(result.status).toBe('paid');
+    expect(hubService.checkPaymentStatus).not.toHaveBeenCalled();
+  });
+
+  it('uuid inconnu : 404, sans appel HUB', async () => {
+    const service = makeService(null);
+
+    await expect(service.verifyHubPaymentByUuid('uuid-inconnu')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(hubService.checkPaymentStatus).not.toHaveBeenCalled();
+  });
+
+  it('paiement sans lien de guichet (CinetPay…) : refus explicite, sans appel HUB', async () => {
+    const service = makeService({
+      uuid: 'pay-cinetpay',
+      transaction_id: null as never,
+      payment_status: PaymentStatus.PENDING,
+    });
+
+    const err = await service.verifyHubPaymentByUuid('pay-cinetpay').catch((e) => e);
+
+    expect(err).toBeInstanceOf(BadRequestException);
+    // Le web reconnaît un refus à son `code`, jamais à son message.
+    expect(err.getResponse()).toMatchObject({ data: { code: 'SANS_LIEN_GUICHET' } });
     expect(hubService.checkPaymentStatus).not.toHaveBeenCalled();
   });
 });

@@ -503,6 +503,28 @@ export class PaymentService {
     }
   }
 
+  /**
+   * **Vérification à la demande d'UN paiement** (bouton « Vérifier » du tableau Comptabilité).
+   *
+   * Aucune logique propre : on résout l'uuid puis on rejoue `syncHubPaymentByTransactionId`,
+   * le chemin déjà éprouvé du cron - crédite si le guichet a encaissé, referme si la tentative
+   * a échoué, ne touche à rien sinon. Idempotent : un double clic ne change rien de plus.
+   */
+  async verifyHubPaymentByUuid(uuid: string): Promise<HubPaymentSyncResult> {
+    const payment = await this.paymentRepo.findOne({ where: { uuid } });
+    if (!payment) {
+      throw new NotFoundException(`Aucun paiement trouvé pour uuid = ${uuid}`);
+    }
+    if (!payment.transaction_id) {
+      // Paiement d'avant le guichet (CinetPay…) : il n'y a rien à interroger côté HUB2.
+      throw new BadRequestException({
+        message: 'Ce paiement ne porte aucun lien de guichet : rien à vérifier.',
+        data: { code: 'SANS_LIEN_GUICHET' },
+      });
+    }
+    return this.syncHubPaymentByTransactionId(payment.transaction_id);
+  }
+
   async syncHubPaymentByTransactionId(
     transaction_id: string,
   ): Promise<HubPaymentSyncResult> {

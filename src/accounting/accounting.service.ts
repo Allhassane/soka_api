@@ -220,11 +220,28 @@ export class AccountingService {
         data: { code: 'BUCKET_INVALIDE' },
       });
     }
-    const limit = Math.min(Math.max(Number(f.limit ?? 50) || 50, 1), 200);
+    // 20 = la page du tableau à l'écran (pagination sous les cartes KPI).
+    const limit = Math.min(Math.max(Number(f.limit ?? 20) || 20, 1), 200);
     const page = Math.max(Number(f.page ?? 1) || 1, 1);
 
     const qb = this.paymentRepo
       .createQueryBuilder('p')
+      // Seules les colonnes affichées : pas de raison de charger l'entité entière
+      // (payment_url, identités dupliquées…) pour une ligne de tableau.
+      .select([
+        'p.uuid',
+        'p.created_at',
+        'p.paid_at',
+        'p.beneficiary_name',
+        'p.actor_name',
+        'p.total_amount',
+        'p.provider',
+        'p.payment_status',
+        'p.failure_code',
+        'p.failure_message',
+        'p.transaction_id',
+        'p.hub_payment_id',
+      ])
       .where('p.source = :source', { source: type })
       .orderBy('p.created_at', 'DESC')
       .skip((page - 1) * limit)

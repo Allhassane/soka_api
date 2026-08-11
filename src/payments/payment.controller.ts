@@ -311,6 +311,18 @@ async getMyExports(
     return this.paymentService.changeStatus(uuid, status, req.user.uuid);
   }
 
+  @Post(':uuid/hub-verify')
+  @RequirePermissions('paiements_modifier')
+  @ApiOperation({
+    summary:
+      'Vérifier un paiement auprès du guichet (rejoue la synchronisation du cron, idempotent)',
+  })
+  @ApiParam({ name: 'uuid', description: 'UUID du paiement' })
+  @ApiResponse({ status: 200, description: 'Verdict du guichet : paid, failed ou pending.' })
+  verifyHub(@Param('uuid') uuid: string) {
+    return this.paymentService.verifyHubPaymentByUuid(uuid);
+  }
+
   @Get('member/:member_uuid')
   @RequirePermissions('paiements_voir')
   @ApiOperation({ summary: 'Lister les paiements effectués pour un membre' })
