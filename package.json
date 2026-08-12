@@ -51,6 +51,7 @@
     "seed:sync-hub-payments": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-sync-hub-payments.ts",
     "seed:backfill-hub-details": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-backfill-hub-payment-details.ts",
     "seed:merge-subscription-campaigns": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-merge-subscription-campaigns.ts",
+    "seed:cleanup-subscription-campaigns": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-cleanup-subscription-campaigns.ts",
     "seed:restore-deleted-payments": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-restore-deleted-payments.ts"
   },
   "dependencies": {

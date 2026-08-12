@@ -166,6 +166,11 @@ export class AccountingService {
    *
    * La somme doit tomber juste : Total = paid + pending + failed + cancelled. C'est la raison
    * d'être de la carte « Annulés » à l'écran - sans elle, l'écran additionnerait faux.
+   *
+   * Rend aussi le **solde de la campagne** (collecté - commission = net). Le taux vit ICI, jamais
+   * côté écran : un 2 % recopié dans le web divergerait le jour où `ACC_HUB_FEE_RATE` change, et
+   * l'écran annoncerait un net faux sans que rien ne le signale. `fees_estimated` dit que la
+   * commission est calculée au taux, pas relevée sur un export HUB2 (seul juge de paix des frais).
    */
   async campaignKpi(f: { type: string; campaign_uuid?: string; from?: Date; to?: Date }) {
     const type = this.verifierType(f.type);
@@ -197,7 +202,21 @@ export class AccountingService {
       kpi.total.count += seau.count;
       kpi.total.amount = arrondi(kpi.total.amount + seau.amount);
     }
-    return { type, campaign_uuid: f.campaign_uuid ?? null, ...kpi };
+    const commission = arrondi(kpi.paid.amount * this.tauxFrais);
+    return {
+      type,
+      campaign_uuid: f.campaign_uuid ?? null,
+      ...kpi,
+      solde: {
+        // Le collecté EST le montant des paiements réussis : ni les tentatives en cours ni les
+        // échecs n'ont jamais atteint le compte.
+        collecte: kpi.paid.amount,
+        commission,
+        net: arrondi(kpi.paid.amount - commission),
+        fee_rate: this.tauxFrais,
+        fees_estimated: true,
+      },
+    };
   }
 
   /**
