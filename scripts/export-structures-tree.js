@@ -6,7 +6,7 @@
  * attendue par les écrans et les exports « organigramme », par opposition à un
  * SELECT à plat où il faut reconstruire la filiation à la main.
  *
- * Lecture seule — aucune écriture en base.
+ * Lecture seule - aucune écriture en base.
  *
  * La base ciblée suit `DB_NAME` : le script charge `../.env` s'il existe (même
  * mécanisme que `src/data-source.ts`), donc il vise AUTOMATIQUEMENT la base
@@ -158,7 +158,7 @@ const parNom = (a, b) => a.nom.localeCompare(b.nom, 'fr');
   fs.mkdirSync(path.dirname(SORTIE), { recursive: true });
   fs.writeFileSync(SORTIE, JSON.stringify(doc, null, 2) + '\n', 'utf8');
 
-  console.log(`Base : ${DB.database} — écrit : ${SORTIE}`);
+  console.log(`Base : ${DB.database} - écrit : ${SORTIE}`);
   console.log(
     '  ' +
       NIVEAUX.map((n) => `${compteurs[n]} ${n.toLowerCase()}`).join(' · '),

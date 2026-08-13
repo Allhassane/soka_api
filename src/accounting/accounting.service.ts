@@ -166,11 +166,6 @@ export class AccountingService {
    *
    * La somme doit tomber juste : Total = paid + pending + failed + cancelled. C'est la raison
    * d'être de la carte « Annulés » à l'écran - sans elle, l'écran additionnerait faux.
-   *
-   * Rend aussi le **solde de la campagne** (collecté - commission = net). Le taux vit ICI, jamais
-   * côté écran : un 2 % recopié dans le web divergerait le jour où `ACC_HUB_FEE_RATE` change, et
-   * l'écran annoncerait un net faux sans que rien ne le signale. `fees_estimated` dit que la
-   * commission est calculée au taux, pas relevée sur un export HUB2 (seul juge de paix des frais).
    */
   async campaignKpi(f: { type: string; campaign_uuid?: string; from?: Date; to?: Date }) {
     const type = this.verifierType(f.type);
@@ -202,21 +197,7 @@ export class AccountingService {
       kpi.total.count += seau.count;
       kpi.total.amount = arrondi(kpi.total.amount + seau.amount);
     }
-    const commission = arrondi(kpi.paid.amount * this.tauxFrais);
-    return {
-      type,
-      campaign_uuid: f.campaign_uuid ?? null,
-      ...kpi,
-      solde: {
-        // Le collecté EST le montant des paiements réussis : ni les tentatives en cours ni les
-        // échecs n'ont jamais atteint le compte.
-        collecte: kpi.paid.amount,
-        commission,
-        net: arrondi(kpi.paid.amount - commission),
-        fee_rate: this.tauxFrais,
-        fees_estimated: true,
-      },
-    };
+    return { type, campaign_uuid: f.campaign_uuid ?? null, ...kpi };
   }
 
   /**
@@ -295,7 +276,7 @@ export class AccountingService {
   // Côté guichet
   // ─────────────────────────────────────────────────────────────────────────────
 
-  /** Compte XOF d'une liste de comptes de solde ; null si absent — jamais un zéro inventé. */
+  /** Compte XOF d'une liste de comptes de solde ; null si absent - jamais un zéro inventé. */
   private compteXof(comptes: HubBalanceAccount[] | undefined): number | null {
     const compte = (comptes ?? []).find((c) => (c.currency ?? '').toLowerCase() === 'xof');
     if (!compte) return null;
@@ -306,7 +287,7 @@ export class AccountingService {
    * **Solde HUB2 constaté à l'instant T**, relayé par le guichet (compte de collecte).
    *
    * C'est la preuve opposable au « solde net attendu » du décompte : les deux doivent
-   * concorder, et leur écart éventuel se chiffre — il ne se devine pas.
+   * concorder, et leur écart éventuel se chiffre - il ne se devine pas.
    */
   async liveBalance() {
     const solde = await this.hubService.getGatewayBalance();
@@ -738,7 +719,7 @@ export class AccountingService {
       // frais réellement prélevés (mesuré : 232 907 réels vs 232 906,02 estimés).
       fees_estimated: s.kind === SnapshotKind.GATEWAY,
       net: Number(s.hub_net),
-      // Le solde relevé au moment de l'instantané — null si le relevé n'a pas eu lieu
+      // Le solde relevé au moment de l'instantané - null si le relevé n'a pas eu lieu
       // (`!= null` couvre aussi les instantanés antérieurs à la colonne).
       gateway_balance: s.gateway_balance != null ? Number(s.gateway_balance) : null,
       // Le décompte, ligne à ligne : c'est la forme sous laquelle il doit s'afficher.

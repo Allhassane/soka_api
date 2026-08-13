@@ -155,7 +155,7 @@ async function main() {
   }
 
   console.log(
-    `\n🚨 ${nonCredites.length} paiement(s) encaissé(s) et non crédité(s) — `
+    `\n🚨 ${nonCredites.length} paiement(s) encaissé(s) et non crédité(s) - `
     + `${montant.toLocaleString('fr-FR')} XOF\n`,
   );
   for (const l of nonCredites) {
@@ -167,7 +167,7 @@ async function main() {
   }
   console.log(
     `\nRien n'a été modifié. Le cron de synchronisation les crédite de lui-même à son `
-    + `prochain passage (toutes les 10 min) — relancer cet audit ensuite doit rendre 0.`,
+    + `prochain passage (toutes les 10 min) - relancer cet audit ensuite doit rendre 0.`,
   );
 
   await ds.destroy();

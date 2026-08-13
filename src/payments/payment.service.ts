@@ -480,7 +480,7 @@ export class PaymentService {
       // 🚨 `updated_at` est réaffectée à SA PROPRE VALEUR, et ce n'est pas une coquetterie :
       // sans elle, la ligne se retrouve datée d'aujourd'hui alors qu'aucun élément métier n'a
       // bougé. Deux mécanismes concourent, il faut neutraliser les deux, et une seule écriture
-      // suffit à le faire — MySQL n'applique `ON UPDATE CURRENT_TIMESTAMP(6)` que si la colonne
+      // suffit à le faire - MySQL n'applique `ON UPDATE CURRENT_TIMESTAMP(6)` que si la colonne
       // n'est pas affectée explicitement, et TypeORM n'ajoute son `= CURRENT_TIMESTAMP` que si
       // elle est absente du SET (`UpdateQueryBuilder.createUpdateExpression`, garde
       // `updatedColumns.indexOf(metadata.updateDateColumn) === -1`).

@@ -86,7 +86,7 @@ export class AccountingController {
   @Post('imports')
   @RequirePermissions(COMPTABILITE)
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Importe un export HUB2 (CSV ou XLSX) — la preuve qui fait foi' })
+  @ApiOperation({ summary: 'Importe un export HUB2 (CSV ou XLSX) - la preuve qui fait foi' })
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: TAILLE_MAX_EXPORT } }))
   async importer(
     @Request() req,

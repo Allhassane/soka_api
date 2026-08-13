@@ -9,7 +9,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * la preuve s'évapore avec la requête.
  *
  * ⚠️ NULL autorisé et significatif : relevé impossible (guichet muet) ou sans objet (import
- * d'export). Jamais 0 par défaut — un zéro affirmerait un compte vide.
+ * d'export). Jamais 0 par défaut - un zéro affirmerait un compte vide.
  *
  * ADDITIVE, IDEMPOTENTE, réversible.
  */

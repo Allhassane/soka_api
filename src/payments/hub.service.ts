@@ -74,7 +74,7 @@ export interface HubGatewayPayment {
   failureCode?: string | null;
   hub2PaymentId?: string | null;
   /**
-   * `live` ou `sandbox` — exposé par le guichet depuis le correctif du 2026-08-11. Absent sur
+   * `live` ou `sandbox` - exposé par le guichet depuis le correctif du 2026-08-11. Absent sur
    * un guichet antérieur. 🚨 Avant ce correctif, la liste marchande MÉLANGEAIT les deux :
    * 47 250 XOF d'essais sandbox comptés comme encaissements réels par la concordance.
    */
@@ -128,7 +128,7 @@ export class HubService {
   /**
    * Racine de l'API marchande, déduite de `HUB_API_URL` (qui pointe `…/payment-links`).
    * Déduire plutôt qu'ajouter une variable d'environnement : une seconde variable finirait par
-   * diverger de la première, et un guichet mal ciblé ne se voit pas — il rend simplement une
+   * diverger de la première, et un guichet mal ciblé ne se voit pas - il rend simplement une
    * concordance vide.
    */
   private get apiRoot(): string {
@@ -198,7 +198,7 @@ export class HubService {
   /**
    * **Relais du solde HUB2** (compte de collecte + compte de reversement) exposé par le guichet.
    *
-   * ⚠️ Lecture seule, comme `listGatewayPayments` : mêmes clé, racine d'API et timeout — jamais
+   * ⚠️ Lecture seule, comme `listGatewayPayments` : mêmes clé, racine d'API et timeout - jamais
    * une seconde variable d'environnement, qui finirait par diverger de la première.
    */
   async getGatewayBalance(): Promise<HubGatewayBalance> {

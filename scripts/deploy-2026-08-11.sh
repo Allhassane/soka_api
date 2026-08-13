@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Déploiement du 2026-08-11 — Module Comptabilité, identité HUB2, rapatriements.
+# Déploiement du 2026-08-11 - Module Comptabilité, identité HUB2, rapatriements.
 #
 # À lancer SUR LE SERVEUR, depuis api/, APRÈS les `git pull` de api/ et web/ :
 #     bash scripts/deploy-2026-08-11.sh
@@ -37,14 +37,14 @@ cd "$API_DIR"
 # ─────────────────────────────────────────────────────────────────────────────
 titre "0. Contrôles préalables"
 
-[ -f .env ] || { souci "api/.env introuvable — rien n'est joué."; exit 1; }
+[ -f .env ] || { souci "api/.env introuvable - rien n'est joué."; exit 1; }
 
 lire_env() { grep -E "^$1=" .env | head -1 | cut -d= -f2- | sed 's/^"//; s/"$//; s/\r$//'; }
 DB_HOST="$(lire_env DB_HOST)"; DB_HOST="${DB_HOST:-localhost}"
 DB_USER="$(lire_env DB_USER)"
 DB_PASS="$(lire_env DB_PASSWORD)"
 DB_NAME="$(lire_env DB_NAME)"
-[ -n "$DB_NAME" ] || { souci "DB_NAME absent de api/.env — rien n'est joué."; exit 1; }
+[ -n "$DB_NAME" ] || { souci "DB_NAME absent de api/.env - rien n'est joué."; exit 1; }
 
 # Un seul point de construction des identifiants : `-p` sans valeur ouvre un prompt et
 # ferait pendre un déploiement non supervisé.
@@ -56,7 +56,7 @@ if [ -n "$DB_PASS" ]; then
 fi
 
 mysql "${MYSQL_ARGS[@]}" -e "SELECT 1" "$DB_NAME" >/dev/null \
-  || { souci "Base « $DB_NAME » injoignable — rien n'est joué."; exit 1; }
+  || { souci "Base « $DB_NAME » injoignable - rien n'est joué."; exit 1; }
 ok "Base « $DB_NAME » joignable sur $DB_HOST"
 ok "Journal de ce déploiement : $JOURNAL"
 
@@ -68,7 +68,7 @@ mysqldump "${MYSQL_ARGS[@]}" --single-transaction --no-tablespaces "$DB_NAME" > 
 ok "$(du -h "$SAUVEGARDE" | cut -f1) → $SAUVEGARDE"
 
 # ─────────────────────────────────────────────────────────────────────────────
-titre "2. API — dépendances, build, migrations"
+titre "2. API - dépendances, build, migrations"
 
 # ⚠️ PAS de `--omit=dev` : `ts-node` et `tsconfig-paths` sont des devDependencies, et les
 # migrations comme les seeds passent par elles. Les omettre casserait tout ce qui suit.
@@ -95,7 +95,7 @@ pm2 restart soka-api
 sleep 5
 pm2 describe soka-api | grep -qi "status.*online" \
   && ok "soka-api en ligne" \
-  || { souci "soka-api n'est pas reparti — voir « pm2 logs soka-api »."; exit 1; }
+  || { souci "soka-api n'est pas reparti - voir « pm2 logs soka-api »."; exit 1; }
 
 # ─────────────────────────────────────────────────────────────────────────────
 titre "5. La gateway répond-elle à notre clé ?"
@@ -115,7 +115,7 @@ else
     GATEWAY_OK=1
     ok "gateway joignable et clé acceptée (200)"
   else
-    saute "la gateway répond $CODE — les étapes 6b, 6c et 6d seront sautées"
+    saute "la gateway répond $CODE - les étapes 6b, 6c et 6d seront sautées"
     souci "La clé de l'API n'est pas une clé marchande valide sur cette gateway."
     souci "Créer une clé sk_live_ puis relancer ce script : il reprendra où il en est."
   fi
@@ -133,13 +133,13 @@ ok "campagnes parallèles rapatriées"
 echo
 echo "6b. Restauration des paiements supprimés"
 if [ "$GATEWAY_OK" -eq 0 ]; then
-  saute "6b — la gateway est inaccessible, impossible de savoir ce qui a été encaissé"
+  saute "6b - la gateway est inaccessible, impossible de savoir ce qui a été encaissé"
 elif ! mysql "${MYSQL_ARGS[@]}" -N -e \
         "SELECT COUNT(*) FROM information_schema.TABLES
           WHERE TABLE_SCHEMA='$DUMP_SCHEMA'
             AND TABLE_NAME IN ('payments','subscription_payments','subscriptions')" \
         | grep -q '^3$'; then
-  saute "6b — le schéma « $DUMP_SCHEMA » n'a pas les 3 tables du dump du 01/08"
+  saute "6b - le schéma « $DUMP_SCHEMA » n'a pas les 3 tables du dump du 01/08"
   echo "        Charger le dump puis relancer ce script :"
   echo "          mysql -u… -p -e \"CREATE DATABASE IF NOT EXISTS $DUMP_SCHEMA\""
   echo "          mysql -u… -p $DUMP_SCHEMA < soka_app_01_08_2026.sql"
@@ -157,20 +157,20 @@ fi
 echo
 echo "6d. Rattrapage de l'identité HUB2"
 if [ "$GATEWAY_OK" -eq 0 ]; then
-  saute "6d — la gateway est inaccessible"
+  saute "6d - la gateway est inaccessible"
 else
   # Après 6b, pour que les paiements restaurés soient inclus : sinon il faudrait un second
-  # balayage complet du guichet. Pas de simulation ici — elle coûterait autant d'appels
+  # balayage complet du guichet. Pas de simulation ici - elle coûterait autant d'appels
   # réseau que l'écriture, et l'opération est purement additive (`updated_at` préservée).
   npm run seed:backfill-hub-details -- --apply
   ok "identité HUB2 rattrapée"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-titre "7. Web — build et redémarrage"
+titre "7. Web - build et redémarrage"
 
 if [ -z "$WEB_DIR" ] || [ ! -f "$WEB_DIR/package.json" ]; then
-  saute "7 — dossier web introuvable (le préciser avec WEB_DIR=/chemin/vers/web)"
+  saute "7 - dossier web introuvable (le préciser avec WEB_DIR=/chemin/vers/web)"
 else
   ( cd "$WEB_DIR" && npm ci && npm run build )
   pm2 restart soka-admin
@@ -188,11 +188,11 @@ if [ "$GATEWAY_OK" -eq 1 ]; then
   if npm run seed:reconcile-hub-payments; then
     ok "aucun encaissement non crédité"
   else
-    souci "des encaissements ne sont pas crédités — voir la liste ci-dessus."
+    souci "des encaissements ne sont pas crédités - voir la liste ci-dessus."
     souci "Le déploiement est en place ; c'est un constat, pas un échec de déploiement."
   fi
 else
-  saute "sonde de réconciliation — la gateway est inaccessible"
+  saute "sonde de réconciliation - la gateway est inaccessible"
 fi
 
 mysql "${MYSQL_ARGS[@]}" -t "$DB_NAME" -e "
@@ -212,7 +212,7 @@ echo "     • cliquer « Rafraîchir (guichet) » pour le premier instantané ;
 echo "     • se RECONNECTER pour voir l'entrée de menu (les droits d'affichage"
 echo "       sont chargés au login, pas rafraîchis à chaud)."
 # ⚠️ `if` et non `[ … ] && echo` : sous `set -e`, ce test échouant (gateway OK) faisait sortir
-# le script en code non nul juste avant le `exit 0` — un déploiement réussi passait pour un échec.
+# le script en code non nul juste avant le `exit 0` - un déploiement réussi passait pour un échec.
 if [ "$GATEWAY_OK" -eq 0 ]; then
   echo "   ⚠️  Étapes 6b/6c/6d NON jouées : clé de gateway à régler, puis relancer ce script."
 fi

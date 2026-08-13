@@ -79,7 +79,7 @@ export class AccHubSnapshotEntity extends DateTimeEntity {
    * Solde HUB2 CONSTATÉ au moment de l'instantané (relais `GET /balance` du guichet, compte de
    * collecte, XOF). C'est la preuve opposable au « solde net attendu » du décompte.
    *
-   * ⚠️ NULL si le relevé a échoué ou n'a pas eu lieu (imports d'export) — jamais un zéro
+   * ⚠️ NULL si le relevé a échoué ou n'a pas eu lieu (imports d'export) - jamais un zéro
    * inventé : un zéro affirmerait un compte vide là où on n'a simplement pas pu lire.
    */
   @Column({ type: 'decimal', precision: 14, scale: 2, nullable: true })

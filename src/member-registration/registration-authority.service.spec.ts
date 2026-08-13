@@ -117,7 +117,7 @@ describe('hasAuthorityOver (R4)', () => {
     ).toBe(true);
   });
 
-  it('refuse le responsable d’un AUTRE district — être responsable de district ne suffit pas', () => {
+  it('refuse le responsable d’un AUTRE district - être responsable de district ne suffit pas', () => {
     expect(
       hasAuthorityOver(
         index,
@@ -202,7 +202,7 @@ describe('planSteps (R4)', () => {
     });
   });
 
-  it('responsable de chapitre : le membre est validé d’emblée — un dossier ne redescend jamais', () => {
+  it('responsable de chapitre : le membre est validé d’emblée - un dossier ne redescend jamais', () => {
     expect(plan([anchor(LVL.chapitre, 'CHAPITRE_1')])).toMatchObject({
       district: StepDecision.ACQUISE,
       chapitre: StepDecision.ACQUISE,
@@ -234,7 +234,7 @@ describe('planSteps (R4)', () => {
     });
   });
 
-  describe('saisie au-dessus du chapitre — aucune étape opposable', () => {
+  describe('saisie au-dessus du chapitre - aucune étape opposable', () => {
     const planHaut = (anchors: AuthorityAnchor[], isAdmin = false) =>
       planSteps({
         index,
@@ -247,7 +247,7 @@ describe('planSteps (R4)', () => {
         isAdmin,
       });
 
-    it('est refusée à un responsable de groupe — sinon le circuit se contourne', () => {
+    it('est refusée à un responsable de groupe - sinon le circuit se contourne', () => {
       expect(planHaut([anchor(LVL.groupe, 'GROUPE_1')]).blocked).toEqual(
         expect.stringContaining('district'),
       );
@@ -398,7 +398,7 @@ describe('RegistrationAuthorityService', () => {
     ]);
   });
 
-  it('ignore une responsabilité sans niveau — fail closed (104 porteurs en base)', async () => {
+  it('ignore une responsabilité sans niveau - fail closed (104 porteurs en base)', async () => {
     responsibilityRows = [{ level_uuid: null }];
     const service = buildService();
     const levelsOrdonnes = await service.orderedLevels(index);

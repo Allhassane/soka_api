@@ -125,7 +125,7 @@ export class MemberRegistrationController {
   @Post(':uuid/reject')
   @RequirePermissions('membres_valider_district', 'membres_valider_chapitre')
   @ApiOperation({
-    summary: 'Refuser le dossier — définitif',
+    summary: 'Refuser le dossier - définitif',
     description:
       'Le motif est obligatoire. Un refus au chapitre annule la validation du district : elle reste tracée mais sans effet. Le dossier est clos, pas renvoyé.',
   })

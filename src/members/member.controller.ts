@@ -102,12 +102,12 @@ async findAll(
   @Post()
   @RequirePermissions('membres_ajouter_un_membre')
   @ApiOperation({
-    summary: 'Enregistrer un membre — dépose un dossier de validation',
+    summary: 'Enregistrer un membre - dépose un dossier de validation',
     description:
       "Depuis la validation à deux niveaux (docs/VALIDATION-MEMBRES.md), cette route ne crée plus " +
       'systématiquement un membre : elle dépose un **dossier** qui doit être signé par le district ' +
       "puis par le chapitre. Le membre n'est créé tout de suite que si le déposant a déjà autorité " +
-      "à ces niveaux (responsable de chapitre et au-dessus, is_admin — règle R4).\n\n" +
+      "à ces niveaux (responsable de chapitre et au-dessus, is_admin - règle R4).\n\n" +
       "La réponse est donc discriminée par `mode` : `dossier_depose` (avec `registration`) ou " +
       '`membre_cree` (avec `member`). Un client qui ignore ce champ affichera « membre créé » alors ' +
       "que rien n'existe encore.",

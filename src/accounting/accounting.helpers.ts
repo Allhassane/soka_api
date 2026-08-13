@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 
 /**
  * Permission UNIQUE du module Comptabilité : elle commande le menu et tout ce qu'il contient
- * (décision produit du 2026-08-10 — le module est en lecture seule sur les paiements, découper
+ * (décision produit du 2026-08-10 - le module est en lecture seule sur les paiements, découper
  * aurait produit des rôles capables de constater un écart sans pouvoir le rafraîchir).
  */
 export const COMPTABILITE = 'comptabilite_voir_menu_comptabilite';

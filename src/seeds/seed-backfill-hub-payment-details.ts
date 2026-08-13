@@ -48,7 +48,7 @@ async function main() {
   // ⚠️ Les DEUX formes sont acceptées (`--limit=20` et `--limit 20`), et la validation porte
   // sur la PRÉSENCE du drapeau, jamais sur celle du motif `--limit=`. Une version antérieure
   // ne reconnaissait que la forme avec `=` : `--limit 20 --apply` passait sans un mot, retombait
-  // sur le défaut de 5 000 et interrogeait TOUT le stock au guichet de production — l'inverse
+  // sur le défaut de 5 000 et interrogeait TOUT le stock au guichet de production - l'inverse
   // exact de ce que l'opérateur demandait. Le piège était d'autant plus sûr que les formes
   // fautives explicites, elles, étaient bien rejetées : on en déduisait que le drapeau était contrôlé.
   const iLimit = process.argv.indexOf('--limit');

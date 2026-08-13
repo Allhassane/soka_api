@@ -4,7 +4,7 @@ Back-end REST de la plateforme SOKA. **NestJS 11 · TypeORM 0.3 · MySQL `soka_a
 Voir la vue d'ensemble dans `../CLAUDE.md`. Journal de travail : `docs/JOURNAL.md`.
 
 > ⚠️ **La base de travail est `soka_app` depuis le 2026-08-05** (avant : `soka_db`, désormais
-> obsolète). Chacun doit poser `DB_NAME=soka_app` dans son `.env` — voir le gotcha « bascule de
+> obsolète). Chacun doit poser `DB_NAME=soka_app` dans son `.env` - voir le gotcha « bascule de
 > base » plus bas.
 
 > **📄 À quoi sert ce fichier - `CLAUDE.md` (fichier de contexte).** Lu automatiquement par Claude
@@ -421,7 +421,7 @@ services) : abonnements et dons.
     `member_travels` et `committee_members` doivent être soft-deletés **explicitement**, sinon le
     membre supprimé **reste responsable** (il continue de sortir de `structure.service.getCommittee()`).
   - **Toujours filtrer `deleted_at: IsNull()` dans un `softDelete()`** : la méthode n'ajoute pas
-    cette condition et **ré-estampe** les lignes déjà supprimées avec une date neuve — on perd
+    cette condition et **ré-estampe** les lignes déjà supprimées avec une date neuve - on perd
     l'historique (ex. responsabilité retirée par la règle d'ancre) et une restauration la ferait
     revenir à tort.
   - **Le compte `users` est désactivé (`is_active`) ET soft-deleté.** Les deux ont un rôle
@@ -430,7 +430,7 @@ services) : abonnements et dons.
     qui **ignore les lignes soft-deletées** : sans ça, recréer une fiche avec le même numéro donne
     un membre **sans compte de connexion, sans aucune erreur**.
   ⚠️ **Corollaire pour toute génération de numéro de série** : `store()` calcule le matricule
-  depuis le dernier `id`, avec **`.withDeleted()` obligatoire** — un query builder filtre
+  depuis le dernier `id`, avec **`.withDeleted()` obligatoire** - un query builder filtre
   `deleted_at IS NULL` par défaut, donc supprimer le dernier membre créé ferait **régénérer son
   matricule** au suivant, et `UQ_members_matricule` n'est pas posé pour l'attraper.
   ⚠️ **La restauration n'existe pas encore.** Quand elle sera écrite : chercher le membre en
@@ -704,7 +704,7 @@ services) : abonnements et dons.
 - **Login = phone_number + password**, pas email. Le guard local attend ces champs.
 - **🔄 Bascule de base : `soka_db` → `soka_app` (2026-08-05).** La base de travail est désormais
   **`soka_app`**, importée du dump serveur du 05/08 14:18. Poser **`DB_NAME=soka_app`** dans son
-  `.env` (le défaut codé dans `data-source.ts` et dans les scripts reste `soka_db` — il ne s'applique
+  `.env` (le défaut codé dans `data-source.ts` et dans les scripts reste `soka_db` - il ne s'applique
   qu'à un `.env` muet). `soka_db` n'a pas été supprimée mais elle est **périmée** : il lui manque
   toute la série `1782800000000 → 1782902000000` (dont `SyncPermissionCatalogV2`), d'où **53
   permissions au lieu de 185** et une table `user_roles` **vide**. Ne plus s'en servir comme

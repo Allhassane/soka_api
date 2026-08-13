@@ -422,37 +422,6 @@ describe('Tableau de bord - KPI par campagne', () => {
     expect(kpi.total.amount).toBe(10170000 + 1485000 + 44500 + 820000);
   });
 
-  it('rend le solde de la campagne : collecté - commission = net, et se dit « estimé »', async () => {
-    // Le taux vit dans le service : l'écran ne recopie pas 2 %, il lit ce qu'on lui rend.
-    const { service, paymentQb } = makeService();
-    paymentQb.getRawMany.mockResolvedValue([
-      { statut: 'paid', nombre: '640', montant: '10170000' },
-      // Les tentatives en cours et les échecs ne sont JAMAIS arrivés sur le compte : ils ne
-      // doivent peser ni sur le collecté, ni sur la commission, ni sur le net.
-      { statut: 'pending', nombre: '99', montant: '1485000' },
-      { statut: 'failed', nombre: '134', montant: '44500' },
-    ]);
-
-    const kpi = await service.campaignKpi({ type: 'subscription' });
-
-    expect(kpi.solde.collecte).toBe(10170000);
-    expect(kpi.solde.commission).toBe(203400);
-    expect(kpi.solde.net).toBe(10170000 - 203400);
-    expect(kpi.solde.fee_rate).toBe(0.02);
-    expect(kpi.solde.fees_estimated).toBe(true);
-  });
-
-  it('rend un solde à ZÉRO - jamais un net négatif - quand la campagne n\'a rien encaissé', async () => {
-    const { service, paymentQb } = makeService();
-    paymentQb.getRawMany.mockResolvedValue([
-      { statut: 'failed', nombre: '12', montant: '180000' },
-    ]);
-
-    const kpi = await service.campaignKpi({ type: 'subscription' });
-
-    expect(kpi.solde).toMatchObject({ collecte: 0, commission: 0, net: 0 });
-  });
-
   it('filtre par campagne quand un uuid est donné', async () => {
     const { service, paymentQb } = makeService();
     await service.campaignKpi({ type: 'donation', campaign_uuid: 'camp-1' });

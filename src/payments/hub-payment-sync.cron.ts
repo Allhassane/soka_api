@@ -21,7 +21,7 @@ export class HubPaymentSyncCronService {
   async syncPendingHubPayments() {
     // 🚨 Interrupteur de POSTE DE TEST : une API locale branchée sur le guichet de PRODUCTION
     // ne doit rien pouvoir y écrire, or ce cron referme des liens abandonnés
-    // (`cancelHubPaymentByTransactionId` désactive le lien au guichet). Défaut : armé —
+    // (`cancelHubPaymentByTransactionId` désactive le lien au guichet). Défaut : armé -
     // seule la valeur littérale 'false' désarme, pour qu'aucune faute de frappe ne puisse
     // éteindre la synchronisation de production en silence.
     if (process.env.HUB_SYNC_CRON_ENABLED === 'false') {
