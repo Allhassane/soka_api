@@ -16,7 +16,7 @@ export interface SmsResult {
  * Config `.env` :
  *  - LETEXTO_API_KEY    (clé Bearer)
  *  - LETEXTO_BASE_URL   (défaut https://apis.letexto.com/v1)
- *  - LETEXTO_SENDER     (Sender ID VALIDÉ, défaut SG-CI)
+ *  - LETEXTO_SENDER     (Sender ID VALIDÉ, défaut « SOKA CI » depuis le 2026-08-19)
  *  - LETEXTO_ENABLED    ('true' = envoi réel ; sinon SIMULATION/log - pas de crédits consommés)
  *  - LETEXTO_TIMEOUT_MS (défaut 10000)
  */
@@ -30,7 +30,7 @@ export class SmsService {
 
   constructor(private readonly config: ConfigService) {
     this.apiKey = (this.config.get<string>('LETEXTO_API_KEY') ?? '').trim();
-    this.sender = this.config.get<string>('LETEXTO_SENDER') ?? 'SG-CI';
+    this.sender = this.config.get<string>('LETEXTO_SENDER') ?? 'SOKA CI';
     this.enabled =
       (this.config.get<string>('LETEXTO_ENABLED') ?? 'false').toLowerCase() ===
       'true';

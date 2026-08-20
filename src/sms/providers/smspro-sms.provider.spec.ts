@@ -17,7 +17,7 @@ import { SmspproSmsProvider } from './smspro-sms.provider';
 function makeProvider(env: Record<string, string> = {}) {
   const defaults: Record<string, string> = {
     SMSPRO_API_TOKEN: 'tok',
-    SMSPRO_SENDER_ID: 'SGBNDCI',
+    SMSPRO_SENDER_ID: 'SOKA CI',
     SMSPRO_ENABLED: 'true',
   };
   const merged = { ...defaults, ...env };
@@ -54,6 +54,17 @@ describe('SmspproSmsProvider', () => {
     expect(p.normalizePhone('2250749326623')).toBe('2250749326623');
   });
 
+  // Le sender est la SEULE chose qui distingue un SMS livré d'un `422` : un `.env`
+  // incomplet doit retomber sur le sender validé, jamais sur l'ancien `SGBNDCI`.
+  it("retombe sur le sender validé « SOKA CI » quand SMSPRO_SENDER_ID est absent", async () => {
+    mockPost.mockResolvedValue({ data: { status: 'success' } });
+    await makeProvider({ SMSPRO_SENDER_ID: undefined as any }).send({
+      to: '0749326623',
+      message: 'hi',
+    });
+    expect(mockPost.mock.calls[0][1].sender_id).toBe('SOKA CI');
+  });
+
   it('canSend() = enabled ET token présent', () => {
     expect(makeProvider().canSend()).toBe(true);
     expect(makeProvider({ SMSPRO_ENABLED: 'false' }).canSend()).toBe(false);
@@ -66,7 +77,7 @@ describe('SmspproSmsProvider', () => {
     const res = await p.send({ to: '0749326623', message: 'hi', reference: 'r1' });
     expect(mockPost).toHaveBeenCalledWith('/sms/send', {
       recipient: '2250749326623',
-      sender_id: 'SGBNDCI',
+      sender_id: 'SOKA CI',
       type: 'plain',
       message: 'hi',
     });

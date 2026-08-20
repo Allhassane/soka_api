@@ -19,7 +19,8 @@ import { SMS_PROVIDER_LETEXTO } from '../sms.constants';
  * PAS : `send()` fait l'appel réel ; c'est `canSend()` (lu par le dispatcher) qui
  * dit s'il faut l'appeler.
  *
- * `.env` : LETEXTO_API_KEY, LETEXTO_BASE_URL, LETEXTO_SENDER (défaut SG-CI),
+ * `.env` : LETEXTO_API_KEY, LETEXTO_BASE_URL, LETEXTO_SENDER (défaut « SOKA CI »,
+ * validé chez LeTexto ET SMSPro depuis le 2026-08-19 - avant : `SG-CI`),
  * LETEXTO_ENABLED ('true' = envoi réel autorisé), LETEXTO_TIMEOUT_MS.
  */
 @Injectable()
@@ -37,7 +38,8 @@ export class LetextoSmsProvider implements ManagedSmsProvider {
     this.baseUrl =
       this.config.get<string>('LETEXTO_BASE_URL') ??
       'https://apis.letexto.com/v1';
-    this.sender = this.config.get<string>('LETEXTO_SENDER') ?? 'SG-CI';
+    // Défaut aligné sur le sender unique validé chez les deux fournisseurs.
+    this.sender = this.config.get<string>('LETEXTO_SENDER') ?? 'SOKA CI';
     this.enabled =
       (this.config.get<string>('LETEXTO_ENABLED') ?? 'false').toLowerCase() ===
       'true';

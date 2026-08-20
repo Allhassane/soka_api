@@ -27,8 +27,9 @@ import { SMS_PROVIDER_SMSPRO } from '../sms.constants';
  * dans les journaux d'accès du proxy - ce que faisait encore `getBalance()`.
  *
  * `.env` : SMSPRO_API_TOKEN, SMSPRO_BASE_URL (défaut .../api/v3),
- * SMSPRO_SENDER_ID (défaut SGBNDCI, 11 caractères max, DOIT être approuvé côté
- * SMSPro), SMSPRO_ENABLED ('true' = envoi réel autorisé), SMSPRO_TIMEOUT_MS.
+ * SMSPRO_SENDER_ID (défaut « SOKA CI » depuis le 2026-08-19 - avant : `SGBNDCI` ;
+ * 11 caractères max, DOIT être approuvé côté SMSPro), SMSPRO_ENABLED ('true' =
+ * envoi réel autorisé), SMSPRO_TIMEOUT_MS.
  */
 @Injectable()
 export class SmspproSmsProvider implements ManagedSmsProvider {
@@ -41,7 +42,8 @@ export class SmspproSmsProvider implements ManagedSmsProvider {
 
   constructor(private readonly config: ConfigService) {
     this.token = (this.config.get<string>('SMSPRO_API_TOKEN') ?? '').trim();
-    this.senderId = this.config.get<string>('SMSPRO_SENDER_ID') ?? 'SGBNDCI';
+    // Défaut aligné sur le sender unique validé chez les deux fournisseurs.
+    this.senderId = this.config.get<string>('SMSPRO_SENDER_ID') ?? 'SOKA CI';
     this.enabled =
       (this.config.get<string>('SMSPRO_ENABLED') ?? 'false').toLowerCase() ===
       'true';

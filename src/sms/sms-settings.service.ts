@@ -227,8 +227,9 @@ export class SmsSettingsService {
     this.lastTestAt = now;
     return this.dispatcher.testSend(provider, {
       to,
+      // Même ouverture que les SMS de mot de passe : le message porte le sender ID.
       message:
-        'SOKA : test de configuration SMS. Si vous recevez ce message, le fournisseur est opérationnel.',
+        'SOKA CI : test de configuration SMS. Si vous recevez ce message, le fournisseur est opérationnel.',
       reference: `test-${provider}`,
     });
   }

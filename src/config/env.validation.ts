@@ -35,7 +35,8 @@ export const envValidationSchema = Joi.object({
   // ENABLED gardé en STRING ('true'/'false') : les providers le lisent en string.
   LETEXTO_API_KEY: Joi.string().allow('').default(''),
   LETEXTO_BASE_URL: Joi.string().uri().default('https://apis.letexto.com/v1'),
-  LETEXTO_SENDER: Joi.string().default('SG-CI'),
+  // Sender unique validé chez les DEUX fournisseurs (2026-08-19). Avant : 'SG-CI'.
+  LETEXTO_SENDER: Joi.string().default('SOKA CI'),
   LETEXTO_ENABLED: Joi.string().valid('true', 'false').default('false'),
   LETEXTO_TIMEOUT_MS: Joi.number().default(8000),
 
@@ -45,7 +46,8 @@ export const envValidationSchema = Joi.object({
   SMSPRO_API_TOKEN: Joi.string().allow('').default(''),
   SMSPRO_BASE_URL: Joi.string().uri().default('https://app.smspro.africa/api/v3'),
   // Expéditeur : 11 caractères max, et il DOIT être approuvé côté SMSPro.
-  SMSPRO_SENDER_ID: Joi.string().max(11).default('SGBNDCI'),
+  // Même sender que LeTexto depuis le 2026-08-19 (avant : 'SGBNDCI').
+  SMSPRO_SENDER_ID: Joi.string().max(11).default('SOKA CI'),
   SMSPRO_ENABLED: Joi.string().valid('true', 'false').default('false'),
   SMSPRO_TIMEOUT_MS: Joi.number().default(8000),
 
