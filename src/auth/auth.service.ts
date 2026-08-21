@@ -24,8 +24,9 @@ import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { StructureEntity } from 'src/structure/entities/structure.entity';
 import { LevelEntity } from 'src/level/entities/level.entity';
-import { ROLE_MEMBRE_SLUG } from 'src/shared/constants/constants';
+import { ROLE_MEMBRE_SLUG, SMS_SENDER_ID } from 'src/shared/constants/constants';
 import { SmsDispatcher } from 'src/sms/sms-dispatcher.service';
+import { LoginContext, LoginJournalService } from './login-journal.service';
 import { first } from 'rxjs';
 
 @Injectable()
@@ -59,18 +60,43 @@ export class AuthService {
     // Convergence du rôle socle (MEMBRE / RESPONSABLE) à chaque connexion.
     private readonly userRoleService: UserRoleService,
 
+    // Journal des tentatives de connexion (2026-08-19). 🚨 Ne peut PAS faire échouer un
+    // login : toutes ses erreurs sont avalées côté service.
+    private readonly loginJournal: LoginJournalService,
+
   ) {}
 
+  /**
+   * ⚠️ `context` est OPTIONNEL et le reste : `validateUser` est appelée par la stratégie
+   * Passport (qui le fournit) mais aussi par les tests. Sans contexte, la tentative est
+   * journalisée sans IP - jamais ignorée.
+   */
   async validateUser(
     identifier: string,
     password: string,
+    context?: LoginContext,
   ): Promise<Omit<User, 'password'> | null> {
     const normalized = (identifier ?? '').replace(/\s+/g, '').trim();
 
     const user = await this.userService.findByLoginWithPassword(normalized);
-    if (!user) return null;
+    if (!user) {
+      // Numéro inconnu : la ligne la plus précieuse du journal (une série de numéros
+      // inconnus depuis une même IP = un balayage, pas un membre distrait).
+      await this.loginJournal.record({
+        outcome: 'unknown_identifier',
+        identifier: normalized,
+        context,
+      });
+      return null;
+    }
 
     if (!user.is_active) {
+      await this.loginJournal.record({
+        outcome: 'inactive_account',
+        identifier: normalized,
+        userUuid: user.uuid,
+        context,
+      });
       throw new UnauthorizedException('Compte désactivé');
     }
 
@@ -92,19 +118,37 @@ export class AuthService {
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return null;
+    if (!isMatch) {
+      await this.loginJournal.record({
+        outcome: 'bad_password',
+        identifier: normalized,
+        userUuid: user.uuid,
+        context,
+      });
+      return null;
+    }
 
     const { password: _password, ...userWithoutPassword } = user;
     void _password;
     return userWithoutPassword as Omit<User, 'password'>;
   }
 
-  async login(user: User) {
+  async login(user: User, context?: LoginContext) {
   // Flux « 1re connexion » : tant que le compte a encore le mot de passe par défaut
   // (must_change_password = true), on NE délivre PAS de session. On génère un nouveau
   // mot de passe, on l'envoie par SMS, et le membre se reconnecte avec.
   if ((user as { must_change_password?: boolean }).must_change_password) {
-    return this.handleFirstLogin(user);
+    const premier = await this.handleFirstLogin(user);
+    // Journalisé APRÈS coup : si l'envoi du SMS échoue, `handleFirstLogin` lève un 503 et
+    // rien n'est écrit ici - c'est voulu, aucun mot de passe n'est parti, il n'y a pas eu
+    // de « 1re connexion ». L'échec d'envoi, lui, est déjà tracé dans les logs applicatifs.
+    await this.loginJournal.record({
+      outcome: 'first_login',
+      identifier: user.phone_number,
+      userUuid: user.uuid,
+      context,
+    });
+    return premier;
   }
 
   // Trace de connexion : passé ce point, une session est délivrée - le compte a donc
@@ -117,6 +161,16 @@ export class AuthService {
     await this.userRepository.update({ id: user.id }, { is_connected: true });
     user.is_connected = true;
   }
+
+  // Journal de connexion : une ligne par session délivrée. C'est ce qui rend calculables
+  // les membres actifs sur 30 jours, la fréquence et les heures d'affluence - que
+  // `is_connected` (un booléen posé une seule fois) ne pourra jamais dire.
+  await this.loginJournal.record({
+    outcome: 'success',
+    identifier: user.phone_number,
+    userUuid: user.uuid,
+    context,
+  });
 
   // Récupération des informations du membre associé AVANT de créer le payload
   let memberResponsibilities: any[] = [];
@@ -576,7 +630,7 @@ export class AuthService {
 
     const sms = await this.smsDispatcher.send({
       to: user.phone_number,
-      message: `SOKA : votre mot de passe est ${newPassword}. Connectez-vous avec ce mot de passe.`,
+      message: AuthService.passwordSmsMessage(newPassword),
       reference: `firstlogin-${user.uuid}`,
     });
 
@@ -690,7 +744,7 @@ export class AuthService {
     // le compte avec un mot de passe perdu, jamais reçu par le membre.
     const sms = await this.smsDispatcher.send({
       to: normalized,
-      message: `SOKA : votre nouveau mot de passe est ${newPassword}. Connectez-vous avec ce mot de passe.`,
+      message: AuthService.passwordSmsMessage(newPassword),
       reference: `reset-${user.uuid}`,
     });
 
@@ -783,4 +837,20 @@ export class AuthService {
     return randomInt(0, 10_000).toString().padStart(4, '0');
   }
 
+  /**
+   * Texte **unique** des SMS de mot de passe (1re connexion ET « mot de passe oublié ») :
+   * les deux portes d'entrée disaient la même chose à un mot près, et cette divergence
+   * n'avait aucune raison d'être. Le message s'ouvre sur le sender ID (règle du
+   * 2026-08-19) : le membre voit le même nom dans l'expéditeur et dans le texte.
+   *
+   * ⚠️ Le sender ID vient de `SMS_SENDER_ID` (`shared/constants`), défini **une seule fois**
+   * pour toute l'API - un littéral recopié ici est exactement ce qui a laissé partir des SMS
+   * annonçant « SOKA : … » sous l'expéditeur « SOKA CI ». Reste que l'expéditeur réellement
+   * posé sur l'envoi vient du `.env` de chaque fournisseur (`LETEXTO_SENDER`,
+   * `SMSPRO_SENDER_ID`, qui retombent sur cette même constante s'ils manquent) : les changer
+   * en base ou en `.env` sans changer la constante ferait diverger le texte de l'expéditeur.
+   */
+  private static passwordSmsMessage(password: string): string {
+    return `${SMS_SENDER_ID} : votre nouveau mot de passe est ${password}. Connectez-vous avec ce mot de passe.`;
+  }
 }

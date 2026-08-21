@@ -40,6 +40,27 @@ export class UserRoleController {
     return this.service.create(dto);
   }
 
+  /**
+   * ⚠️ Routes littérales AVANT `@Get(':uuid')` : Nest résout dans l'ordre de déclaration, et
+   * `/user-roles/roles/xxx` serait sinon avalé par la route paramétrée.
+   */
+  @Get('roles/:roleUuid/titulaires')
+  @RequirePermissions('utilisateurs_roles_voir')
+  @ApiOperation({ summary: 'Membres portant ce rôle' })
+  async titulaires(@Param('roleUuid') roleUuid: string) {
+    return this.service.titulaires(roleUuid);
+  }
+
+  @Get('roles/:roleUuid/candidats')
+  @RequirePermissions('collaborateurs_assigner_un_role_a_un_collaborateur')
+  @ApiOperation({
+    summary: 'Comptes pouvant recevoir ce rôle (recherche, 2 caractères minimum)',
+  })
+  @ApiQuery({ name: 'q', required: true })
+  async candidats(@Param('roleUuid') roleUuid: string, @Query('q') q = '') {
+    return this.service.candidats(roleUuid, q);
+  }
+
   @Get()
   @RequirePermissions('utilisateurs_roles_voir')
   @ApiOperation({

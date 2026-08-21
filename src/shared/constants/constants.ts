@@ -29,3 +29,17 @@ export const SYSTEM_ROLE_SLUGS: readonly string[] = [
   ROLE_MEMBRE_SLUG,
 ];
 export const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
+
+/**
+ * **Sender ID unique de TOUS les SMS sortants** - validé chez LeTexto ET SMSPro Africa depuis
+ * le 2026-08-19, et qui doit également **ouvrir le message** (« SOKA CI : … »).
+ *
+ * ⚠️ Défini ICI, et nulle part ailleurs dans l'API : c'est précisément parce que le préfixe du
+ * message et l'expéditeur vivaient dans des fichiers sans lien qu'un SMS a pu partir sous
+ * « SOKA CI » en s'annonçant « SOKA : … ». Les providers y retombent quand la variable `.env`
+ * correspondante manque (`LETEXTO_SENDER`, `SMSPRO_SENDER_ID`, `TEXTO_SENDER`).
+ *
+ * ⚠️ La console d'assistance (`assistance/src/lib/sms.ts`) en garde sa **propre** copie : c'est
+ * un projet séparé, la duplication est assumée et commentée aux deux endroits. Les changer ensemble.
+ */
+export const SMS_SENDER_ID = 'SOKA CI';

@@ -25,10 +25,25 @@ import {
 } from './dto/distribute-edition.dto';
 import { NotificationService } from './notifications/notification.service';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
+import { SMS_SENDER_ID } from 'src/shared/constants/constants';
 import * as ExcelJS from 'exceljs';
 
 const DEFAULT_TEMPLATE =
   'Bonjour {correspondent}, le journal "{edition}" est prêt. Veuillez retirer votre colis ({quantity} ex.) et confirmer la distribution avant le {deadline}.';
+
+/**
+ * **Tout SMS sortant s'ouvre sur le sender ID** (règle du 2026-08-19, étendue ici le
+ * 2026-08-20 : ces notifications étaient les dernières à partir sans).
+ *
+ * Appliqué au message **rendu**, et pas au seul gabarit par défaut : le gabarit est
+ * surchargeable par l'appelant (`message_template`), un préfixe posé sur la constante serait
+ * donc perdu dès la première personnalisation. Le garde `startsWith` évite le doublon si
+ * quelqu'un écrit un gabarit qui porte déjà le sender.
+ */
+export function prefixeSender(message: string): string {
+  const texte = message.trim();
+  return texte.startsWith(SMS_SENDER_ID) ? texte : `${SMS_SENDER_ID} : ${texte}`;
+}
 
 @Injectable()
 export class JournalDistributionService {
@@ -72,11 +87,12 @@ export class JournalDistributionService {
       deadline: string;
     },
   ): string {
-    return template
+    const rendu = template
       .replace(/\{correspondent\}/g, ctx.correspondent)
       .replace(/\{edition\}/g, ctx.edition)
       .replace(/\{quantity\}/g, String(ctx.quantity))
       .replace(/\{deadline\}/g, ctx.deadline);
+    return prefixeSender(rendu);
   }
 
   /** Téléphone du responsable de la zone selon le canal. */
@@ -443,10 +459,11 @@ export class JournalDistributionService {
         const responsibleName = d.zone
           ? await this.zoneResponsibleName(d.zone)
           : 'Responsable';
-        const message =
+        const message = prefixeSender(
           `Rappel : la distribution de "${d.edition.title} N°${d.edition.number}" doit être achevée au plus tard le ` +
-          deadline.toISOString().substring(0, 10) +
-          `. Merci ${responsibleName}.`;
+            deadline.toISOString().substring(0, 10) +
+            `. Merci ${responsibleName}.`,
+        );
 
         const res = await this.notificationService.send({
           to: phone,

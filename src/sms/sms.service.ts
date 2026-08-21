@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
+import { SMS_SENDER_ID } from 'src/shared/constants/constants';
 
 export interface SmsResult {
   success: boolean;
@@ -30,7 +31,7 @@ export class SmsService {
 
   constructor(private readonly config: ConfigService) {
     this.apiKey = (this.config.get<string>('LETEXTO_API_KEY') ?? '').trim();
-    this.sender = this.config.get<string>('LETEXTO_SENDER') ?? 'SOKA CI';
+    this.sender = this.config.get<string>('LETEXTO_SENDER') ?? SMS_SENDER_ID;
     this.enabled =
       (this.config.get<string>('LETEXTO_ENABLED') ?? 'false').toLowerCase() ===
       'true';

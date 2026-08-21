@@ -9,6 +9,7 @@ import { AppConfigService } from 'src/config/config.service';
 import { SettingsService } from 'src/settings/settings.service';
 import { SmsProviderRegistry } from './sms-provider.registry';
 import { SmsDispatcher } from './sms-dispatcher.service';
+import { SMS_SENDER_ID } from 'src/shared/constants/constants';
 import type { SendMessageResult } from 'src/journals/interfaces/sms-provider.interface';
 import type { ProviderBalance } from './interfaces/managed-sms-provider.interface';
 import {
@@ -228,8 +229,7 @@ export class SmsSettingsService {
     return this.dispatcher.testSend(provider, {
       to,
       // Même ouverture que les SMS de mot de passe : le message porte le sender ID.
-      message:
-        'SOKA CI : test de configuration SMS. Si vous recevez ce message, le fournisseur est opérationnel.',
+      message: `${SMS_SENDER_ID} : test de configuration SMS. Si vous recevez ce message, le fournisseur est opérationnel.`,
       reference: `test-${provider}`,
     });
   }

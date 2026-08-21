@@ -632,6 +632,10 @@ async function run(): Promise<void> {
         ds.getRepository(UserRole),
         ds.getRepository(User),
         ds.getRepository(Role),
+        // Cache de droits : sans objet dans un script à usage unique (aucune API en vie
+        // derrière), mais le constructeur l'exige - on passe un objet inerte plutôt qu'un
+        // `null` qui exploserait au premier appel.
+        { invalider: () => undefined } as any,
       );
 
       if (candidats.length) {

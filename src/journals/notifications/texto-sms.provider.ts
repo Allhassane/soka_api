@@ -7,6 +7,7 @@ import {
   SendMessageResult,
 } from '../interfaces/sms-provider.interface';
 import { NotificationChannel } from '../entities/journal-distribution.entity';
+import { SMS_SENDER_ID } from 'src/shared/constants/constants';
 
 /**
  * Provider d'envoi SMS / WhatsApp via TextO.
@@ -14,7 +15,8 @@ import { NotificationChannel } from '../entities/journal-distribution.entity';
  *  - TEXTO_BASE_URL     (ex: https://api.texto.ci/api/v1)
  *  - TEXTO_API_KEY      (clé API / token bearer)
  *  - TEXTO_CLIENT_ID    (optionnel - identifiant client)
- *  - TEXTO_SENDER       (sender ID alphanumérique, ex: SOKA)
+ *  - TEXTO_SENDER       (sender ID alphanumérique ; défaut « SOKA CI », le sender unique de
+ *                        toute l'application - cf. `SMS_SENDER_ID`)
  *  - TEXTO_SMS_PATH     (chemin endpoint SMS, défaut: /sms/send)
  *  - TEXTO_WA_PATH      (chemin endpoint WhatsApp, défaut: /whatsapp/send)
  *  - TEXTO_TIMEOUT_MS   (défaut: 10000)
@@ -38,7 +40,9 @@ export class TextoSmsProvider implements NotificationProvider {
     this.baseUrl = this.config.get<string>('TEXTO_BASE_URL') ?? '';
     this.apiKey = this.config.get<string>('TEXTO_API_KEY') ?? '';
     this.clientId = this.config.get<string>('TEXTO_CLIENT_ID') ?? '';
-    this.sender = this.config.get<string>('TEXTO_SENDER') ?? 'SOKA';
+    // ⚠️ Défaut aligné sur le sender unique de l'application (2026-08-20) : il valait « SOKA »,
+    // seul expéditeur du code à ne pas porter le nom validé chez les fournisseurs.
+    this.sender = this.config.get<string>('TEXTO_SENDER') ?? SMS_SENDER_ID;
     this.smsPath = this.config.get<string>('TEXTO_SMS_PATH') ?? '/sms/send';
     this.waPath = this.config.get<string>('TEXTO_WA_PATH') ?? '/whatsapp/send';
     this.enabled =

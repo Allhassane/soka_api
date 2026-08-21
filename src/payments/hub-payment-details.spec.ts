@@ -308,3 +308,64 @@ describe('PaymentService - capture du détail guichet', () => {
     expect(patchEcrit().failure_code).toBe('authentication_failed');
   });
 });
+
+/**
+ * Un membre rejoue souvent le MÊME lien : la tentative ratée pose un motif d'échec, celle qui
+ * réussit n'en envoie aucun. Sans effacement, le paiement finit crédité **et** étiqueté
+ * « authentication_failed » - constaté sur les 2 rattrapages du 2026-08-20, et c'est ce champ
+ * que lit la console d'assistance pour qualifier un ticket.
+ */
+describe("PaymentService - une réussite efface le motif d'échec de la tentative précédente", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('🚨 remet `failure_code` et `failure_message` à NULL quand le guichet dit `successful`', async () => {
+    const { service, patchEcrit } = makeService({
+      uuid: 'pay-uuid',
+      transaction_id: 'plink_rejoue',
+      payment_status: PaymentStatus.FAILED,
+      failure_code: 'authentication_failed',
+      failure_message: 'La validation du paiement a échoué.',
+    });
+
+    hubService.checkPaymentStatus.mockResolvedValue({
+      paid: true,
+      payment: {
+        status: 'successful',
+        provider: 'orange',
+        id: 'pay_ok',
+        paidAt: '2026-08-17T20:47:49.167Z',
+        createdAt: '2026-08-17T20:47:07.661Z',
+        failureCode: null,
+        failureMessage: null,
+      },
+    });
+
+    // C'est le rattrapage : la ligne est close, on force la ré-interrogation du guichet.
+    await service.syncHubPaymentByTransactionId('plink_rejoue', { relancerCloture: true });
+
+    const patch = patchEcrit();
+    expect(patch.failure_code).toBeNull();
+    expect(patch.failure_message).toBeNull();
+    // Et c'est bien la tentative RÉUSSIE qui est retenue, pas celle qui avait échoué.
+    expect(patch.hub_payment_id).toBe('pay_ok');
+  });
+
+  it('conserve le motif quand la tentative a réellement échoué', async () => {
+    const { service, patchEcrit } = makeService({
+      uuid: 'pay-uuid',
+      transaction_id: 'plink_ko',
+      payment_status: PaymentStatus.PENDING,
+    });
+
+    enAttente({
+      status: 'failed',
+      provider: 'orange',
+      failureCode: 'authentication_failed',
+      failureMessage: 'La validation du paiement a échoué.',
+    });
+
+    await service.syncHubPaymentByTransactionId('plink_ko');
+
+    expect(patchEcrit().failure_code).toBe('authentication_failed');
+  });
+});

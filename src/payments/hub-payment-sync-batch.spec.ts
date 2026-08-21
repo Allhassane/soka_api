@@ -24,6 +24,7 @@ describe('HubPaymentSyncCronService - interrupteur de poste de test', () => {
     const paymentService = {
       syncAllPendingHubPayments: jest.fn().mockResolvedValue({
         processed: 0, paid: 0, failed: 0, abandoned: 0, pending: 0, errors: 0,
+        recredited: 0,
       }),
     };
     const cron = new HubPaymentSyncCronService(paymentService as never);
@@ -49,17 +50,30 @@ describe('HubPaymentSyncCronService - interrupteur de poste de test', () => {
  * (le récent d'abord) et **la purge** (la file décroît).
  */
 
-function makeService(pending: Partial<PaymentEntity>[]) {
-  const queryBuilder: any = {
+/**
+ * Deux files, donc deux `createQueryBuilder` : la 1ʳᵉ rend les `pending`, la 2ᵈᵉ les
+ * tentatives closes à re-vérifier. Les confondre ferait passer la même liste deux fois.
+ */
+function makeService(
+  pending: Partial<PaymentEntity>[],
+  closed: Partial<PaymentEntity>[] = [],
+) {
+  const build = (rows: Partial<PaymentEntity>[]) => ({
     where: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
     orderBy: jest.fn().mockReturnThis(),
     take: jest.fn().mockReturnThis(),
-    getMany: jest.fn().mockResolvedValue(pending),
-  };
+    getMany: jest.fn().mockResolvedValue(rows),
+  });
+
+  const queryBuilder: any = build(pending);
+  const closedBuilder: any = build(closed);
 
   const paymentRepo = {
-    createQueryBuilder: jest.fn().mockReturnValue(queryBuilder),
+    createQueryBuilder: jest
+      .fn()
+      .mockReturnValueOnce(queryBuilder)
+      .mockReturnValueOnce(closedBuilder),
     findOne: jest.fn(),
   };
 
@@ -79,7 +93,7 @@ function makeService(pending: Partial<PaymentEntity>[]) {
     null as never,
   );
 
-  return { service, queryBuilder };
+  return { service, queryBuilder, closedBuilder, paymentRepo };
 }
 
 const enAttente = (id: string, ageHeures: number): Partial<PaymentEntity> => ({
@@ -205,6 +219,16 @@ describe('PaymentService.syncAllPendingHubPayments - purge des abandons', () => 
     expect(result.pending).toBe(1);
   });
 
+  it('la file des `pending` et celle des closes sont DEUX requêtes distinctes', async () => {
+    const { service, paymentRepo } = makeService([], []);
+
+    await service.syncAllPendingHubPayments();
+
+    // 🚨 Fondues en une seule, les lignes closes (jusqu'à 350 en un jour) mangeraient le
+    // plafond de 500 au détriment des `pending` - l'argent en cours.
+    expect(paymentRepo.createQueryBuilder).toHaveBeenCalledTimes(2);
+  });
+
   it('compte séparément payés, échoués et erreurs', async () => {
     const { service } = makeService([
       enAttente('a', 1),
@@ -224,5 +248,121 @@ describe('PaymentService.syncAllPendingHubPayments - purge des abandons', () => 
     expect(result.paid).toBe(1);
     expect(result.failed).toBe(1);
     expect(result.errors).toBe(1);
+  });
+});
+
+/**
+ * RÉGRESSION MESURÉE EN PRODUCTION (2026-08-20) : **30 000 XOF encaissés et jamais crédités**,
+ * sur 2 paiements des 17 et 18/08.
+ *
+ * Mécanique : le membre rate sa validation, le guichet répond `failed`, le cron referme la
+ * ligne - **puis le membre recommence sur le MÊME lien et réussit** (47 min plus tard dans un
+ * cas, 9 min dans l'autre). Un lien HUB2 n'expire pas et reste payable après un échec ; côté
+ * application, en revanche, `failed` sortait la ligne de la file **pour toujours**, et
+ * `syncHubPaymentByTransactionId` répondait depuis la base sans jamais rappeler le guichet.
+ *
+ * Ces tests verrouillent la propriété qui rend la panne impossible : **une tentative close
+ * reste vérifiée tant qu'elle est dans la fenêtre**, et un encaissement retrouvé se VOIT.
+ */
+describe('PaymentService.syncAllPendingHubPayments - re-vérification des tentatives closes', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  const close = (
+    id: string,
+    statut: PaymentStatus = PaymentStatus.FAILED,
+  ): Partial<PaymentEntity> => ({
+    uuid: `pay-${id}`,
+    transaction_id: `plink_${id}`,
+    payment_status: statut,
+    status: GlobalStatus.FAILED,
+    total_amount: 15000,
+    beneficiary_name: 'MEMBRE TEST',
+    created_at: new Date(),
+  });
+
+  it('🚨 rattrape un paiement REFERMÉ À TORT que le guichet a encaissé', async () => {
+    const { service } = makeService([], [close('rattrape')]);
+
+    const sync = jest
+      .spyOn(service, 'syncHubPaymentByTransactionId')
+      .mockResolvedValue({ status: 'paid', transaction_id: 'plink_rattrape' });
+
+    const result = await service.syncAllPendingHubPayments();
+
+    // Compté à part de `paid` : noyé dedans, il redeviendrait invisible dans le journal.
+    expect(result.recredited).toBe(1);
+    expect(result.paid).toBe(0);
+    // ⚠️ C'est le drapeau qui fait tout : sans lui, la synchronisation répond « échoué »
+    // depuis la base sans jamais rappeler le guichet, et l'argent reste perdu.
+    expect(sync).toHaveBeenCalledWith('plink_rattrape', { relancerCloture: true });
+  });
+
+  it('re-vérifie aussi les tentatives ANNULÉES par le membre', async () => {
+    // Le lien est désactivé à l'annulation, mais une autorisation déjà validée chez
+    // l'opérateur ira à son terme - et aucun webhook n'existe pour la ramener.
+    const { service } = makeService([], [close('annule', PaymentStatus.CANCELLED)]);
+
+    jest
+      .spyOn(service, 'syncHubPaymentByTransactionId')
+      .mockResolvedValue({ status: 'paid', transaction_id: 'plink_annule' });
+
+    const result = await service.syncAllPendingHubPayments();
+
+    expect(result.recredited).toBe(1);
+  });
+
+  it('une tentative close qui reste échouée ne compte pas comme rattrapage', async () => {
+    const { service } = makeService([], [close('toujours-echoue')]);
+
+    jest
+      .spyOn(service, 'syncHubPaymentByTransactionId')
+      .mockResolvedValue({ status: 'failed', transaction_id: 'plink_toujours-echoue' });
+
+    const result = await service.syncAllPendingHubPayments();
+
+    expect(result.recredited).toBe(0);
+    expect(result.failed).toBe(1);
+  });
+
+  it('🚨 un guichet injoignable ne fait pas passer un rattrapage pour un échec', async () => {
+    const { service } = makeService([], [close('panne')]);
+
+    jest
+      .spyOn(service, 'syncHubPaymentByTransactionId')
+      .mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const result = await service.syncAllPendingHubPayments();
+
+    expect(result.errors).toBe(1);
+    expect(result.recredited).toBe(0);
+    expect(result.failed).toBe(0);
+  });
+
+  it("borne la file des closes à son propre plafond, pas à celui des `pending`", async () => {
+    const { service, closedBuilder } = makeService([], []);
+
+    await service.syncAllPendingHubPayments();
+
+    expect(closedBuilder.take).toHaveBeenCalledWith(300);
+    // Et elle part de la plus récemment refermée : même raison qu'ailleurs, une exécution
+    // écourtée doit avoir traité ce qui compte le plus.
+    expect(closedBuilder.orderBy).toHaveBeenCalledWith('p.updated_at', 'DESC');
+  });
+
+  it('les deux files sont traitées dans le même passage', async () => {
+    const { service } = makeService(
+      [{ uuid: 'p1', transaction_id: 'plink_p1', payment_status: PaymentStatus.PENDING, created_at: new Date() }],
+      [close('c1')],
+    );
+
+    jest
+      .spyOn(service, 'syncHubPaymentByTransactionId')
+      .mockResolvedValue({ status: 'paid', transaction_id: 'x' });
+
+    const result = await service.syncAllPendingHubPayments();
+
+    expect(result.processed).toBe(2);
+    expect(result.paid).toBe(1);
+    expect(result.recredited).toBe(1);
   });
 });

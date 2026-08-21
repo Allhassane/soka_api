@@ -33,10 +33,24 @@ import {
   HubPaymentSyncResult,
 } from './types/hub-payment-sync-result.type';
 import { HubPaymentDetails } from './types/hub-payment-details.type';
-import { CRON_ABANDON_AFTER_HOURS } from './abandon.constants';
+import {
+  CRON_ABANDON_AFTER_HOURS,
+  RECHECK_CLOSED_FOR_HOURS,
+} from './abandon.constants';
 
 /** Interrogations du guichet menées de front pendant une synchronisation en masse. */
 const SYNC_CONCURRENCY = 5;
+
+/**
+ * Plafond de la file de **re-vérification des tentatives closes**, DISTINCT de celui des
+ * tentatives en attente.
+ *
+ * 🚨 **Les deux files ne doivent jamais partager un plafond.** Versées dans la même requête,
+ * les lignes closes (72 sur 48 h en régime courant, **350 le 07/08**) mangeraient les 500
+ * places au détriment des `pending` - et le tri DESC, qui est le vrai garde-fou hérité de la
+ * perte de 585 000 XOF, ne protégerait plus rien. Deux files, deux plafonds, deux tris.
+ */
+const RECHECK_BATCH_LIMIT = 300;
 
 @Injectable()
 export class PaymentService {
@@ -438,14 +452,25 @@ export class PaymentService {
       patch.provider = provider;
     }
 
-    const failureCode = details.failureCode?.trim();
-    if (failureCode && failureCode !== payment.failure_code) {
-      patch.failure_code = failureCode;
-    }
+    // 🚨 **Une tentative qui aboutit EFFACE le motif d'échec de la précédente.** Le membre
+    // rejoue souvent le même lien : la tentative ratée pose `authentication_failed`, celle
+    // qui réussit n'envoie aucun motif - et sans cet effacement le paiement reste crédité
+    // ET étiqueté « échec d'authentification ». Constaté sur les 2 rattrapages du 20/08 ;
+    // c'est ce que lit la console d'assistance pour qualifier un ticket.
+    const abouti = details.status === 'successful';
+    if (abouti) {
+      if (payment.failure_code !== null) patch.failure_code = null;
+      if (payment.failure_message !== null) patch.failure_message = null;
+    } else {
+      const failureCode = details.failureCode?.trim();
+      if (failureCode && failureCode !== payment.failure_code) {
+        patch.failure_code = failureCode;
+      }
 
-    const failureMessage = details.failureMessage?.trim();
-    if (failureMessage && failureMessage !== payment.failure_message) {
-      patch.failure_message = failureMessage;
+      const failureMessage = details.failureMessage?.trim();
+      if (failureMessage && failureMessage !== payment.failure_message) {
+        patch.failure_message = failureMessage;
+      }
     }
 
     // Une date illisible est ignorée plutôt que stockée en `Invalid Date`, qui ferait
@@ -527,6 +552,15 @@ export class PaymentService {
 
   async syncHubPaymentByTransactionId(
     transaction_id: string,
+    /**
+     * `relancerCloture` : **rouvre une ligne déjà close** (`failed` / `cancelled`) et
+     * réinterroge le guichet au lieu de répondre depuis la base.
+     *
+     * 🚨 Réservé aux appels de FOND (cron, seeds de rattrapage). Les écrans interactifs
+     * gardent le raccourci : c'est lui qui leur donne une réponse immédiate sans peser sur le
+     * guichet, et un paiement clos ne change pas d'avis entre deux F5.
+     */
+    { relancerCloture = false }: { relancerCloture?: boolean } = {},
   ): Promise<HubPaymentSyncResult> {
     if (!transaction_id?.trim()) {
       return { status: 'not_found', transaction_id: transaction_id ?? '' };
@@ -564,9 +598,16 @@ export class PaymentService {
       );
     }
 
+    // 🚨 **Cette sortie est une SORTIE PROVISOIRE, pas une vérité.** Elle répond « échoué »
+    // depuis la base, sans rappeler le guichet - or le lien, lui, reste PAYABLE : il n'expire
+    // pas et rien ne le désactive tant que le membre n'a pas cliqué « Annuler ». Un membre
+    // qui recommence sur le même lien et réussit verse donc de l'argent que ce `return`
+    // rendait invisible pour toujours (30 000 XOF perdus ainsi les 17 et 18/08).
+    // `relancerCloture` est la porte laissée aux appels de fond pour aller vérifier.
     if (
-      payment.payment_status === PaymentStatus.FAILED
-      || payment.payment_status === PaymentStatus.CANCELLED
+      !relancerCloture
+      && (payment.payment_status === PaymentStatus.FAILED
+        || payment.payment_status === PaymentStatus.CANCELLED)
     ) {
       await this.updateLinkedEntities(
         payment,
@@ -611,10 +652,16 @@ export class PaymentService {
       || hubPaymentStatus === 'canceled';
 
     if (isFailed) {
-      await this.updatePayment(payment.uuid, {
-        status: GlobalStatus.FAILED,
-        payment_status: PaymentStatus.FAILED,
-      });
+      // 🚨 **N'écrire que s'il y a un écart.** La file de re-vérification est bornée par
+      // `updated_at` : réécrire « échoué » sur une ligne déjà échouée repousserait sa date à
+      // chaque passage, et la ligne resterait dans la fenêtre des 48 h **pour toujours** -
+      // la file ne décroîtrait plus jamais. `updateLinkedEntities` est déjà idempotente.
+      if (payment.payment_status !== PaymentStatus.FAILED) {
+        await this.updatePayment(payment.uuid, {
+          status: GlobalStatus.FAILED,
+          payment_status: PaymentStatus.FAILED,
+        });
+      }
       await this.updateLinkedEntities(payment, GlobalStatus.FAILED);
 
       return this.buildHubPaymentSyncResult(
@@ -789,6 +836,28 @@ export class PaymentService {
       .take(limit)
       .getMany();
 
+    /**
+     * **Seconde file : les tentatives CLOSES des dernières 48 h.**
+     *
+     * 🚨 Requête SÉPARÉE, plafond SÉPARÉ, tri SÉPARÉ - jamais fondue dans celle des `pending`
+     * (cf. `RECHECK_BATCH_LIMIT`). Elle répond à une question que la première ne pose pas :
+     * « ai-je enterré un lien sur lequel le membre a fini par payer ? ». Bornée par
+     * `updated_at`, donc par la date de fermeture, elle décroît d'elle-même.
+     */
+    const closedPayments = await this.paymentRepo
+      .createQueryBuilder('p')
+      .where('p.payment_status IN (:...closedStatuses)', {
+        closedStatuses: [PaymentStatus.FAILED, PaymentStatus.CANCELLED],
+      })
+      .andWhere('p.updated_at >= :depuis', {
+        depuis: new Date(Date.now() - RECHECK_CLOSED_FOR_HOURS * 3600_000),
+      })
+      .andWhere('p.transaction_id IS NOT NULL')
+      .andWhere('p.transaction_id LIKE :prefix', { prefix: 'plink_%' })
+      .orderBy('p.updated_at', 'DESC')
+      .take(RECHECK_BATCH_LIMIT)
+      .getMany();
+
     const result: HubPaymentSyncBatchResult = {
       processed: 0,
       paid: 0,
@@ -796,6 +865,7 @@ export class PaymentService {
       pending: 0,
       abandoned: 0,
       errors: 0,
+      recredited: 0,
     };
 
     // Interrogations menées par petits lots : 500 appels en série, au timeout de 8 s chacun,
@@ -813,7 +883,66 @@ export class PaymentService {
       }
     }
 
+    // Puis la re-vérification des lignes closes. En second, volontairement : si le guichet
+    // tombe en route, ce sont les `pending` - l'argent en cours - qui auront été servis.
+    for (let i = 0; i < closedPayments.length; i += SYNC_CONCURRENCY) {
+      const lot = closedPayments.slice(i, i + SYNC_CONCURRENCY);
+
+      const verdicts = await Promise.all(
+        lot.map((payment) => this.recheckClosedPayment(payment)),
+      );
+
+      for (const verdict of verdicts) {
+        result.processed += 1;
+        result[verdict] += 1;
+      }
+    }
+
     return result;
+  }
+
+  /**
+   * **Re-vérifie une tentative que l'application a refermée** (`failed` / `cancelled`) et
+   * qu'un membre a pu payer depuis.
+   *
+   * ⚠️ Elle ne crédite RIEN elle-même : elle repasse par
+   * `syncHubPaymentByTransactionId`, la route unique vers les statuts, avec la seule
+   * différence qu'elle l'autorise à rappeler le guichet. Une seconde route vers le même
+   * argent finirait par diverger - c'est cette duplication qui a produit les écarts d'août.
+   */
+  private async recheckClosedPayment(
+    payment: PaymentEntity,
+  ): Promise<'paid' | 'failed' | 'pending' | 'errors' | 'recredited'> {
+    try {
+      const syncResult = await this.syncHubPaymentByTransactionId(
+        payment.transaction_id,
+        { relancerCloture: true },
+      );
+
+      if (syncResult.status === 'not_found') return 'errors';
+
+      // Le guichet confirme l'encaissement d'une ligne qu'on avait enterrée : de l'argent
+      // vient d'être rendu à ses comptes. On le dit fort - c'est une anomalie, pas une
+      // routine, et elle doit se voir dans le journal du cron.
+      if (syncResult.status === 'paid') {
+        this.logger.warn(
+          `[HUB][RATTRAPAGE] ${payment.transaction_id} était « ${payment.payment_status} » `
+          + `et le guichet l'a ENCAISSÉ : ${payment.total_amount} XOF recrédités `
+          + `(${payment.beneficiary_name}).`,
+        );
+        return 'recredited';
+      }
+
+      // Toujours close, ou redevenue « en attente » chez HUB2 (il remet une intention
+      // abandonnée en attente au lieu de l'échouer) : rien à faire, elle sortira de la
+      // fenêtre toute seule.
+      return syncResult.status === 'pending' ? 'pending' : 'failed';
+    } catch (error) {
+      this.logger.warn(
+        `[HUB][RATTRAPAGE] ${payment.transaction_id} : ${error?.message ?? error}`,
+      );
+      return 'errors';
+    }
   }
 
   /**

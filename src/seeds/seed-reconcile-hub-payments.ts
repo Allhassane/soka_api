@@ -20,14 +20,18 @@ import AppDataSource from '../data-source';
  * ferait une **deuxième route vers le même argent**, et deux routes finissent toujours par
  * diverger - c'est précisément ce genre de duplication qui produit les écarts qu'on mesure.
  *
- * ⚠️ Il n'interroge que les paiements **en attente** : ce sont les seuls à risque. Un paiement
- * déjà `paid` ou `failed` est définitif côté application.
+ * ⚠️ **Il interroge TOUT ce qui n'est pas crédité**, `pending` comme `failed` comme
+ * `cancelled` - et non plus les seuls `pending`. Voir le commentaire du filtre : c'est cette
+ * restriction qui lui a fait rater les 30 000 XOF du 2026-08-20. Un statut local ne dit rien
+ * de ce que le lien est devenu au guichet.
  *
  * Sortie : un tableau récapitulatif et, s'il y a des écarts, la liste nominative.
  * **Code de sortie 1** quand un écart est trouvé, pour pouvoir servir de sonde de supervision.
  *
  * Exécution (depuis api/) :
- *   npm run seed:reconcile-hub-payments
+ *   npm run seed:reconcile-hub-payments              # 90 derniers jours
+ *   npm run seed:reconcile-hub-payments -- --jours=7 # passage quotidien, plus court
+ *   npm run seed:reconcile-hub-payments -- --tout    # audit complet de l'historique
  */
 
 const API_URL =
@@ -87,9 +91,31 @@ async function main() {
   const ds = await AppDataSource.initialize();
 
   /**
-   * ⚠️ Le même filtre que le cron, à dessein : si les deux divergeaient, l'audit déclarerait
-   * « tout va bien » sur une population que la synchronisation ne traite pas.
+   * 🚨 **Ce filtre disait `payment_status = 'pending'`, et c'était le trou.**
+   *
+   * Le commentaire d'origine affirmait qu'« un paiement déjà `paid` ou `failed` est définitif
+   * côté application » : c'est vrai côté application, et **faux côté guichet**. Un lien HUB2
+   * n'expire pas, passe simplement `used`, et reste payable après une tentative ratée. Le
+   * 2026-08-20, deux membres ont payé sur un lien que l'application avait enterré - 30 000 XOF
+   * encaissés, jamais crédités - et **ce détecteur, dont c'est précisément le métier, les a
+   * déclarés inexistants** parce qu'il ne regardait que les `pending`.
+   *
+   * Le détecteur porte donc désormais sur **tout ce qui n'est pas crédité**, quel qu'en soit
+   * le statut local. C'est un contrôle d'invariant : « tout encaissement abouti a une
+   * contrepartie créditée ». Il ne doit dépendre d'aucune hypothèse sur la façon dont
+   * l'argent a pu se perdre - sinon il ne trouvera jamais que les pannes déjà connues.
+   *
+   * `--jours=N` borne l'examen aux paiements créés dans les N derniers jours (défaut 90, de
+   * quoi tenir un passage quotidien à coût constant) ; `--tout` balaie tout l'historique.
    */
+  const TOUT = process.argv.includes('--tout');
+  const JOURS = Number(
+    process.argv.find((a) => a.startsWith('--jours='))?.split('=')[1] ?? 90,
+  );
+  const borne = TOUT
+    ? ''
+    : `AND p.created_at >= (NOW() - INTERVAL ${Number.isFinite(JOURS) ? JOURS : 90} DAY)`;
+
   const lignes: LignePaiement[] = await ds.query(`
     SELECT p.uuid            AS payment_uuid,
            p.transaction_id  AS transaction_id,
@@ -102,13 +128,17 @@ async function main() {
     LEFT JOIN subscription_payments sp ON sp.payment_uuid = p.uuid
     LEFT JOIN subscriptions s ON s.uuid = sp.subscription_uuid
     LEFT JOIN members m ON m.uuid = sp.beneficiary_uuid
-    WHERE p.payment_status = 'pending'
-      AND p.status IN ('init','pending')
+    WHERE p.deleted_at IS NULL
       AND p.transaction_id LIKE 'plink_%'
+      AND p.payment_status <> 'paid'
+      ${borne}
     ORDER BY p.created_at DESC
   `);
 
-  console.log(`\nPaiements « en attente » à vérifier : ${lignes.length}`);
+  console.log(
+    `\nPaiements NON CRÉDITÉS à vérifier : ${lignes.length}`
+    + `${TOUT ? ' (tout l historique)' : ` (${JOURS} derniers jours)`}`,
+  );
   console.log(`Guichet interrogé : ${API_URL}\n`);
 
   const compteurs: Record<Verdict, number> = {

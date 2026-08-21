@@ -42,6 +42,7 @@ function makeService(
   service: AuthService;
   send: jest.Mock;
   update: jest.Mock;
+  journal: jest.Mock;
 } {
   const user = 'user' in opts ? opts.user : ACTIVE_USER;
   const smsOk = opts.smsOk ?? true;
@@ -52,6 +53,7 @@ function makeService(
       : { success: false, provider: null, error: 'fournisseur injoignable' },
   );
   const update = jest.fn(async () => undefined);
+  const journal = jest.fn(async () => undefined);
 
   const userRepository = {
     findOne: jest.fn(async () => user ?? null),
@@ -69,9 +71,12 @@ function makeService(
     { send } as any, // smsDispatcher
     {} as any, // accessScopeService
     {} as any, // userRoleService
+    // Journal de connexion : un espion suffit, `requestPasswordReset` ne l'utilise pas -
+    // mais le constructeur l'exige, et un `{}` ferait échouer tout appel réel en silence.
+    { record: journal } as any, // loginJournal
   );
 
-  return { service, send, update };
+  return { service, send, update, journal };
 }
 
 describe('AuthService.requestPasswordReset', () => {
@@ -146,6 +151,21 @@ describe('AuthService.requestPasswordReset', () => {
     // autres assertions et donnerait le MÊME code à tous les membres).
     expect(vus.size).toBeGreaterThan(20);
   }, 30_000);
+
+  // Règle du 2026-08-19 : le message DOIT s'ouvrir sur le sender ID validé chez les deux
+  // fournisseurs, pour que le nom lu dans le texte soit celui affiché comme expéditeur.
+  // Le message est aussi le MÊME que celui de la 1re connexion : les deux portes d'entrée
+  // divergeaient d'un mot, sans raison.
+  it("ouvre le SMS sur le sender ID « SOKA CI »", async () => {
+    const { service, send } = makeService();
+
+    await service.requestPasswordReset(ACTIVE_USER.phone_number);
+
+    const message: string = send.mock.calls[0][0].message;
+    expect(message).toMatch(
+      /^SOKA CI : votre nouveau mot de passe est \d{4}\. Connectez-vous avec ce mot de passe\.$/,
+    );
+  });
 
   it("marque la demande en base (is_sent + sending_at) dans le même update", async () => {
     const { service, update } = makeService();

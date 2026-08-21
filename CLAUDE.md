@@ -338,9 +338,31 @@ services) : abonnements et dons.
   - Le journal du cron porte un **avertissement de saturation** quand la file touche le
     plafond. Le défaut d'origine était invisible : le cron annonçait fièrement « 200 traités »
     pendant qu'il rejouait 200 liens morts.
+  - **📓 Journal de bord dédié : `logs/hub-sync-cron.log`** (`payments/hub-sync-journal.ts`),
+    une ligne par passage. Il existe parce que l'information était déjà dans
+    `/var/log/pm2/soka-api-out.log`, **noyée** dans tout le trafic de l'API : en pratique
+    personne ne la regardait. `tail -30 logs/hub-sync-cron.log` suffit désormais.
+    Chemin : `HUB_SYNC_LOG_FILE` sinon `<cwd>/logs/…` (pm2 fixe `cwd`, donc toujours le même
+    endroit) ; valeur vide = désactivé ; **muet sous Jest** (sinon la suite créerait un `logs/`
+    dans le dépôt). Bascule en `.1` à 2 Mo, une seule génération gardée.
+    ⚠️ **Les QUATRE issues y sont écrites** (`OK` / `IGNORÉ` / `DÉSARMÉ` / `ERREUR`) plus une
+    ligne `DÉMARRAGE` : un journal qui ne consigne que les succès ne prouve rien - un cron
+    désarmé ou qui plante laisserait un fichier identique à celui d'un cron mort.
+    ⚠️ **L'absence de lignes EST le signal** : dernière ligne datant de plus de ~10 min ⇒
+    processus arrêté ou bloqué. C'est écrit dans l'en-tête du fichier.
+    ⚠️ **Le journal ne doit jamais faire échouer le cron** : toute erreur d'écriture est avalée.
+  - **🚨 `onModuleInit` se déclenche PLUSIEURS FOIS sur le même singleton** - mesuré : **5 fois**
+    pour un seul démarrage, parce que `PaymentModule` est importé par 5 modules et que Nest
+    rejoue le hook pour chacun. **Il n'y a bien qu'UNE instance et UN job planifié** (vérifié via
+    `SchedulerRegistry` : `getCronJobs().size === 1`), donc pas de synchronisation concurrente -
+    mais tout effet de bord posé dans un `onModuleInit` doit être **idempotent** (c'est pourquoi
+    `HubSyncJournal.demarrage()` porte un verrou par processus).
   - **Le cron vit DANS le processus de l'API** (`ScheduleModule.forRoot()` + `@Cron`), pas dans
     un crontab système : `pm2 restart` le relance, mais le premier passage attend la prochaine
-    tranche de 10 min. ⚠️ `ecosystem.config.js` déclare `instances: 1` en `fork` - en `cluster`,
+    tranche de 10 min. **Intervalle : `@Cron('0 */10 * * * *')`** - format à 6 champs, le premier
+    `0` est la **SECONDE** : passages à :00, :10, :20, :30, :40, :50, à la seconde 0. La constante
+    `INTERVALLE` est partagée avec la ligne `DÉMARRAGE` du journal, pour que la valeur affichée
+    soit la valeur appliquée. C'est le **seul** `@Cron` du projet. ⚠️ `ecosystem.config.js` déclare `instances: 1` en `fork` - en `cluster`,
     on aurait **N crons concurrents** sur le même guichet.
   - **`HUB_SYNC_CRON_ENABLED=false` désarme le cron** (seule la valeur littérale `'false'` - une
     faute de frappe n'éteint rien). Raison d'être : une API **locale** pointée sur le guichet de
@@ -352,9 +374,40 @@ services) : abonnements et dons.
     réels par la concordance en prod. Tout consommateur de `listGatewayPayments` qui filtre ou
     additionne de l'argent doit tenir compte de ce champ (le seed de restauration REFUSE un
     guichet qui ne le rend pas).
+  - **🚨 Un `failed` local n'est PAS définitif au guichet - correctif du 2026-08-20.** Mesuré :
+    **30 000 XOF encaissés et jamais crédités**, sur 2 paiements des 17 et 18/08. Le membre rate
+    sa validation, HUB2 répond `failed`, le cron referme la ligne - **puis le membre recommence
+    sur le MÊME lien et réussit** (47 min plus tard dans un cas, 9 min dans l'autre). Un lien
+    HUB2 **n'expire pas** (`expiresAt: null`), passe simplement `used`, et n'est désactivé que
+    par le geste explicite du membre : il reste donc **payable après un échec**.
+    - Trois choses le rendaient invisible : `syncAllPendingHubPayments` ne prenait que les
+      `pending` ; `syncHubPaymentByTransactionId` répondait depuis la base sans rappeler le
+      guichet dès que le statut local était `failed`/`cancelled` ; et **le détecteur
+      `seed:reconcile-hub-payments` portait le MÊME angle mort** (il ne regardait que les
+      `pending`) - il déclarait donc « 0 encaissement non crédité » pendant que l'argent
+      dormait.
+    - **Il n'existe AUCUN canal de notification** : `soka_pay.webhook_endpoints` est **vide**,
+      `webhook_deliveries` s'arrête aux 9 livraisons de recette du 25/06, les liens ont
+      `callbackUrl: null`. Le commentaire de `cancelHubPaymentByTransactionId` (« le webhook la
+      ramènera ») décrit un filet **qui n'existe pas**. Tout repose sur le polling.
+    - Correctif : `syncHubPaymentByTransactionId(id, { relancerCloture: true })` rouvre une
+      ligne close et réinterroge le guichet ; le cron balaie une **seconde file** des
+      `failed`/`cancelled` des dernières `RECHECK_CLOSED_FOR_HOURS` (48 h).
+      ⚠️ **Deux files SÉPARÉES, deux plafonds, deux tris** (500 / `created_at DESC` pour les
+      `pending`, 300 / `updated_at DESC` pour les closes) : fondues, les lignes closes (72 sur
+      48 h en régime courant, **350 le 07/08**) mangeraient le plafond au détriment de l'argent
+      en cours. ⚠️ Le drapeau est réservé aux appels de fond - les écrans gardent le raccourci.
+      ⚠️ On ne réécrit « échoué » que s'il y a un écart : sinon `updated_at` avancerait à chaque
+      passage et la ligne ne sortirait **jamais** de la fenêtre.
+    - Le compteur **`recredited`** est distinct de `paid` **exprès** : il doit rester à 0, et le
+      cron l'affiche en `WARN` s'il monte. Noyé dans `paid`, il redeviendrait invisible.
+    - ⚠️ **Une tentative qui aboutit EFFACE le motif d'échec de la précédente**
+      (`captureHubPaymentDetails`) : sans ça un paiement crédité reste étiqueté
+      `authentication_failed`, et c'est ce champ que lit la console d'assistance.
   - **Deux commandes, à ne pas confondre** :
     `npm run seed:reconcile-hub-payments` = **lecture stricte**, détecte les encaissements non
-    crédités, liste nominative, **code de sortie 1** s'il y en a (utilisable en sonde) ;
+    crédités **quel que soit leur statut local** (`--jours=N`, défaut 90 ; `--tout` pour
+    l'historique complet), liste nominative, **code de sortie 1** s'il y en a (sonde) ;
     `npm run seed:sync-hub-payments` = **écrit**, rejoue un passage du cron à la demande (utile
     juste après un déploiement, pour ne pas attendre 10 min). Le second **désarme les tâches
     planifiées de son contexte** pour ne pas lancer un balayage concurrent de celui de l'API, et
@@ -584,6 +637,87 @@ services) : abonnements et dons.
   hiérarchique** - la réutiliser plutôt que réinventer un contrôle. Le grisage côté front n'est
   qu'un confort.
 
+- **📊 Module Statistiques (`src/statistics/`) - agrégats SQL, lecture seule, bornés au périmètre.**
+  Six endpoints `GET /statistics/members/*` (overview · demography · practice · vitality · adoption ·
+  quality) + `filters`, **un par onglet** de `/statistiques/membres` : règle héritée du module
+  `statistique` supprimé le 01/08 (6 routes sans écran). Le `WHERE` est construit **à un seul
+  endroit** (`buildMemberWhere`) et injecté dans toutes les requêtes : sans ça, deux tuiles du même
+  écran compteraient des populations différentes. Permissions :
+  `statistiques_voir_menu_statistiques` + `statistiques_voir_statistiques_membres`.
+  🚨 **Périmètre : un non-administrateur SANS racine ne voit RIEN (`1 = 0`)**, jamais « tout par
+  défaut ». Vérifié en recette : un RESPONSABLE voit **52 membres** là où l'admin en voit 8 033.
+- **🐌 JAMAIS de sous-requête corrélée dans le `SELECT` d'un `GROUP BY` sur jointures.** MySQL les
+  évalue **par ligne intermédiaire**, pas par groupe : la couverture des responsables par palier
+  mettait **81 secondes** avec deux `(SELECT COUNT(*) …)` dans sa liste de colonnes, **0,5 s** sans
+  (comptages faits à part, rapprochés en TypeScript). Même piège avec `SUM(EXISTS (…))` sur une
+  grande table : la participation aux campagnes est passée de **10,6 s à 0,3 s** en remplaçant
+  l'`EXISTS` corrélé par une **jointure sur table dérivée** (`LEFT JOIN (SELECT DISTINCT …)`).
+- **🔑 `members.uuid` n'avait AUCUN index** jusqu'au 2026-08-19 (`IDX_members_uuid`, migration
+  `AddMembersUuidIndex`). La clé primaire est `id` : toute jointure sur l'uuid - et c'est la clé de
+  jointure de tout le schéma (`users.member_uuid`, `member_responsibilities.member_uuid`,
+  `subscription_payments.beneficiary_uuid`) - faisait un **balayage complet** (`EXPLAIN` : `type:
+  ALL`, `possible_keys: NULL`). Index **simple, pas unique** : un `UNIQUE` ferait échouer la
+  migration en production sur une seule ligne dérogeante, pour un gain nul (l'objet est la
+  performance de jointure). `jobs.uuid` était dans le même cas.
+  ⚠️ Une jointure **latin1 ↔ utf8mb4** (cas de `member_responsibilities`, `responsibilities`,
+  `levels`, `payments`, `subscription_payments` face à `members`/`structures`) **fonctionne** - MySQL
+  convertit - et **utilise bien l'index** une fois qu'il existe. Le problème n'était pas la collation.
+- **🌳 `structure_closure` ne couvre PAS tout l'arbre** : 3 562 structures sur 3 769 au 2026-08-19,
+  soit **372 membres invisibles** à travers une portée calculée par la closure. Conséquence assumée :
+  un responsable ne les voit pas (le sens de l'erreur est le bon - on cache plutôt qu'on ne divulgue),
+  et l'onglet **Qualité les compte explicitement** (« membres rattachés à une structure absente de
+  l'arbre ») pour que ce trou ne passe pas pour un effectif réel.
+- **🧭 « Une structure a un responsable » = un membre de son sous-arbre porte un mandat TYPÉ à son
+  palier** (`responsibilities.level_uuid`), remonté par la closure. La définition laxiste (« un
+  membre porte un mandat quelconque ») ferait passer la couverture des sous-groupes de **36 % à
+  71 %** sans qu'aucun n'ait gagné de responsable. ⚠️ `member_responsibilities` **ne porte pas la
+  structure dirigée** : le mandat est imputé à l'ancêtre du bon palier du responsable - juste dans
+  l'immense majorité des cas, faux si quelqu'un dirige une structure dont il n'est pas membre.
+  ⚠️ Un palier sans aucun mandat au référentiel (`CENTRE_REGIONAL`) sort en **`sans_objet`**, pas à 0 %.
+- **🔐 `login_logs` - journal des tentatives de connexion** (2026-08-19). Écrit par `AuthService`
+  (`LoginJournalService`), lu en SQL brut par les Statistiques (aucune dépendance de module).
+  Cinq issues figées : `success` · `first_login` (identifiants bons, mot de passe envoyé par SMS,
+  **aucune session**) · `bad_password` · `unknown_identifier` · `inactive_account`.
+  🚨 **Le journal ne fait JAMAIS échouer un login** : toutes ses erreurs sont avalées.
+  🚨 **Aucun mot de passe n'y entre**, la signature ne le permet pas.
+  ⚠️ **Aucun effet rétroactif** : l'historique commence à la mise en service, et l'écran affiche la
+  date d'ouverture - sinon « 0 connexion sur 30 jours » se lirait comme un effondrement de l'usage.
+  L'IP vient de `req.ip` (`passReqToCallback` sur la stratégie locale), **jamais** de
+  `x-forwarded-for` : cet en-tête est falsifiable, un balayage s'y cacherait.
+- **⚠️ `permission-catalog.ts` : les clés de `defaults` sont lues en MINUSCULES**
+  (`p.defaults[role.slug.toLowerCase()]`, slugs `administrateur`/`responsable`/`membre`). Un
+  `defaults: { RESPONSABLE: true }` **n'accorde rien**. Le piège est invisible pour ADMINISTRATEUR
+  (forcé à vrai par ailleurs). ⚠️ Il reste des entrées fautives dans le catalogue (module Membres,
+  3 permissions) : elles n'ont jamais rien accordé à RESPONSABLE. ⚠️ `defaults` ne joue **qu'à
+  l'insertion** du lien : sur une base où le lien existe déjà à 0, corriger le catalogue ne suffit
+  pas - seuls `absorbs`/`grantTo`/`estAdmin` élargissent un lien existant.
+- **✍️ UN SEUL sender ID, « SOKA CI », et le message s'ouvre dessus** (règle du 2026-08-19).
+  Les deux fournisseurs ont validé le **même** expéditeur : `LETEXTO_SENDER` = `SMSPRO_SENDER_ID` =
+  **`SOKA CI`** (avant : `SG-CI` chez LeTexto, `SGBNDCI` chez SMSPro - la diffusion faisait donc
+  arriver **deux SMS sous deux noms différents**). Et **tout SMS de mot de passe commence par ce
+  sender ID** : « `SOKA CI : votre nouveau mot de passe est 0482. Connectez-vous avec ce mot de
+  passe.` » - texte **unique**, servi par `AuthService.passwordSmsMessage()` aux **deux** portes
+  d'entrée (1re connexion **et** mot de passe oublié), qui divergeaient d'un mot jusque-là.
+  🔑 **Le littéral n'existe QU'À UN ENDROIT : `SMS_SENDER_ID` (`src/shared/constants/constants.ts`)**
+  - depuis le 2026-08-20. Y retombent `LETEXTO_SENDER`, `SMSPRO_SENDER_ID` **et** `TEXTO_SENDER`
+  (notifications Journal) quand la variable `.env` manque, ainsi que les défauts Joi de
+  `env.validation.ts`, le message de test de l'écran Paramètres et `passwordSmsMessage()`.
+  **Ne jamais recopier « SOKA CI » ailleurs** : importer la constante.
+  ⚠️ Reste que **l'expéditeur réellement posé sur l'envoi vient du `.env`** de chaque fournisseur :
+  le changer là sans changer la constante fait de nouveau diverger le texte et l'expéditeur. Le
+  sender vit dans le `.env`, pas en base - le modifier **exige un redéploiement**, contrairement au
+  fournisseur actif et à la diffusion.
+  🚨 **Le piège s'est réalisé** : la correction du 2026-08-19 a été commitée **sans
+  `auth.service.ts`** (commit `0868ec8`, 6 fichiers `sms/` seulement) - la production a donc
+  continué à envoyer « **SOKA** : votre mot de passe … » sous l'expéditeur « SOKA CI » pendant que
+  le working tree, lui, était correct. **Le texte du message vit dans `auth.service.ts`** : un
+  commit « sender » qui ne le contient pas ne change RIEN pour le membre.
+  ⚠️ **Tout SMS sortant s'ouvre sur le sender ID**, pas seulement ceux de mot de passe : les
+  notifications de distribution du Journal (`prefixeSender()` dans `journal-distribution.service.ts`)
+  sont préfixées **au message rendu**, pour couvrir aussi les gabarits personnalisés
+  (`message_template`) ; le garde `startsWith` évite le doublon.
+  ⚠️ Un sender **non approuvé** côté fournisseur fait échouer l'envoi (`422` chez SMSPro) : ne le
+  changer qu'après validation **chez les deux**.
 - **📱 SMS transactionnel : mode DIFFUSION par défaut (les 2 fournisseurs envoient).** Depuis le
   2026-07-31, `sms.broadcast.enabled = true` : chaque SMS d'auth (1re connexion / mot de passe
   oublié) part **par LeTexto ET SMSPro en parallèle** → le membre reçoit **2 SMS** portant le même
@@ -619,8 +753,8 @@ services) : abonnements et dons.
   l'ancien `/api/http` avec `api_token` dans le corps ou en query (vérifié : les deux répondent
   200 sur `/balance`), mais c'est le Bearer qui est validé **envoi compris**, et un token en
   query finit dans les journaux d'accès du proxy. `SMSPRO_SENDER_ID` : **11 caractères max** et
-  **doit être approuvé** côté SMSPro (`SGBNDCI` aujourd'hui) - un sender non approuvé donne un
-  `422`. Un HTTP **200 peut porter `{status:'error'}`** : toujours relire l'enveloppe.
+  **doit être approuvé** côté SMSPro (**`SOKA CI`** depuis le 2026-08-19 ; avant : `SGBNDCI`) - un
+  sender non approuvé donne un `422`. Un HTTP **200 peut porter `{status:'error'}`** : toujours relire l'enveloppe.
   Normalisation : `225` + les 10 chiffres locaux **en conservant le `0`** (`0749326623` →
   `2250749326623`) - retirer le `0` fait rejeter le SMS.
 - **👤 Le compte de connexion d'un membre : UN seul point, `MemberAccountService`**

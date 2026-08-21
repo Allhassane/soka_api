@@ -10,6 +10,7 @@ import type {
   ProviderBalance,
 } from '../interfaces/managed-sms-provider.interface';
 import { SMS_PROVIDER_SMSPRO } from '../sms.constants';
+import { SMS_SENDER_ID } from 'src/shared/constants/constants';
 
 /**
  * Adaptateur SMSPro Africa - API v3 (app.smspro.africa/api/v3) - transport pur.
@@ -43,7 +44,7 @@ export class SmspproSmsProvider implements ManagedSmsProvider {
   constructor(private readonly config: ConfigService) {
     this.token = (this.config.get<string>('SMSPRO_API_TOKEN') ?? '').trim();
     // Défaut aligné sur le sender unique validé chez les deux fournisseurs.
-    this.senderId = this.config.get<string>('SMSPRO_SENDER_ID') ?? 'SOKA CI';
+    this.senderId = this.config.get<string>('SMSPRO_SENDER_ID') ?? SMS_SENDER_ID;
     this.enabled =
       (this.config.get<string>('SMSPRO_ENABLED') ?? 'false').toLowerCase() ===
       'true';

@@ -887,6 +887,42 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
     ],
   },
   {
+    name: 'Statistiques',
+    description:
+      'Statistiques membres : effectif et maillage, démographie, pratique religieuse, '
+      + 'encadrement, adoption numérique et qualité des données. Lecture seule, bornée au '
+      + 'périmètre de l’utilisateur.',
+    permissions: [
+      {
+        name: 'Accéder au menu Statistiques',
+        slug: 'statistiques_voir_menu_statistiques',
+        // ⚠️ Clés en MINUSCULES, obligatoirement : `permission-catalog-sync.ts` lit
+        // `p.defaults[role.slug.toLowerCase()]` et les slugs de rôle sont `administrateur`,
+        // `responsable`, `membre`. Un `defaults: { RESPONSABLE: true }` n'accorde RIEN - le
+        // piège est invisible pour ADMINISTRATEUR (forcé à vrai par ailleurs), ce qui le rend
+        // d'autant plus facile à reproduire. Il reste des entrées fautives dans ce fichier
+        // (voir le module Membres) : elles n'ont jamais rien accordé à RESPONSABLE.
+        // ⚠️ NE PAS faire absorber `statistiques_voir` : ce slug a lui-même été absorbé par
+        // `dashboard_voir_menu_dashboard` à la refonte du 2026-08-01. Le reprendre ici
+        // rendrait le menu Statistiques visible à tout titulaire du tableau de bord, ce qui
+        // n'est pas la décision prise (RESPONSABLE l'a, MEMBRE non).
+        defaults: { administrateur: true, responsable: true },
+      },
+      {
+        // Un seul droit pour les six onglets : ils répondent tous à la même question
+        // (« qui sont nos membres et l'organisation tient-elle ? ») et sont bornés par le
+        // MÊME périmètre. Découper aurait produit des rôles capables de voir un effectif
+        // sans pouvoir voir d'où vient le chiffre - une fausse finesse.
+        // ⚠️ Le bloc « IP suspectes » de l'onglet Adoption, lui, n'est pas commandé par une
+        // permission mais par `is_admin` dans le service : il n'est pas bornable par
+        // périmètre (une IP n'a pas de structure), donc il ne sort jamais pour un responsable.
+        name: 'Voir les statistiques membres',
+        slug: 'statistiques_voir_statistiques_membres',
+        defaults: { administrateur: true, responsable: true },
+      },
+    ],
+  },
+  {
     name: 'Comptabilité',
     description:
       'Concordance « Solde HUB2 = Solde App » : rapprochement des encaissements du guichet '

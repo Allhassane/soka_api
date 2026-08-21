@@ -40,6 +40,7 @@ import { DonateModule } from './donate/donate.module';
 import { SubscriptionModule } from './subscriptions/subscription.module';
 import { PaymentModule } from './payments/payment.module';
 import { AccountingModule } from './accounting/accounting.module';
+import { StatisticsModule } from './statistics/statistics.module';
 import { MigrationModule } from './migration/migration.module';
 import { DonatePaymentModule } from './donate-payment/donate-payment.module';
 import { MemberTravelModule } from './member-travel/member-travel.module';
@@ -132,6 +133,7 @@ import { SokaPayModule } from './sokapay/sokapay.module';
     SubscriptionModule,
     PaymentModule,
     AccountingModule,
+    StatisticsModule,
     MigrationModule,
     DonatePaymentModule,
     MemberTravelModule,

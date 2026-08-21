@@ -132,8 +132,21 @@ const n = (x) => Number(x).toLocaleString('fr-FR');
   const existantes = await q(
     'SELECT id, uuid, user_uuid, role_uuid, is_active, deleted_at FROM user_roles ORDER BY id',
   );
+  // 🚨 Les rôles MÉTIER attribués à la main (comptable, trésorier…) sont INTOUCHABLES.
+  //
+  // Ce seeder converge le **rôle socle** (ADMINISTRATEUR / RESPONSABLE / MEMBRE) : « une ligne
+  // par compte ». Appliquée à toutes les lignes, cette règle supprimait - par un vrai DELETE -
+  // toute attribution nominative faite depuis l'écran Rôles. Un seul passage du script et les
+  // comptables perdaient leur accès sans que rien ne le signale.
+  //
+  // On sépare donc les deux populations : le socle converge, le reste est laissé tel quel et
+  // seulement compté dans le rapport.
+  const uuidsSocle = new Set([roleUuid[SLUG_ADMIN], roleUuid[SLUG_RESP], roleUuid[SLUG_MEMBRE]]);
+  const lignesMetier = existantes.filter((l) => !uuidsSocle.has(l.role_uuid));
+  const lignesSocle = existantes.filter((l) => uuidsSocle.has(l.role_uuid));
+
   const parUser = new Map();
-  for (const l of existantes) {
+  for (const l of lignesSocle) {
     if (!parUser.has(l.user_uuid)) parUser.set(l.user_uuid, []);
     parUser.get(l.user_uuid).push(l);
   }
@@ -175,8 +188,10 @@ const n = (x) => Number(x).toLocaleString('fr-FR');
     for (const l of lignes) if (l.id !== garder.id) aSupprimer.push(l.id);
   }
 
-  // Lignes rattachées à un utilisateur hors population (compte supprimé, member_uuid orphelin…)
-  const horsPopulation = existantes.filter((l) => !cibleParUser.has(l.user_uuid));
+  // Lignes SOCLE rattachées à un utilisateur hors population (compte supprimé, member_uuid
+  // orphelin…). ⚠️ `lignesSocle` et non `existantes` : une attribution métier sur un compte
+  // hors population reste l'affaire d'un administrateur, pas celle de ce script.
+  const horsPopulation = lignesSocle.filter((l) => !cibleParUser.has(l.user_uuid));
   for (const l of horsPopulation) aSupprimer.push(l.id);
 
   // ── 5) Rapport
@@ -192,6 +207,7 @@ const n = (x) => Number(x).toLocaleString('fr-FR');
   console.log(`comptes utilisateurs vivants        : ${n(ctx.users_vivants)}`);
   console.log(`  ignorés (aucun membre, non admin) : ${n(ctx.users_sans_membre_ignores)}`);
   console.log(`lignes user_roles déjà en base      : ${n(existantes.length)}`);
+  console.log(`  dont rôles MÉTIER (non touchés)    : ${n(lignesMetier.length)}`);
 
   console.log('\n========== PLAN ==========');
   console.log(`population cible (1 ligne/compte) : ${n(cibles.length)}`);

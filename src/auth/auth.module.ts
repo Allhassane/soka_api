@@ -16,6 +16,8 @@ import { LevelEntity } from 'src/level/entities/level.entity';
 import { User } from 'src/users/entities/user.entity';
 import { UserRoleModule } from 'src/user-roles/user-roles.module';
 import { SmsModule } from 'src/sms/sms.module';
+import { LoginLogEntity } from './entities/login-log.entity';
+import { LoginJournalService } from './login-journal.service';
 
 @Module({
   imports: [
@@ -31,6 +33,9 @@ import { SmsModule } from 'src/sms/sms.module';
       StructureEntity,
       LevelEntity,
       User,
+      // Journal des tentatives de connexion : écrit ici, LU par le module Statistiques
+      // (en SQL brut, sans dépendance de module - éviter un cycle Auth ↔ Statistiques).
+      LoginLogEntity,
     ]),
     JwtModule.registerAsync({
       imports: [AppConfigModule],
@@ -44,7 +49,7 @@ import { SmsModule } from 'src/sms/sms.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, LocalStrategy, JwtStrategy],
+  providers: [AuthService, LocalStrategy, JwtStrategy, LoginJournalService],
   exports: [AuthService],
 })
 export class AuthModule {}

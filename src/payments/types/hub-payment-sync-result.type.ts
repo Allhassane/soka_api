@@ -25,4 +25,13 @@ export interface HubPaymentSyncBatchResult {
    */
   abandoned: number;
   errors: number;
+  /**
+   * **Tentatives CLOSES qui se sont avérées encaissées** et qui viennent d'être créditées.
+   *
+   * 🚨 Ce compteur doit rester à 0 en régime normal. Toute valeur non nulle veut dire qu'un
+   * membre a payé sur un lien que l'application avait enterré - c'est le défaut du 2026-08-20
+   * (30 000 XOF). Il est compté à part de `paid` précisément pour qu'il se VOIE dans le
+   * journal du cron : noyé dans `paid`, il redeviendrait invisible.
+   */
+  recredited: number;
 }

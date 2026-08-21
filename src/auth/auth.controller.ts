@@ -27,6 +27,7 @@ import { SuccessMessage } from 'src/shared/decorators/success-message.decorator'
 import { ResetPasswordDto } from './dtos/reset-password.dto';
 import { ForgotPasswordDto } from './dtos/forgot-password.dto';
 import { JwtPayload } from './interfaces/auth.interface';
+import { contexteDeRequete } from './login-journal.service';
 
 @ApiTags('Authentification')
 @Controller('auth')
@@ -38,7 +39,8 @@ export class AuthController {
   @ApiOperation({ summary: 'Connexion avec email + mot de passe' })
   @ApiBody({ type: LoginDto })
   login(@Request() req: { user: User }) {
-    return this.authService.login(req.user);
+    // Le contexte (IP, navigateur) sert au journal de connexion, pas à l'authentification.
+    return this.authService.login(req.user, contexteDeRequete(req));
   }
 
   @Get('user')

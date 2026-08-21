@@ -10,6 +10,7 @@ import type {
   ProviderBalance,
 } from '../interfaces/managed-sms-provider.interface';
 import { SMS_PROVIDER_LETEXTO } from '../sms.constants';
+import { SMS_SENDER_ID } from 'src/shared/constants/constants';
 
 /**
  * Adaptateur LeTexto (apis.letexto.com/v1) - transport pur.
@@ -39,7 +40,7 @@ export class LetextoSmsProvider implements ManagedSmsProvider {
       this.config.get<string>('LETEXTO_BASE_URL') ??
       'https://apis.letexto.com/v1';
     // Défaut aligné sur le sender unique validé chez les deux fournisseurs.
-    this.sender = this.config.get<string>('LETEXTO_SENDER') ?? 'SOKA CI';
+    this.sender = this.config.get<string>('LETEXTO_SENDER') ?? SMS_SENDER_ID;
     this.enabled =
       (this.config.get<string>('LETEXTO_ENABLED') ?? 'false').toLowerCase() ===
       'true';
