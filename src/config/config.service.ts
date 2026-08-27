@@ -85,6 +85,17 @@ export class AppConfigService {
     return `${this.appUrl}api/webhooks/soka-pay`;
   }
 
+  /**
+   * Clé du lien de rapport public (`GET /rapports/effectifs-abonnements?cle=…`).
+   *
+   * 🚨 **Vide = route FERMÉE**, jamais ouverte : une variable oubliée au déploiement ne doit
+   * pas publier les effectifs de l'organisation. C'est `EffectifsAbonnementsService.assertCle`
+   * qui applique la règle ; ce getter se contente de ne rien inventer.
+   */
+  get rapportPublicKey(): string {
+    return (this.config.get<string>('RAPPORT_PUBLIC_KEY') ?? '').trim();
+  }
+
   // --- SMS transactionnel ---
 
   /**

@@ -51,6 +51,24 @@ export class UserRoleController {
     return this.service.titulaires(roleUuid);
   }
 
+  /**
+   * **Les rôles d'un membre** - alimente l'onglet « Rôles » de sa fiche.
+   *
+   * L'axe est inversé par rapport à `titulaires` : on part de la personne, pas du rôle. C'est
+   * depuis cet écran que l'attribution se pilote désormais (décision produit du 2026-08-27) ;
+   * la fiche d'un rôle ne fait plus que LISTER ses porteurs.
+   *
+   * ⚠️ Le paramètre est l'uuid du MEMBRE (`members.uuid`), pas celui du compte : c'est ce que
+   * la fiche a sous la main. Le service fait la jointure par `users.member_uuid`.
+   */
+  @Get('members/:memberUuid')
+  @RequirePermissions('utilisateurs_roles_voir')
+  @ApiOperation({ summary: 'Rôles portés par un membre' })
+  @ApiParam({ name: 'memberUuid', description: 'UUID du MEMBRE (pas du compte)' })
+  async rolesDuMembre(@Param('memberUuid') memberUuid: string) {
+    return this.service.rolesDuMembre(memberUuid);
+  }
+
   @Get('roles/:roleUuid/candidats')
   @RequirePermissions('collaborateurs_assigner_un_role_a_un_collaborateur')
   @ApiOperation({

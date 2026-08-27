@@ -17,6 +17,12 @@ import {
 import { AccHubSnapshotEntity, SnapshotKind } from './entities/acc-hub-snapshot.entity';
 import { AccHubSnapshotLineEntity, MatchStatus } from './entities/acc-hub-snapshot-line.entity';
 import { parseHub2Export } from './hub2-export.parser';
+import {
+  BucketStats,
+  SourceStats,
+  verifierBucket,
+  verifierSource,
+} from './accounting.helpers';
 
 export interface ConcordanceFiltres {
   from?: Date;
@@ -24,17 +30,10 @@ export interface ConcordanceFiltres {
   campaign_uuid?: string;
 }
 
-/**
- * Les deux sources de paiement que le tableau de bord sait filtrer : les valeurs sont celles de
- * `payments.source` (`PaymentSource`). `shop_item` existe dans l'enum mais ne porte aucune
- * campagne - il n'a pas sa place ici.
- */
-export type SourceStats = 'subscription' | 'donation';
-const SOURCES_STATS: SourceStats[] = ['subscription', 'donation'];
-
-/** Les seaux d'une carte KPI : `all` + les quatre valeurs de `payments.payment_status`. */
-export type BucketStats = 'all' | 'paid' | 'pending' | 'failed' | 'cancelled';
-const BUCKETS_STATS: BucketStats[] = ['all', 'paid', 'pending', 'failed', 'cancelled'];
+/* Sources, seaux et leurs validations vivent dans `accounting.helpers.ts` : l'export du module
+   doit filtrer EXACTEMENT comme cet écran (cf. le commentaire du helper). Réexportés ici pour
+   ne pas casser les importateurs existants. */
+export type { SourceStats, BucketStats };
 
 /** Ce que l'application dit avoir encaissé sur le périmètre. */
 interface CoteApplication {
@@ -117,13 +116,7 @@ export class AccountingService {
   // ─────────────────────────────────────────────────────────────────────────────
 
   private verifierType(type: string): SourceStats {
-    if (!SOURCES_STATS.includes(type as SourceStats)) {
-      throw new BadRequestException({
-        message: 'Type inconnu : attendu `subscription` (abonnements) ou `donation` (zaimu).',
-        data: { code: 'TYPE_INVALIDE' },
-      });
-    }
-    return type as SourceStats;
+    return verifierSource(type);
   }
 
   /**
@@ -213,13 +206,7 @@ export class AccountingService {
     limit?: number;
   }) {
     const type = this.verifierType(f.type);
-    const bucket = (f.bucket ?? 'all') as BucketStats;
-    if (!BUCKETS_STATS.includes(bucket)) {
-      throw new BadRequestException({
-        message: 'Catégorie inconnue : attendu all, paid, pending, failed ou cancelled.',
-        data: { code: 'BUCKET_INVALIDE' },
-      });
-    }
+    const bucket = verifierBucket(f.bucket);
     // 20 = la page du tableau à l'écran (pagination sous les cartes KPI).
     const limit = Math.min(Math.max(Number(f.limit ?? 20) || 20, 1), 200);
     const page = Math.max(Number(f.page ?? 1) || 1, 1);

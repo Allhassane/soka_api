@@ -15,6 +15,8 @@ import * as ExcelJS from 'exceljs';
 import * as fs from 'fs';
 import * as path from 'path';
 import { StructureTreeService } from 'src/structure/structure-tree.service';
+import { appliquerFiltresPaiementsCompta } from './accounting-payments-query';
+import { construireFeuilleCompta } from './accounting-payments-sheet';
 
 @Injectable()
 export class ExportProcessorService {
@@ -570,5 +572,120 @@ export class ExportProcessorService {
 
       throw error;
     }
+  }
+
+  /**
+   * **L'export des lignes d'une carte KPI de la Comptabilité.**
+   *
+   * Distinct de `processTransactionsExport`, et il doit le rester : ils ne filtrent pas la
+   * même colonne de statut, n'appliquent pas le même périmètre et ne rendent pas les mêmes
+   * colonnes. Ce qu'ils partagent - la résolution des arbres de structure et l'écriture du
+   * classeur - est mis en commun (`resoudreArbresBeneficiaires`, `ecrireClasseur`), pas
+   * recopié.
+   *
+   * ⚠️ Le job porte TOUT le filtre dans ses `params` : c'est ce qui rend l'export rejouable et
+   * vérifiable après coup (« ce fichier, c'était quelle campagne, quel seau ? »).
+   */
+  async processAccountingPaymentsExport(jobId: string): Promise<void> {
+    try {
+      await this.exportJobService.updateJobStatus(jobId, ExportJobStatus.PROCESSING);
+
+      const job = await this.exportJobService.getJob(jobId);
+      const { type, campaign_uuid, bucket } = job.params ?? {};
+
+      await this.exportJobService.updateJobProgress(jobId, 10);
+
+      const qb = this.paymentRepo
+        .createQueryBuilder('p')
+        .leftJoinAndSelect('p.actor', 'actor')
+        .leftJoinAndSelect('p.beneficiary', 'beneficiary')
+        .leftJoinAndSelect('beneficiary.structure', 'beneficiaryStructure');
+      // 🚨 Le filtre de la tuile, et rien d'autre : cf. `accounting-payments-query.ts`.
+      // Noter l'absence de jointure sur `actor.structure` - le fichier ne porte pas la
+      // structure du payeur (exigence du 2026-08-26), inutile de la charger.
+      appliquerFiltresPaiementsCompta(qb, { type, campaign_uuid, bucket });
+
+      const paiements = await qb.getMany();
+      await this.exportJobService.updateJobProgress(jobId, 40);
+
+      const arbres = await this.resoudreArbresBeneficiaires(paiements);
+      await this.exportJobService.updateJobProgress(jobId, 70);
+
+      const { colonnes, lignes } = construireFeuilleCompta(paiements, arbres);
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Paiements');
+      worksheet.columns = colonnes;
+      this.styliserEnTete(worksheet);
+      lignes.forEach((l) => worksheet.addRow(l));
+
+      await this.exportJobService.updateJobProgress(jobId, 85);
+
+      const suffixe = [type, campaign_uuid ? 'campagne' : 'toutes', bucket]
+        .filter(Boolean)
+        .join('_');
+      await this.ecrireClasseur(jobId, workbook, `comptabilite_${suffixe}`);
+    } catch (error) {
+      await this.exportJobService.updateJobStatus(
+        jobId,
+        ExportJobStatus.FAILED,
+        error?.message || "Erreur inconnue lors de l'export comptable",
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Arbre de structure de chaque bénéficiaire, mis en CACHE par structure.
+   *
+   * ⚠️ `getStructureTreeForResponsible` recharge TOUTES les structures à chaque appel : en
+   * boucle par bénéficiaire, c'est O(N x structures) et l'export paraît bloqué sur de gros
+   * volumes. Les nombreux bénéficiaires d'un même sous-groupe ne déclenchent qu'un calcul.
+   */
+  private async resoudreArbresBeneficiaires(
+    paiements: PaymentEntity[],
+  ): Promise<Map<string, any>> {
+    const parBeneficiaire = new Map<string, any>();
+    const cache = new Map<string, any>();
+
+    for (const p of paiements) {
+      const uuid = p.beneficiary?.uuid;
+      const structure = p.beneficiary?.structure_uuid;
+      if (!uuid || !structure || parBeneficiaire.has(uuid)) continue;
+
+      if (!cache.has(structure)) {
+        // `order` est accepté mais ignoré : l'arbre ne dépend que de la structure.
+        cache.set(
+          structure,
+          await this.structureTreeService.getStructureTreeForResponsible(structure, 999),
+        );
+      }
+      parBeneficiaire.set(uuid, cache.get(structure));
+    }
+
+    return parBeneficiaire;
+  }
+
+  /** L'en-tête bleu et gras, commun aux exports du projet. */
+  private styliserEnTete(worksheet: ExcelJS.Worksheet): void {
+    const entete = worksheet.getRow(1);
+    entete.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    entete.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
+    entete.alignment = { vertical: 'middle', horizontal: 'center' };
+  }
+
+  /** Écrit le classeur dans `uploads/exports` et referme le job sur son chemin. */
+  private async ecrireClasseur(
+    jobId: string,
+    workbook: ExcelJS.Workbook,
+    base: string,
+  ): Promise<void> {
+    const fileName = `${base}_${Date.now()}.xlsx`;
+    const dossier = path.join(process.cwd(), 'uploads', 'exports');
+    if (!fs.existsSync(dossier)) fs.mkdirSync(dossier, { recursive: true });
+
+    const chemin = path.join(dossier, fileName);
+    await workbook.xlsx.writeFile(chemin);
+    await this.exportJobService.completeJob(jobId, chemin, fileName);
   }
 }

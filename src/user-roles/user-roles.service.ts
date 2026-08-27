@@ -127,6 +127,29 @@ export class UserRoleService {
     );
   }
 
+  /**
+   * Refuse le RETRAIT d'un rôle socle.
+   *
+   * 🚨 Symétrique de `assertRoleAttribuable`, et tout aussi nécessaire : l'attribution était
+   * gardée, le retrait ne l'était pas. Rien n'empêchait un appel direct de supprimer la ligne
+   * MEMBRE ou RESPONSABLE d'une personne, qui perdait ses droits jusqu'à sa prochaine
+   * connexion (le socle n'est resemé qu'au login). Masquer le bouton côté écran ne protège
+   * pas la route.
+   *
+   * ⚠️ Une ligne sans rôle chargé n'est pas bloquée : l'absence d'information n'est pas une
+   * preuve de socle, et refuser par défaut rendrait des attributions métier irretirables.
+   */
+  private assertRoleRetirable(role?: Role | null): void {
+    const slug = (role?.slug ?? '').toLowerCase();
+    if (!slug || !UserRoleService.SLUGS_SOCLE.includes(slug)) return;
+
+    throw new BadRequestException(
+      `Le rôle ${role?.name ?? slug} est un rôle SOCLE : il est calculé à partir des ` +
+        "responsabilités du membre et resemé à chaque connexion. Le retirer priverait la " +
+        "personne de ses droits jusqu'a sa prochaine connexion, sans rien regler.",
+    );
+  }
+
   async update(uuid: string, dto: UpdateUserRoleDto): Promise<UserRole> {
     const userRole = await this.findOneByUuid(uuid);
 
@@ -336,10 +359,48 @@ export class UserRoleService {
 
   async softDelete(uuid: string): Promise<void> {
     const userRole = await this.findOneByUuid(uuid);
+    this.assertRoleRetirable(userRole?.role);
     await this.userRoleRepo.softDelete({ id: userRole.id });
     // Le retrait doit être IMMÉDIAT : c'est un geste de sécurité, il ne peut pas attendre
     // l'expiration d'un cache.
     this.effectivePermissions.invalider(userRole.user_uuid);
+  }
+
+  /**
+   * **Les rôles portés par un MEMBRE** - ce qu'affiche l'onglet « Rôles » de sa fiche.
+   *
+   * La route part du membre et non du compte : c'est l'uuid que l'écran a sous la main. Le
+   * lien passe par `users.member_uuid` (renseigné sur la totalité des comptes).
+   *
+   * ⚠️ Chaque ligne porte `est_socle` : c'est LUI qui décide de l'affichage du bouton
+   * « Retirer ». Le calculer ici, à côté de la règle qu'applique `assertRoleRetirable`, évite
+   * que l'écran et le serveur se fassent une idée différente de ce qu'est un rôle socle.
+   *
+   * Le nom vient de la fiche membre quand elle existe (`COALESCE`), comme pour `titulaires()`.
+   */
+  async rolesDuMembre(memberUuid: string): Promise<any[]> {
+    const lignes: any[] = await this.userRoleRepo.manager.query(
+      `SELECT ur.uuid                            AS user_role_uuid,
+              ur.is_active                       AS actif,
+              ur.created_at                      AS attribue_le,
+              r.uuid                             AS role_uuid,
+              r.name                             AS role_name,
+              r.slug                             AS role_slug,
+              u.uuid                             AS user_uuid
+         FROM users u
+         JOIN user_roles ur ON ur.user_uuid = u.uuid AND ur.deleted_at IS NULL
+         JOIN roles r       ON r.uuid = ur.role_uuid AND r.deleted_at IS NULL
+        WHERE u.member_uuid = ? AND u.deleted_at IS NULL
+        ORDER BY r.name ASC`,
+      [memberUuid],
+    );
+
+    return lignes.map((l) => ({
+      ...l,
+      est_socle: UserRoleService.SLUGS_SOCLE.includes(
+        (l.role_slug ?? '').toLowerCase(),
+      ),
+    }));
   }
 
   /**

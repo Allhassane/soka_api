@@ -574,6 +574,29 @@ services) : abonnements et dons.
   ⇒ Repli historique conservé mais désormais inerte : `responsibility_role` puis `default_membre`
   ne s'appliquent que si la fusion ne donne rien.
 
+- **🎭 Attribuer un rôle à quelqu'un : ça part de la FICHE DU MEMBRE, pas de celle du rôle**
+  (2026-08-27). L'onglet **« Rôles »** de `/membres/[uuid]` liste ce que la personne porte, permet
+  d'ajouter et de retirer ; la fiche d'un rôle (Paramètres → Rôles) est passée en **lecture seule**
+  et ne fait plus que lister ses porteurs - vue de gouvernance qu'on ne reconstitue pas fiche par
+  fiche. ⚠️ Ne pas y remettre d'action : deux points d'entrée pour le même geste, et on ne sait plus
+  lequel fait foi.
+  - Routes : **`GET /user-roles/members/:memberUuid`** (`utilisateurs_roles_voir`) pour lister,
+    `POST /user-roles` et `DELETE /user-roles/:uuid`
+    (`collaborateurs_assigner_un_role_a_un_collaborateur`) pour agir. Le paramètre de la première
+    est l'uuid du **MEMBRE**, pas du compte : la jointure passe par `users.member_uuid`.
+  - 🚨 **Un rôle SOCLE ne s'attribue NI ne se retire.** `assertRoleAttribuable` gardait déjà
+    l'attribution ; **`assertRoleRetirable` garde désormais le retrait** - il manquait, et rien
+    n'empêchait un appel direct de supprimer la ligne MEMBRE ou RESPONSABLE de quelqu'un, qui
+    perdait ses droits jusqu'à sa prochaine connexion (le socle n'est resemé qu'au login).
+    **Masquer un bouton ne protège jamais une route.**
+  - ⚠️ **`est_socle` est calculé par le SERVEUR**, ligne par ligne, et c'est lui qui commande
+    l'affichage du bouton « Retirer ». Ne pas recopier une liste de slugs dans l'écran : elle
+    divergerait de `SLUGS_SOCLE` au premier rôle ajouté au socle.
+  - ⚠️ Une ligne dont le rôle n'est pas chargé n'est **pas** bloquée au retrait : l'absence
+    d'information n'est pas une preuve de socle, et refuser par défaut rendrait des attributions
+    métier irretirables.
+  - Le sélecteur d'ajout filtre sur **`is_system`** (déjà rendu par `GET /roles`) et sur les rôles
+    déjà portés : pas de route « rôles attribuables », le catalogue existant suffit.
 - **🔑 Ajouter une permission : la migration doit écrire dans DEUX tables.** Insérer la ligne dans
   `permissions` ne suffit pas - sans ligne `roles_permissions` pour un rôle donné,
   `findGlobalPermissions` renvoie `role_permission_uuid: null` et la case de Paramètres → Rôles
@@ -858,6 +881,63 @@ services) : abonnements et dons.
   `sql/` et `soka_db.sql` ne sont pas dans le graphe.
 - **Export lourds via Bull** : les exports Excel passent par des jobs asynchrones
   (`export-async`), pas en synchrone dans la requête HTTP.
+- **🔗 Rapport public par lien à clé : `GET /api/rapports/effectifs-abonnements?cle=…`**
+  (2026-08-27, `src/reports/`). Rend en **JSON brut** la pyramide Région > Centre régional > Centre >
+  Chapitre avec, à chaque niveau, abonnés distincts / abonnements (somme des quantités) / membres,
+  sur les paiements **réussis** de la campagne d'abonnement en cours (`?campagne=<uuid>` pour en
+  viser une autre). **Aucun écran ne l'appelle et aucun ne doit l'appeler** : il est fait pour être
+  ouvert à la main dans un navigateur.
+  - 🚨 **Route `@Public()` : seule la clé la protège.** `RAPPORT_PUBLIC_KEY` **vide ou absente
+    ⇒ route FERMÉE (404)** - une variable oubliée au déploiement ne doit pas publier les effectifs.
+    Comparaison en **temps constant** ; **404 sur clé fausse**, jamais 403 (un 403 confirmerait que
+    l'URL existe). ⚠️ Une clé dans une URL finit dans l'historique, les journaux du proxy et le
+    `Referer` : prix assumé d'un lien cliquable, la révoquer = changer le `.env` + redémarrer.
+  - ⚠️ **`@Res()` volontaire** : il court-circuite le `ResponseInterceptor` global, donc **pas
+    d'enveloppe `{success, message, data}`**. Retourner l'objet la ferait revenir.
+  - 🚨 **Remontée récursive de l'arbre, PAS `structure_closure`** (qui ne couvre que 3 562
+    structures sur 3 782) : la closure ferait disparaître des membres et des paiements **en silence**.
+  - 🚨 **Les abonnés ne s'additionnent PAS** : un bénéficiaire à cheval sur deux chapitres serait
+    compté deux fois. Chaque niveau garde l'ENSEMBLE de ses bénéficiaires et rend son cardinal.
+    Abonnements et membres, eux, se somment.
+  - 🚨 **Aucun paiement n'est écarté.** Un abonnement payé dont la fiche membre a été supprimée
+    APRÈS le paiement disparaissait du rapport (écart de 1 sur 1 098, invisible à l'œil). Les
+    jointures sont donc en `LEFT JOIN` sans filtre de rattachement : ce qui ne se place pas compte
+    **au national** et part dans **`non_rattaches`** avec son motif.
+    **Invariant : national = somme des régions + non rattachés.**
+- **📤 Export des indicateurs de la Comptabilité : un type de job À PART, cloisonné des DEUX côtés**
+  (2026-08-27). `GET /accounting/exports/{payments,status/:id,download/:id}`
+  (`accounting/accounting-export.{controller,service}.ts`) produit l'Excel des lignes d'une carte
+  KPI. Type de job **`accounting_payments`** (`TYPE_EXPORT_COMPTA`, dans
+  `export-async/entities/export-job.entity.ts`) - **aucune migration** : `export_jobs.type` est une
+  colonne texte libre.
+  - 🚨 **Ces exports n'appartiennent PAS au module Exports**, et le cloisonnement est **symétrique** :
+    `ExportJobService.getUserJobs` les exclut **par construction** (condition dans la requête, pas un
+    filtre optionnel qu'un appelant peut oublier - un `filters.type` explicite ne la contourne pas) ;
+    `PaymentService.downloadTransactionsExport` **refuse** un job comptable ; et
+    `AccountingExportService` refuse tout job qui **n'est pas** comptable ou qui n'appartient pas au
+    demandeur. Sans ce dernier refus, la seule permission Comptabilité suffirait à télécharger
+    l'export de membres de quelqu'un d'autre : **cacher un job d'une liste ne ferme aucune route.**
+  - 🚨 **`payments` porte DEUX colonnes de statut, et l'export compta filtre l'AUTRE.** L'export du
+    module Exports filtre **`p.status`** (statut métier) ; la Comptabilité affiche et compte
+    **`p.payment_status`** (celui du guichet). Le filtre de l'export compta
+    (`export-async/accounting-payments-query.ts`) reproduit `AccountingService.campaignPayments`
+    condition pour condition - recopier celui du voisin rendrait un fichier plausible et **faux**.
+  - 🚨 **Aucun périmètre de structure**, volontairement : `campaignPayments` n'en applique aucun,
+    donc les tuiles comptent toute l'organisation. Scoper l'export livrerait un fichier **plus court
+    que le chiffre affiché**, sans que rien ne le signale - on ne remarque pas les lignes qui
+    manquent. Corollaire à connaître : ce fichier porte les **téléphones** des payeurs et
+    bénéficiaires de toute l'organisation.
+  - ⚠️ **Le fichier ne porte PAS la structure du payeur** (exigence produit). C'est la seule
+    différence de contenu avec `processTransactionsExport` : recopier ses colonnes la
+    réintroduirait sans bruit. Un test la verrouille (`accounting-payments-sheet.spec.ts`).
+  - ⚠️ Les colonnes de paliers sont déduites du **plus profond** des arbres de bénéficiaires, pas du
+    premier venu : une ligne plus profonde que l'exemple perdrait ses derniers paliers.
+  - ⚠️ **Le module Comptabilité écrit dans `export_jobs`** - c'est sa seule écriture hors `acc_*`, et
+    elle est **déléguée** au service du module qui possède la table. La règle qui compte tient : il
+    n'écrit toujours **rien** dans `payments`.
+  - `verifierSource` / `verifierBucket` vivent dans `accounting/accounting.helpers.ts` et sont
+    **partagés** par l'écran et l'export : deux définitions du mot « échoué » feraient diverger le
+    fichier et le chiffre affiché, et personne ne s'en apercevrait avant de compter à la main.
 
 ## Fichiers ad hoc à ranger
 

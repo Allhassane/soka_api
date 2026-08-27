@@ -17,7 +17,9 @@ import { UserRoleService } from './user-roles.service';
 
 const ROLE_METIER = { uuid: 'r-compta', name: 'COMPTABLE', slug: 'comptable' };
 
-function makeService(opts: { role?: any; ligneRetiree?: any } = {}) {
+function makeService(
+  opts: { role?: any; ligneRetiree?: any; ligneCourante?: any; lignesMembre?: any[] } = {},
+) {
   const role = 'role' in opts ? opts.role : ROLE_METIER;
   const invalider = jest.fn();
   const save = jest.fn(async (x: any) => ({ ...x, id: 1, uuid: 'ur-1' }));
@@ -53,8 +55,10 @@ function makeService(opts: { role?: any; ligneRetiree?: any } = {}) {
     update,
     softDelete,
     findOneByOrFail: jest.fn(async () => ({ id: 1, uuid: 'ur-1' })),
-    findOne: jest.fn(async () => ({ id: 9, uuid: 'ur-9', user_uuid: 'u-1' })),
-    manager: { query: jest.fn(async () => []) },
+    findOne: jest.fn(
+      async () => opts.ligneCourante ?? { id: 9, uuid: 'ur-9', user_uuid: 'u-1' },
+    ),
+    manager: { query: jest.fn(async () => opts.lignesMembre ?? []) },
   };
   const userRepo: any = { findOneBy: jest.fn(async () => ({ uuid: 'u-1' })) };
   const roleRepo: any = { findOneBy: jest.fn(async () => role) };
@@ -150,5 +154,100 @@ describe('UserRoleService - recherche de candidats', () => {
     expect(sql).toContain('NOT EXISTS');
     expect(sql).toContain('LIMIT 20');
     expect(params).toContain('%ko%');
+  });
+});
+
+/**
+ * **Le rôle SOCLE ne se retire pas non plus.**
+ *
+ * 🚨 L'attribution était gardée (`assertRoleAttribuable`), le RETRAIT ne l'était pas : rien
+ * n'empêchait un appel direct de supprimer la ligne MEMBRE ou RESPONSABLE d'une personne, qui
+ * perdait alors ses droits jusqu'à sa prochaine connexion (le socle est resemé au login).
+ * Masquer le bouton côté écran ne protège pas la route - la règle doit vivre ici.
+ */
+describe('UserRoleService - retrait', () => {
+  const ligneSocle = (slug: string, name: string) => ({
+    id: 7,
+    uuid: 'ur-socle',
+    user_uuid: 'u-1',
+    role: { uuid: 'r-s', name, slug },
+  });
+
+  it.each([
+    ['administrateur', 'ADMINISTRATEUR'],
+    ['membre', 'MEMBRE'],
+    ['responsable', 'RESPONSABLE'],
+  ])('refuse de retirer le rôle socle %s', async (slug, name) => {
+    const { service, softDelete, invalider } = makeService({
+      ligneCourante: ligneSocle(slug, name),
+    });
+
+    await expect(service.softDelete('ur-socle')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    // Rien n'a été retiré, et le cache n'a pas bougé : un refus n'est pas un demi-geste.
+    expect(softDelete).not.toHaveBeenCalled();
+    expect(invalider).not.toHaveBeenCalled();
+  });
+
+  it('explique POURQUOI le socle ne se retire pas', async () => {
+    const { service } = makeService({ ligneCourante: ligneSocle('membre', 'MEMBRE') });
+
+    await expect(service.softDelete('ur-socle')).rejects.toThrow(/socle|calcul/i);
+  });
+
+  it('retire normalement un rôle métier', async () => {
+    const { service, softDelete, invalider } = makeService({
+      ligneCourante: {
+        id: 7,
+        uuid: 'ur-compta',
+        user_uuid: 'u-1',
+        role: ROLE_METIER,
+      },
+    });
+
+    await service.softDelete('ur-compta');
+
+    expect(softDelete).toHaveBeenCalledWith({ id: 7 });
+    expect(invalider).toHaveBeenCalledWith('u-1');
+  });
+});
+
+/**
+ * **Les rôles d'un membre** - ce que l'onglet « Rôles » de la fiche affiche.
+ *
+ * La route part du membre, pas du compte : c'est l'uuid que porte l'écran. Chaque ligne dit si
+ * le rôle est un socle, parce que c'est ce qui décide de l'affichage du bouton « Retirer ».
+ */
+describe('UserRoleService - rôles d’un membre', () => {
+  it('marque les rôles socle, et eux seuls', async () => {
+    const { service } = makeService({
+      lignesMembre: [
+        { user_role_uuid: 'ur-1', role_slug: 'membre', role_name: 'MEMBRE' },
+        { user_role_uuid: 'ur-2', role_slug: 'comptable', role_name: 'COMPTABLE' },
+      ],
+    });
+
+    const lignes = await service.rolesDuMembre('m-1');
+
+    expect(lignes.map((l: any) => l.est_socle)).toEqual([true, false]);
+  });
+
+  it('interroge la base sur le MEMBRE et écarte les attributions retirées', async () => {
+    const { service, userRoleRepo } = makeService();
+
+    await service.rolesDuMembre('m-1');
+
+    expect(userRoleRepo.manager.query).toHaveBeenCalledTimes(1);
+    const [sql, params] = userRoleRepo.manager.query.mock.calls[0];
+    expect(sql).toContain('member_uuid');
+    expect(sql).toContain('ur.deleted_at IS NULL');
+    expect(params).toContain('m-1');
+  });
+
+  it('rend une liste vide pour un membre sans compte, sans lever', async () => {
+    const { service } = makeService({ lignesMembre: [] });
+
+    await expect(service.rolesDuMembre('m-sans-compte')).resolves.toEqual([]);
   });
 });

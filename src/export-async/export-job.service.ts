@@ -2,7 +2,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ExportJobEntity, ExportJobStatus } from './entities/export-job.entity';
+import { ExportJobEntity, ExportJobStatus, TYPE_EXPORT_COMPTA } from './entities/export-job.entity';
 import * as ExcelJS from 'exceljs';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -85,7 +85,13 @@ export class ExportJobService {
 
     const qb = this.exportJobRepo
       .createQueryBuilder('job')
-      .where('job.user_uuid = :user_uuid', { user_uuid });
+      .where('job.user_uuid = :user_uuid', { user_uuid })
+      // 🚨 Les exports lancés depuis la Comptabilité n'appartiennent PAS au module Exports :
+      // ils ne s'affichent que dans la Comptabilité (décision produit du 2026-08-26).
+      // L'exclusion est posée dans la requête, pas laissée aux appelants : un filtre optionnel
+      // à passer finit par manquer quelque part, une condition ici vaut pour tout le monde.
+      // Même un `filters.type = 'accounting_payments'` explicite ne la contourne pas.
+      .andWhere('job.type != :typeCompta', { typeCompta: TYPE_EXPORT_COMPTA });
 
     // Recherche plein-texte (nom de fichier ou type)
     if (filters.search && filters.search.trim()) {

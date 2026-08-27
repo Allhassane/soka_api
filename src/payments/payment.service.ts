@@ -26,7 +26,7 @@ import { ExportJobService, ExportJobFilters } from 'src/export-async/export-job.
 import { ExportProcessorService } from 'src/export-async/export-processor.service';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ExportJobStatus } from 'src/export-async/entities/export-job.entity';
+import { ExportJobStatus, TYPE_EXPORT_COMPTA } from 'src/export-async/entities/export-job.entity';
 import { filter } from 'rxjs';
 import {
   HubPaymentSyncBatchResult,
@@ -1990,6 +1990,14 @@ async findTransactionsForSubGroupsExport(
   async downloadTransactionsExport(jobUuid: string, user_uuid: string) {
     // Récupérer le job
     const job = await this.exportJobService.getJob(jobUuid);
+
+    // 🚨 Les exports de la Comptabilité ne se téléchargent PAS par cette porte : ils ont la
+    // leur (`/accounting/exports/…`), sous la permission du module Comptabilité. Les cacher
+    // de la liste ne suffirait pas - la liste dissimule un uuid, elle ne ferme pas la route,
+    // et ce fichier porte les noms et téléphones de toute l'organisation, sans périmètre.
+    if (job.type === TYPE_EXPORT_COMPTA) {
+      throw new ForbiddenException('Cet export appartient au module Comptabilité');
+    }
 
     // Vérifier que l'utilisateur a accès à ce job
     if (job.user_uuid !== user_uuid) {
