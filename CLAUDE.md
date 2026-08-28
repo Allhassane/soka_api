@@ -25,9 +25,10 @@ npm run build            # nest build -> dist/
 npm run start:prod       # node dist/main
 npm run lint             # eslint --fix
 npm test                 # jest (unitaires) ; test:e2e, test:cov
-npm run migration:generate -- src/migrations/<Nom>   # générer une migration TypeORM
+npm run typeorm -- migration:create src/migrations/<Nom>  # squelette vide -> on écrit up()/down() À LA MAIN
 npm run migration:run    # appliquer les migrations
 npm run migration:revert # annuler la dernière
+# ⚠️ migration:generate = DIAGNOSTIC UNIQUEMENT (avec --dryrun). Voir le gotcha « Migrations ».
 npm run export:structures # arbre des structures en JSON (lecture seule) -> ../structures-hierarchie.json
                           # --jusqu-a=DISTRICT|SOUS_GROUPE… pour descendre plus bas, --out=<chemin>
 ```
@@ -90,7 +91,12 @@ modifier.
   **DivisionEntity**, **OrganisationCityEntity** (villes rattachées à une organisation).
 
 ### Responsabilités & comités - `src/responsibilities`, `src/committees`
-- **ResponsibilityEntity** - un poste/rôle fonctionnel occupable dans une structure.
+- **ResponsibilityEntity** - un poste/rôle fonctionnel occupable dans une structure. Porte un
+  `level_uuid`, un `role_uuid` et un `gender`. ⚠️ **Le triplet (niveau, rôle, genre) n'est PAS
+  unique** : 9 combinaisons en portent 2 à 5 (`NATIONAL/RESPONSABLE/mixte` = Conseiller(e),
+  Directeur général, Secrétaire général…). Ce qui distingue deux responsabilités est le **libellé**,
+  et c'est `slug` qui porte l'unicité. Les colonnes `level_id`/`role_id` sont **NULL partout** -
+  ne jamais joindre dessus.
 - **CommitteesEntity** / **CommitteeMemberEntity** - comités et leurs membres. Un comité porte un
   **`role_uuid`** (obligatoire à la création) et un **`level_uuid`** (facultatif), comme une
   responsabilité. Colonnes **sans relation ORM** : `CommitteeService.loadRefs()` les résout par
@@ -873,8 +879,32 @@ services) : abonnements et dons.
   sauté, 10 lignes portant un libellé de formulaire en guise de matricule (`"Nouveau membre ou non
   digitalisé"` ×8, `"Ancien membre venu d'autre centre"` ×2). Dédoublonner puis
   `CREATE UNIQUE INDEX UQ_members_matricule ON members (matricule);`.
-- **Migrations manuelles.** `synchronize` doit rester **off** ; passer par
-  `migration:generate` / `migration:run`. Ne jamais laisser TypeORM modifier `soka_app` en auto.
+- **🚨 Migrations : les écrire À LA MAIN. `migration:generate` détruirait la base** (mesuré le
+  2026-08-07 en `--dryrun`). Le schéma réel a **beaucoup** dérivé des entités (`roles.id` CHAR(36),
+  `roles_permissions`, colonnes FK numériques mortes…), et `generate` compare **toutes** les entités
+  à **toute** la base : le `up()` produit fait 340 lignes et contient entre autres
+  `ALTER TABLE members DROP COLUMN id, matricule, email, gender…`,
+  `ALTER TABLE users DROP COLUMN id, uuid, sending_at…`, `DROP TABLE activity_types`, plus un
+  `CHANGE uuid … DEFAULT (UUID())` pourtant interdit ici. Sur 7 950 membres, c'est une perte de
+  données. Les 36 migrations du repo sont **toutes manuelles** — modèle :
+  `1782600000000-AddMemberUpdatePermission`.
+  ✅ `migration:generate --dryrun` reste **utile comme outil de diagnostic** (il n'écrit rien) pour
+  visualiser la dérive entité ↔ base. Jamais pour produire une migration à appliquer.
+  `synchronize` doit rester **off** ; ne jamais laisser TypeORM modifier `soka_app` en auto.
+
+- **🕳️ TypeORM retire silencieusement les `undefined` d'un `where`** (vérifié le 2026-08-07 en
+  0.3.25) : il ne lève pas, il **élargit la requête**. Un `findOne({ where: { name: payload.nom,
+  … } })` dont la propriété est mal orthographiée cherche donc sur les seuls critères restants et
+  rend une ligne **qui ne correspond pas** — sans erreur. C'est ce qui rendait la clé de
+  dédoublonnage de `ResponsibilityService.store()` aveugle au libellé. Se méfier partout où un
+  `where` est construit depuis un `payload: any` (les DTO ne protègent pas : le champ absent est
+  juste `undefined`).
+
+- **⚠️ Un index UNIQUE ignore `deleted_at`.** Un `slug`/`matricule` libéré par un soft-delete reste
+  pris **en base** alors qu'un `findOne` classique ne le voit plus : le contrôle d'unicité applicatif
+  doit passer `withDeleted: true`, sinon MySQL rend une **1062 brute → 500**. Cas traité sur
+  `responsibilities.slug` (2026-08-07) ; `members.matricule` a le problème inverse (index
+  **non posé**, cf. bascule de base).
 - **Slug/uuid dupliqués selon les modules.** Certaines entités ont `.generateUUID()` vs
   `.generateUuid()` (casse différente) - vérifier le hook réel de l'entité avant de s'y fier.
 - **`.sql` non indexés par Graphify** (dépendance `tree_sitter_sql` absente) : les dumps

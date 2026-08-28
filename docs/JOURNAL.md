@@ -24,6 +24,56 @@ Une entrée par session significative, la plus récente en haut.
 
 ---
 
+## 2026-08-07 — Création d'une responsabilité : trois défauts empilés derrière un même 500 — module `responsabilités`
+**Contexte :** « internal server error » sur `POST /responsibilities` depuis
+Paramètres → Responsabilités. La liste s'affichait bien, seule l'écriture cassait. Le diagnostic a
+sorti **trois** défauts distincts, dont deux se seraient révélés l'un après l'autre.
+⚠️ **Hors périmètre `membres`** : `responsibilities` est un référentiel partagé (lu par
+`member_responsibilities` et par `committees`, qui porte le même couple `role_uuid`/`level_uuid`).
+À signaler avant le merge global. Correctif web associé : `web/docs/JOURNAL.md`, même date.
+- **🐛 Fait — la relation `role` joignait une colonne INT morte** (`responsibility.entity.ts`).
+  Le `@JoinColumn({ name: 'role_id', referencedColumnName: 'id' })` faisait écrire `role.id` dans
+  `responsibilities.role_id`, qui est un **INT**. Or `roles.id` est un **CHAR(36) égal à l'uuid**
+  (piège déjà connu, cf. `CLAUDE.md`) ⇒ `ERROR 1366 Incorrect integer value` sous
+  `STRICT_TRANS_TABLES`, non capturée ⇒ **500**. Bascule sur
+  `@JoinColumn({ name: 'role_uuid', referencedColumnName: 'uuid' })`.
+- **Décision — aucune migration.** `role_uuid` **existe déjà et est peuplée sur 31/31 lignes**,
+  `role_id` est NULL sur 31/31. L'entité décrivait mal un schéma correct : il n'y avait rien à
+  migrer, seulement une déclaration à remettre d'aplomb. Exactement le cas de `level_uuid`, corrigé
+  avant. Le 2ᵉ argument du `@ManyToOne` a aussi été retiré (il désignait une colonne scalaire, pas
+  une relation inverse — `Role` n'a pas de `responsibilities[]`), pour s'aligner sur `level`.
+- **🐛 Fait — clé de dédoublonnage aveugle au libellé** (`reponsibility.service.ts`, `store()`).
+  `name: payload.nname` (faute de frappe) valait `undefined`, et **TypeORM retire silencieusement
+  les `undefined` d'un `where`** au lieu de lever : la clé se réduisait à
+  `(genre, niveau, rôle)`. Comme `store()` renvoie l'existant quand elle matche, toute création sur
+  un triplet déjà utilisé renvoyait **200 avec une autre responsabilité, sans rien créer**.
+- **Décision — pourquoi ce n'était pas anodin :** partager ce triplet est le cas **normal**, pas
+  l'exception — 9 combinaisons en base en portent 2 à 5 (`NATIONAL/RESPONSABLE/mixte` en a 5 :
+  Conseiller(e), Directeur général, Secrétaire général…). Le défaut aurait donc pris le relais du
+  500 dès qu'il aurait été corrigé, en pire : un échec **silencieux**.
+- **🐛 Fait — `slug` UNIQUE non gardé.** `responsibilities.slug` porte un index UNIQUE qui, comme
+  tout index MySQL, **ignore `deleted_at`**. Un libellé déjà pris remontait une **1062 brute**, donc
+  un troisième 500. Contrôle explicite ajouté avant l'insert, en `withDeleted: true`, qui lève un
+  **409 `ConflictException`** (convention maison : `RoleService.assertNameAvailable`,
+  `UserService`) et distingue dans le message le cas « responsabilité supprimée ».
+- **Fait — `relations: ['level']` sur `findAll()`** : alimente la colonne « Niveau » du tableau web,
+  qui résolvait jusque-là l'uuid côté client via `useFormQueries`.
+- **Décision — validation par transaction annulée, pas par écriture réelle.** Les trois branches
+  (création sur triplet occupé → **créé** ; collision de libellé seule → **409** ; doublon strict →
+  renvoi de l'existant, idempotent) ont été rejouées contre `soka_app` dans une transaction
+  systématiquement rollbackée. Base partagée : aucune ligne de test n'y a été laissée.
+- **Fait — commentaires périmés corrigés** (`role.entity.ts`, `CLAUDE.md`) : `ResponsibilityEntity`
+  ne joint plus sur `roles.id`, **seul `UserRole` le fait encore**. C'est ce qui continue d'interdire
+  de « corriger » le type de `Role.id`.
+- **TODO :** `update()` porte **la même faille de slug** que `store()` — renommer vers un libellé
+  existant produira la même 1062 ⇒ 500. Non corrigé (la demande portait sur la création) ; le
+  contrôle est à extraire dans une méthode privée partagée par les deux.
+- **TODO :** `update()` passe un **objet** à `logService.logAction()` là où tout le reste passe une
+  chaîne — à vérifier, non exercé ici.
+- **TODO :** aucun test automatisé sur ce module ; les trois cas ci-dessus mériteraient un `.spec`.
+
+---
+
 ## 2026-08-05 — Suppression logique d'un membre : cascade, matricule, téléphone — module `membres`
 **Contexte :** demande d'« implémenter le soft delete des membres ». Relevé préalable : il était
 **déjà là** — `deleted_at` hérité de `DateTimeEntity`, `MemberService.delete()` en `softRemove` +
