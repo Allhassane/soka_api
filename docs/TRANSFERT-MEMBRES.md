@@ -237,6 +237,25 @@ Base `/member-transfers`, `JwtAuthGuard` + `PermissionsGuard`.
 **Permissions à créer** (table partagée `permissions`, module Membres) :
 `membres_voir_menu_transferts`, `membres_initier_transfert`, `membres_approuver_transfert`.
 
+### Cascade de destination — une route hors périmètre, à part (ajout du 2026-09-08)
+
+| Verbe | Route | Permission | Rôle |
+|---|---|---|---|
+| GET | `/structure/transfer-targets?uuid=` | `membres_initier_transfert` | cascade Région → District de la structure d'accueil |
+
+⚠️ **Ne pas rebrancher cet écran sur `/structure/childrens`.** Cette dernière est gardée par
+`assertNavigable()` → `assertStructureNavigable()`, qui borne l'appelant à **son sous-arbre et à
+sa chaîne d'ancêtres** — la bonne règle pour le filtre du tableau de bord, un contresens ici : la
+destination d'un transfert est par construction **hors périmètre** (R2 ne contrôle que la source,
+R3 confie la cible à l'approbateur). Avec la route bornée, un responsable de district ne voyait
+qu'**1 région sur 4 et 1 centre régional sur 17**, et les menus se vidaient dès le palier
+« Centre régional » pour tout non-administrateur (`isAdmin` sort de la barrière d'emblée, d'où un
+écran qui paraissait sain côté admin).
+
+`transfer-targets` s'arrête au **district** (`400` en deçà) : conformément au §3, groupe et
+sous-groupe d'accueil restent le choix de l'approbateur. Ce qu'elle expose se limite à des **noms
+de structures**, pour les seuls porteurs de `membres_initier_transfert`.
+
 ### Application transactionnelle (`approve`)
 
 ```

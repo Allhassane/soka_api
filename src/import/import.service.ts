@@ -6,6 +6,7 @@ import { CANON, IMPORT_REQUIRED_COLUMNS } from './import.constants';
 import { norm, digitsOnly, parseBool, parseDateFr } from './import.util';
 import { ImportReferenceService } from './import-reference.service';
 import { MemberEntity } from 'src/members/entities/member.entity';
+import { MatriculeService } from 'src/members/matricule.service';
 import { MemberResponsibilityEntity } from 'src/member-responsibility/entities/member-responsibility.entity';
 import { ImportFailureEntity } from './entities/import-failure.entity';
 import { ImportBatchEntity } from './entities/import-batch.entity';
@@ -72,6 +73,8 @@ export class ImportService {
     private readonly batchRepo: Repository<ImportBatchEntity>,
     /** Règle unique du compte de connexion, partagée avec `MemberService.store()`. */
     private readonly accounts: MemberAccountService,
+    /** Règle unique du matricule, partagée avec `MemberService.store()`. */
+    private readonly matricules: MatriculeService,
   ) {}
 
   // ─────────────────────────── Parsing / format ───────────────────────────
@@ -212,7 +215,13 @@ export class ImportService {
       if (val !== undefined && val !== null && val !== '') set[key] = val;
     };
 
-    put('matricule', (row['Matricule'] ?? '').trim());
+    // ⚠️ La cellule n'est reprise que si elle **ressemble** à un matricule. Elle était recopiée
+    // verbatim : sur les 271 membres créés par l'import, 31 ont hérité du remplissage du tableur
+    // (`sss`, `XXXXX`, les numéros de ligne `1`..`18`, « Nouveau membre ou non digitalisé »).
+    // Écartée ici, elle est remplacée par un matricule généré sur le chemin `create` (cf.
+    // `commit()`) ; sur le chemin `update`, l'absence de clé laisse simplement l'existant.
+    const matriculeCell = (row['Matricule'] ?? '').trim();
+    if (MatriculeService.isPlausible(matriculeCell)) set.matricule = matriculeCell;
     put('lastname', (row['Nom'] ?? '').trim());
     put('firstname', (row['Prénom'] ?? '').trim());
     const g = norm(row['Genre']);
@@ -363,6 +372,13 @@ export class ImportService {
           // naissaient sans compte, donc sans moyen de se connecter, et rien ne le signalait
           // (360 membres dans ce cas au 2026-07-30, rattrapés par un seed manuel).
           const saved = await this.memberRepo.manager.transaction(async (manager) => {
+            // Cellule vide ou non plausible ⇒ matricule généré, exactement comme le ferait
+            // `MemberService.store()`. Sans ceci, l'import créait des membres à `matricule NULL` :
+            // 235 fiches dans ce cas au 2026-09-08, rattrapées par `seed:fix-missing-matricule`.
+            // Dans la transaction pour que le rang tienne compte des lignes déjà insérées.
+            if (!entity.matricule) {
+              entity.matricule = await this.matricules.generate(manager);
+            }
             const savedMember = await manager.save(entity);
             const outcome = await this.accounts.reconcileAccount(savedMember, manager);
             if (outcome === 'created') accountsCreated++;

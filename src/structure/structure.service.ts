@@ -184,6 +184,52 @@ export class StructureService {
     }
   }
 
+  /**
+   * Cascade de **destination d'un transfert** : Région → … → District, SANS barrière de périmètre.
+   *
+   * ⚠️ Ne pas confondre avec `findChildrens`, qui reste bornée par `assertNavigable`. Ici la
+   * cible est par construction **hors** du périmètre de l'appelant : `MemberTransferService.create`
+   * ne contrôle que le district **source** (règle R2), le district **cible** étant validé par
+   * l'approbateur (R3). Réutiliser la route bornée fermait la cascade dès le palier
+   * « Centre régional » à tout non-administrateur — il ne pouvait naviguer que sur sa propre
+   * chaîne d'ancêtres (anomalie remontée le 2026-09-08).
+   *
+   * Ce qui est exposé se limite aux **noms de structures jusqu'au district** : on refuse de
+   * descendre plus bas (groupe / sous-groupe relèvent de l'approbateur, seul à connaître la
+   * répartition interne de son district), et aucune donnée de membre ne transite ici.
+   */
+  async findTransferTargetChildrens(uuid: string | undefined) {
+    if (uuid === undefined || uuid === null) {
+      // Sans uuid : les régions (enfants du national), point de départ de la cascade.
+      return this.findChildrens(undefined);
+    }
+
+    const structure = await this.findOne(uuid);
+
+    const district = await this.levelRepository.findOne({
+      where: { name: 'DISTRICT' },
+    });
+    const parentLevel = structure.level_uuid
+      ? await this.levelRepository.findOne({
+          where: { uuid: structure.level_uuid },
+        })
+      : null;
+
+    // Demander les enfants d'un district (ou plus bas) reviendrait à lister groupes et
+    // sous-groupes : hors périmètre fonctionnel de l'initiateur.
+    if (district && parentLevel && parentLevel.order >= district.order) {
+      throw new BadRequestException(
+        "La cascade de destination s'arrête au district.",
+      );
+    }
+
+    const childrens = await this.structureRepo.find({
+      where: { parent_uuid: structure.uuid },
+    });
+
+    return { parent: structure, childrens };
+  }
+
   async findByChildrens(uuid: string | undefined) {
     if (uuid === undefined || uuid === null) {
       const structure = await this.findOneWithoutParent();

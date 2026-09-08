@@ -8,6 +8,7 @@ import { MemberResponsibilityEntity } from 'src/member-responsibility/entities/m
 import { ImportFailureEntity } from './entities/import-failure.entity';
 import { ImportBatchEntity } from './entities/import-batch.entity';
 import { UserModule } from 'src/users/user.module';
+import { MatriculeModule } from 'src/members/matricule.module';
 
 /**
  * Module d'importation Excel des membres.
@@ -25,6 +26,9 @@ import { UserModule } from 'src/users/user.module';
     ]),
     // Pour `MemberAccountService` : un membre importé sans compte ne peut pas se connecter.
     UserModule,
+    // Pour `MatriculeService` : un membre importé sans matricule n'est identifiable nulle part.
+    // Module minuscule exprès - tirer `MembersModule` ici créerait un cycle.
+    MatriculeModule,
   ],
   controllers: [ImportController],
   providers: [ImportService, ImportReferenceService],

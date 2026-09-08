@@ -1,6 +1,7 @@
 import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MemberService } from './member.service';
+import { MatriculeModule } from './matricule.module';
 import { MemberController } from './member.controller';
 import { MemberEntity } from './entities/member.entity';
 import { LogActivitiesModule } from 'src/log-activities/log-activities.module';
@@ -50,6 +51,8 @@ import { MemberRegistrationModule } from 'src/member-registration/member-registr
       ]),
     LogActivitiesModule,
     UserModule,
+    // Règle unique du matricule, partagée avec l'import Excel.
+    MatriculeModule,
     ResponsibilityModule,
     CivilityModule,
     AccessoryModule,

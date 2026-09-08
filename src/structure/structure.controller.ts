@@ -574,6 +574,47 @@ async exportStatCategory(
     return this.structureService.create(createStructureDto);
   }
 
+  // ⚠️ Déclarée AVANT `@Get(':uuid')` : Nest résout les routes dans l'ordre de déclaration, et
+  // un segment unique placé après serait capturé par le paramètre.
+  //
+  // Cascade de **destination d'un transfert**, volontairement SANS `assertNavigable`.
+  // `assertNavigable` n'autorise que le sous-arbre de l'appelant et sa chaîne d'ancêtres : c'est
+  // la bonne règle pour le filtre du tableau de bord (on n'y descend que chez soi), mais elle
+  // ferme cet écran-ci, dont le but est justement de désigner un district **hors** périmètre.
+  // Le contrat d'écriture le dit déjà : `MemberTransferService.create` ne contrôle que la
+  // **source** (R2), la **cible** relevant de l'approbateur (R3) - la lecture refusait donc ce
+  // que l'écriture accepte (anomalie du 2026-09-08 : menus vides dès « Centre régional » pour
+  // tout non-administrateur).
+  //
+  // Ce qu'on ouvre reste étroit : des **noms de structures jusqu'au district**, pour les seuls
+  // porteurs de `membres_initier_transfert`. Aucune donnée de membre, aucun effectif.
+  @Get('transfer-targets')
+  @RequirePermissions('membres_initier_transfert')
+  @ApiOperation({
+    summary:
+      "Cascade des structures de destination d'un transfert (Région → District), hors périmètre",
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Enfants récupérés avec succès',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'La cascade de destination ne descend pas sous le district',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Non autorisé - Authentification requise',
+  })
+  @ApiQuery({
+    name: 'uuid',
+    description: 'UUID de la structure parente (absent = les régions)',
+    required: false,
+  })
+  public async findTransferTargets(@Query('uuid') uuid: string | undefined) {
+    return this.structureService.findTransferTargetChildrens(uuid);
+  }
+
   // Une structure isolée (nom, niveau, parent) est une donnée de nomenclature : lisible par tout
   // connecté, comme la cascade `childrens`. Seuls l'arbre complet et la liste exhaustive (avec
   // effectifs) restent sous `structures_voir`.

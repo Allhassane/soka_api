@@ -26,6 +26,7 @@
     "seed:city-duplicates-audit": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-city-duplicates-audit.ts",
     "seed:structure-duplicates-audit": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-structure-duplicates-audit.ts",
     "seed:fix-phone-letter-o": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-fix-phone-letter-o.ts",
+    "seed:fix-missing-matricule": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-fix-missing-matricule.ts",
     "seed:broken-responsibilities-audit": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-broken-responsibilities-audit.ts",
     "seed:orphan-structure-chains-audit": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-orphan-structure-chains-audit.ts",
     "seed:check-member": "node -r ts-node/register -r tsconfig-paths/register src/seeds/seed-check-member-responsibility.ts",
