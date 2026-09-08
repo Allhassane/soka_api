@@ -1008,6 +1008,15 @@ services) : abonnements et dons.
     **partagés** par l'écran et l'export : deux définitions du mot « échoué » feraient diverger le
     fichier et le chiffre affiché, et personne ne s'en apercevrait avant de compter à la main.
 
+- **🚨 `/docs` est dans le `.gitignore` (ligne 70) alors que les fichiers de `docs/` sont SUIVIS.**
+  `git add docs/JOURNAL.md` retourne **1** (« The following paths are ignored… use -f ») tout en
+  **stageant quand même** le fichier, puisqu'il est déjà suivi. Le piège n'est donc pas « rien n'a
+  été ajouté » : c'est qu'un enchaînement `git add … && git commit` **s'arrête au `add`**, en
+  laissant le fichier dans l'index — le prochain commit l'emportera sans qu'on l'ait demandé.
+  Le geste sûr est **`git add -f docs/<fichier>`**. Vérifié le 2026-09-08, identique dans `web/`.
+  ⚠️ Ne pas retirer `/docs` du `.gitignore` sans l'équipe : la règle protège peut-être des sorties
+  d'outils non versionnées.
+
 ## Fichiers ad hoc à ranger
 
 - `FIX_500_LISTE_MEMBRES.md` à la racine du repo : note de correctif ponctuel. À terme, fusionner
