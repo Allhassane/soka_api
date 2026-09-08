@@ -68,3 +68,9 @@ pids
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 /docs
+
+# Rapports des seeds (racine du repo) : ils portent des NOMS DE MEMBRES et leur structure.
+# Sortie documentée de seed:fix-missing-matricule, seed:create-missing-user-accounts, etc.
+/matricules-a-attribuer-*.xlsx
+/matricules-attribues-*.xlsx
+/comptes-a-creer-*.xlsx

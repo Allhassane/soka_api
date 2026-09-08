@@ -488,10 +488,11 @@ services) : abonnements et dons.
     numéro de téléphone**. `MemberAccountService` refuse un numéro déjà porté via un `findOne`,
     qui **ignore les lignes soft-deletées** : sans ça, recréer une fiche avec le même numéro donne
     un membre **sans compte de connexion, sans aucune erreur**.
-  ⚠️ **Corollaire pour toute génération de numéro de série** : `store()` calcule le matricule
-  depuis le dernier `id`, avec **`.withDeleted()` obligatoire** - un query builder filtre
-  `deleted_at IS NULL` par défaut, donc supprimer le dernier membre créé ferait **régénérer son
-  matricule** au suivant, et `UQ_members_matricule` n'est pas posé pour l'attraper.
+  ⚠️ **Corollaire pour toute génération de numéro de série** : le matricule se calcule depuis le
+  dernier `id`, avec **`.withDeleted()` obligatoire** - un query builder filtre `deleted_at IS NULL`
+  par défaut, donc supprimer le dernier membre créé ferait **régénérer son matricule** au suivant.
+  Depuis le 2026-09-08 la règle vit dans **`MatriculeService`** (`src/members/matricule.service.ts`)
+  et `UQ_members_matricule` est posé pour attraper le cas.
   ⚠️ **La restauration n'existe pas encore.** Quand elle sera écrite : chercher le membre en
   `withDeleted: true`, **vérifier que le numéro est libre** (`users.phone_number` n'a aucun index
   UNIQUE ⇒ deux comptes actifs sur un numéro = login ambigu), et repasser par
@@ -635,6 +636,20 @@ services) : abonnements et dons.
   suffit à lire tout l'arbre (fuite réelle : 7 950 membres avec téléphones et e-mails exposés à
   un responsable de sous-groupe). Idem pour une structure de **destination** en écriture
   (`PUT /members/:uuid`), sans quoi l'utilisateur élargit son propre périmètre.
+
+- **🧭 Deux barrières de périmètre, plus une route délibérément sans barrière.**
+  `assertStructureWithinPerimeter()` (données) et `assertStructureNavigable()` (listes d'enfants :
+  sous-arbre **+ chaîne d'ancêtres**, pour qu'une cascade puisse partir de la racine). Toutes deux
+  sortent d'emblée si `isAdmin` ⇒ **un défaut de périmètre est invisible en compte admin** :
+  toujours recetter avec un `RESPONSABLE` réel.
+  ⚠️ **`GET /structure/transfer-targets` n'en porte aucune, exprès.** La destination d'un transfert
+  est par construction hors périmètre (`MemberTransferService.create` ne contrôle que la **source**,
+  R2 ; la **cible** revient à l'approbateur, R3). La brancher sur `/structure/childrens` referme
+  l'écran dès le palier « Centre régional » pour tout non-administrateur - défaut réel du
+  2026-09-08. Elle reste étroite : noms de structures **jusqu'au district** (`400` en deçà), sous
+  `membres_initier_transfert`. Avant de « corriger » une route de lecture qui semble trop ouverte,
+  **vérifier ce que la route d'écriture correspondante accepte** : ici c'est la lecture qui était
+  en tort.
 
 - **🍪 Le JWT finit dans un cookie de 4 096 o max - budget serré.** Le front **re-chiffre** le token
   (`useAuth.login` → `encryptData`, A256GCM+base64 = **+38 %**) avant de le poser en cookie. Chrome
@@ -828,6 +843,27 @@ services) : abonnements et dons.
   n'est envoyé à la création ; le vrai mot de passe part au **1er login** (`AuthService`).
   Passer le `manager` de la transaction en cours quand il y en a une, sinon un rollback du membre
   laisse un compte orphelin.
+- **🔢 Le matricule d'un membre : UN seul point, `MatriculeService`**
+  (`src/members/matricule.service.ts`, exporté par le module minuscule `MatriculeModule` - tirer
+  `MembersModule` dans l'import créerait un cycle). `generate(manager?)` rend le prochain
+  `AA-NNNN` libre ; `isPlausible(v)` dit si une valeur venue de l'extérieur est un matricule.
+  ⚠️ **Ne pas réimplémenter la règle chez un 3ᵉ appelant** - c'est exactement ce qui s'est passé :
+  la règle vivait dans `MemberService.store()` et l'import Excel ne la rejouait pas. Sur les 271
+  membres créés par l'import entre le 27/07 et le 04/08, **235 sans aucun matricule** et 31
+  portant le contenu brut du tableur (`sss`, `XXXXX`, les numéros de ligne `1`..`18`). Rattrapés
+  par `npm run seed:fix-missing-matricule`. **Même famille que `MemberAccountService`** (360
+  membres sans compte, 2026-08-01) : l'import réplique mal ce que fait `store()`, et l'écart est
+  invisible.
+  ⚠️ `buildPayload()` ne recopie la cellule « Matricule » que si `isPlausible()` l'accepte. Les
+  formats retenus sont le canonique `AA-NNNN` **et** la numérotation héritée tout-chiffres
+  (`0007283`, 24 fiches en base) : ce sont de **vrais identifiants**, ne pas les écraser.
+  ⚠️ **Le rang est un minimum de 4 chiffres, pas une largeur fixe** : `26-10000` est valide. La
+  base comptait 8 270 membres au 2026-09-08 - le cas est à ~1 700 créations, pas dans un futur
+  lointain. Ne pas « corriger » l'élargissement en tronquant (un test le verrouille).
+  ⚠️ `generate()` **saute un numéro déjà pris** : le rang vient de `MAX(id)` alors que les
+  matricules hérités ne suivent pas les `id` (ils montent à 8604 pour un `MAX(id)` de 8270). Sans
+  ce décalage, `UQ_members_matricule` ferait échouer une création.
+
 - **🔓 `POST /auth/forgot-password` répond en clair - il n'est PLUS anti-énumération** (depuis le
   2026-07-31). Chaque situation qui empêche le membre de recevoir son SMS a son code, parce que la
   page « Recevoir mon mot de passe » affiche le message tel quel : **404** numéro inconnu · **403**
@@ -875,10 +911,13 @@ services) : abonnements et dons.
   ⚠️ **Le contenu métier diffère, pas seulement le schéma** : `soka_app` porte **4 régions et
   17 centres régionaux** (contre 3 et 3 dans `soka_db`), 336 districts, 1 095 groupes, 2 104
   sous-groupes. Un chiffre relevé avant cette date sur `soka_db` est à re-mesurer.
-  ⚠️ **Index `UQ_members_matricule` non posé** : `CreateMemberRegistration` l'a volontairement
-  sauté, 10 lignes portant un libellé de formulaire en guise de matricule (`"Nouveau membre ou non
-  digitalisé"` ×8, `"Ancien membre venu d'autre centre"` ×2). Dédoublonner puis
-  `CREATE UNIQUE INDEX UQ_members_matricule ON members (matricule);`.
+  ⚠️ **`UQ_members_matricule` est POSÉ depuis le 2026-09-08** (migration
+  `AddMembersMatriculeUniqueIndex`), après dédoublonnage des 10 lignes qui portaient un libellé de
+  formulaire en guise de matricule. **La migration REFUSE de s'appliquer si des doublons
+  subsistent** et nomme le rattrapage dans son message - à prévoir avant le déploiement en prod,
+  qui n'est pas rattrapée : `npm run seed:fix-missing-matricule -- --liberer-doublons --confirm`.
+  NULL reste permis (MySQL l'autorise sous un UNIQUE) : l'index garantit qu'un matricule n'est pas
+  porté deux fois, pas qu'il en existe un partout - cette seconde garantie est au code.
 - **🚨 Migrations : les écrire À LA MAIN. `migration:generate` détruirait la base** (mesuré le
   2026-08-07 en `--dryrun`). Le schéma réel a **beaucoup** dérivé des entités (`roles.id` CHAR(36),
   `roles_permissions`, colonnes FK numériques mortes…), et `generate` compare **toutes** les entités

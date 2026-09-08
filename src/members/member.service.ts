@@ -11,6 +11,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, In, IsNull, Repository } from 'typeorm';
 import { MemberEntity } from './entities/member.entity';
+import { MatriculeService } from './matricule.service';
 import { LogActivitiesService } from '../log-activities/log-activities.service';
 import { User } from '../users/entities/user.entity';
 import { CreateMemberDto } from './dto/create-member.dto';
@@ -120,6 +121,9 @@ export class MemberService {
     /** Droits effectifs du demandeur (service @Global, cache 30 s). */
     private readonly effectivePermissions: EffectivePermissionsService,
 
+    /** Règle unique du matricule, partagée avec l'import Excel. */
+    private readonly matriculeService: MatriculeService,
+
   ) {}
 
 
@@ -130,8 +134,14 @@ export class MemberService {
      * ⚠️ Depuis la validation à deux niveaux (`docs/VALIDATION-MEMBRES.md`), cette méthode n'est
      * plus appelée directement par `POST /members` : le contrôleur passe par
      * `MemberRegistrationService.submit()`, qui l'appelle soit tout de suite (étapes acquises
-     * d'office, règle R4), soit à la dernière signature. L'import de masse, lui, l'appelle
-     * toujours en direct - décision assumée (règle R12).
+     * d'office, règle R4), soit à la dernière signature.
+     *
+     * ⚠️ **L'import de masse ne passe PAS par ici** (il écrit `memberRepo` en direct, cf.
+     * `ImportService.commit()`) - contrairement à ce que cette note affirmait jusqu'au
+     * 2026-09-08, ce qui a fait croire qu'il héritait de la génération du matricule. Il n'en
+     * héritait pas : 235 membres importés sans matricule. Toute règle qui doit valoir pour les
+     * DEUX voies vit dans un service partagé (`MatriculeService`, `MemberAccountService`), jamais
+     * dans le corps de cette méthode.
      *
      * @param options.manager  transaction en cours à réutiliser. Indispensable quand l'appelant
      *   écrit d'autres lignes dans le même commit (le dossier de validation) : sans lui, un échec
@@ -182,21 +192,10 @@ export class MemberService {
         throw new NotFoundException('Civilité introuvable.');
       }
 
-      //  Génération du matricule unique
-      // ⚠️ `withDeleted()` est INDISPENSABLE : sans lui, TypeORM ajoute `deleted_at IS NULL`
-      // au query builder, donc supprimer (logiquement) le dernier membre créé fait retomber
-      // `lastMember` sur l'avant-dernier → le membre suivant **régénère le matricule du
-      // supprimé**. Et comme `UQ_members_matricule` n'est pas posé en base (cf. CLAUDE.md),
-      // le doublon passerait sans erreur. Une ligne soft-deletée occupe toujours son `id`.
-      const lastMember = await this.memberRepo
-        .createQueryBuilder('m')
-        .withDeleted()
-        .orderBy('m.id', 'DESC')
-        .getOne();
-
-      const nextId = lastMember ? lastMember.id + 1 : 1;
-      const yearSuffix = new Date().getFullYear().toString().slice(-2);
-      const matricule = `${yearSuffix}-${String(nextId).padStart(4, '0')}`;
+      // Génération du matricule : règle unique, partagée avec l'import de masse.
+      // Elle vivait ici, et l'import ne la rejouait pas - d'où 235 membres importés sans aucun
+      // matricule (2026-09-08). Ne pas la réinstaller en local : cf. `MatriculeService`.
+      const matricule = await this.matriculeService.generate(options.manager);
 
       // ---- Création du membre ----
       const member = this.memberRepo.create({
