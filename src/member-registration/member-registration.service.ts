@@ -272,7 +272,7 @@ export class MemberRegistrationService {
         throw new ConflictException('Ce dossier a déjà été traité.');
       }
 
-      await this.assertPhoneFree(frais.phone, manager);
+      await this.assertPhoneFree(frais.phone, manager, frais.uuid);
 
       const member = await this.memberService.store(
         frais.payload as CreateMemberDto,
@@ -544,6 +544,12 @@ export class MemberRegistrationService {
   private async assertPhoneFree(
     phone: string | null | undefined,
     manager?: EntityManager,
+    /**
+     * Dossier à ignorer : c'est **lui** qu'on est en train de valider. Sans cette exclusion, la
+     * revérification de `finalize()` retrouve le dossier courant (toujours en attente à cet
+     * instant) et le prend pour un doublon - toute dernière signature échouerait en 409.
+     */
+    exceptUuid?: string | null,
   ): Promise<void> {
     if (!phone) return;
 
@@ -553,7 +559,11 @@ export class MemberRegistrationService {
     const userRepo = manager ? manager.getRepository(User) : this.userRepository;
 
     const dossier = await registrationRepo.findOne({
-      where: { phone, status: In(EN_ATTENTE) },
+      where: {
+        phone,
+        status: In(EN_ATTENTE),
+        ...(exceptUuid ? { uuid: Not(exceptUuid) } : {}),
+      },
     });
     if (dossier) {
       throw new ConflictException(

@@ -24,6 +24,34 @@ Une entrée par session significative, la plus récente en haut.
 
 ---
 
+## 2026-09-10 — Validation d'un membre : le dossier se prenait lui-même pour un doublon — module `membres`
+**Contexte :** remontée terrain — la signature du **1er niveau (district) passe**, celle du
+**2e niveau (chapitre) échoue** systématiquement sur « *Un dossier en attente de validation porte
+déjà ce numéro de téléphone.* ». Reproduit en compte `is_admin` comme en compte responsable : le
+défaut n'a rien à voir avec les droits.
+- **🐛 Fait — diagnostic.** `finalize()` (`member-registration.service.ts`) rejoue le contrôle R10
+  avant de créer le membre, parce que la base a pu bouger depuis le dépôt. Mais à cet instant le
+  dossier qu'on valide est **lui-même** encore en `en_attente_*` **avec ce téléphone** :
+  `assertPhoneFree()` le retrouve et le prend pour un doublon. Le 409 n'est donc pas un conflit
+  réel, c'est le dossier contre lui-même.
+- **Pourquoi le district « passait ».** Le blocage n'est pas propre au chapitre mais à la
+  **dernière** signature : elle seule appelle `finalize()`. Une approbation district qui laisse le
+  chapitre à signer ne fait qu'un `update` de statut, donc ne déclenche rien. Corollaire : un
+  dossier dont l'étape chapitre est **acquise d'office** (R4) échouait dès la signature *district*.
+- **Fait — correctif.** `assertPhoneFree(phone, manager, exceptUuid)` : le dossier en cours est
+  exclu de la recherche (`uuid: Not(exceptUuid)`). Les deux autres gardes R10 sont **intactes** —
+  un autre dossier en attente sur le même numéro, et un compte `users` existant, refusent toujours.
+- **Décision — exclure, pas désactiver.** On aurait pu retirer la revérification de `finalize()` :
+  ce serait rouvrir la fenêtre qu'elle protège (un numéro pris entre le dépôt et la signature
+  créerait un membre **sans compte de connexion**, l'angle mort des 360 membres du 2026-08-01).
+  L'auto-collision est le seul faux positif : c'est lui qu'on retire.
+- **Fait — non-régression.** `member-registration.service.spec.ts` (3 cas) : la validation finale
+  passe sur son propre numéro, et refuse toujours l'autre dossier en attente comme le compte
+  existant. Ces trois-là tombent ensemble si quelqu'un « simplifie » l'exclusion.
+- **TODO :** aucun dossier en attente en base locale (`member_registrations` est **vide** dans
+  `soka_app` comme dans `soka_db`) — recette à rejouer sur l'environnement où le défaut a été vu,
+  avec un compte non-admin, en déposant un dossier qui exige les deux signatures.
+
 ## 2026-09-08 — Membres sans matricule : l'import ne rejouait pas la règle — module `membres`
 **Contexte :** remontée terrain — des membres n'ont pas de numéro matricule. Relevé en base :
 **235 fiches sur 8 002**, toutes créées entre le 2026-07-27 et le 2026-08-04.
