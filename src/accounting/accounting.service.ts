@@ -9,6 +9,13 @@ import { IsNull, Repository } from 'typeorm';
 import { DonateEntity } from 'src/donate/entities/donate.entity';
 import { PaymentEntity } from 'src/payments/entities/payment.entity';
 import { SubscriptionEntity } from 'src/subscriptions/entities/subscription.entity';
+import { StructureEntity } from 'src/structure/entities/structure.entity';
+import { LevelEntity } from 'src/level/entities/level.entity';
+import { AccessScopeService } from 'src/access-scope/access-scope.service';
+import {
+  appliquerFiltresPaiementsCompta,
+  structuresDuFiltreCompta,
+} from 'src/export-async/accounting-payments-query';
 import {
   HubBalanceAccount,
   HubGatewayPayment,
@@ -16,6 +23,7 @@ import {
 } from 'src/payments/hub.service';
 import { AccHubSnapshotEntity, SnapshotKind } from './entities/acc-hub-snapshot.entity';
 import { AccHubSnapshotLineEntity, MatchStatus } from './entities/acc-hub-snapshot-line.entity';
+import { AccWithdrawalEntity } from './entities/acc-withdrawal.entity';
 import { parseHub2Export } from './hub2-export.parser';
 import {
   BucketStats,
@@ -81,6 +89,13 @@ export class AccountingService {
     @InjectRepository(DonateEntity)
     private readonly donateRepo: Repository<DonateEntity>,
     private readonly hubService: HubService,
+    @InjectRepository(AccWithdrawalEntity)
+    private readonly withdrawalRepo: Repository<AccWithdrawalEntity>,
+    /** Cascade du filtre « Structure » : des NOMS de structures, en lecture. */
+    @InjectRepository(StructureEntity)
+    private readonly structureRepo: Repository<StructureEntity>,
+    /** Sous-arbre d'une structure (service `@Global`) : le filtre « Structure » des lignes. */
+    private readonly accessScope: AccessScopeService,
   ) {}
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -195,18 +210,25 @@ export class AccountingService {
 
   /**
    * Les lignes qui composent une carte KPI - ce que la modale affiche. Paginé : un seau peut
-   * porter plus d'un millier de lignes. ⚠️ Le `total` rendu DOIT être le chiffre de la carte
-   * (même filtre, même source) : c'est le contrat de cohérence carte ↔ modale.
+   * porter plus d'un millier de lignes. ⚠️ Sans filtre « Structure », le `total` rendu DOIT être
+   * le chiffre de la carte (même filtre, même source) : c'est le contrat de cohérence carte ↔
+   * modale. Avec, c'est la part de ce chiffre qui revient à la structure choisie.
+   *
+   * 🚨 Les conditions sont celles de l'export (`appliquerFiltresPaiementsCompta`) : le fichier
+   * rend exactement les lignes de ce tableau, filtre « Structure » compris.
    */
   async campaignPayments(f: {
     type: string;
     campaign_uuid?: string;
     bucket?: string;
+    /** Filtre « Structure » : structure du BÉNÉFICIAIRE, sous-arbre complet. */
+    structure_uuid?: string;
     page?: number;
     limit?: number;
   }) {
     const type = this.verifierType(f.type);
     const bucket = verifierBucket(f.bucket);
+    const structures = await structuresDuFiltreCompta(this.accessScope, f.structure_uuid);
     // 20 = la page du tableau à l'écran (pagination sous les cartes KPI).
     const limit = Math.min(Math.max(Number(f.limit ?? 20) || 20, 1), 200);
     const page = Math.max(Number(f.page ?? 1) || 1, 1);
@@ -228,13 +250,14 @@ export class AccountingService {
         'p.failure_message',
         'p.transaction_id',
         'p.hub_payment_id',
-      ])
-      .where('p.source = :source', { source: type })
-      .orderBy('p.created_at', 'DESC')
-      .skip((page - 1) * limit)
-      .take(limit);
-    if (f.campaign_uuid) qb.andWhere('p.source_uuid = :campagne', { campagne: f.campaign_uuid });
-    if (bucket !== 'all') qb.andWhere('p.payment_status = :statut', { statut: bucket });
+      ]);
+    appliquerFiltresPaiementsCompta(qb, {
+      type,
+      campaign_uuid: f.campaign_uuid,
+      bucket,
+      structures,
+    });
+    qb.skip((page - 1) * limit).take(limit);
 
     const [rows, total] = await qb.getManyAndCount();
     return {
@@ -257,6 +280,44 @@ export class AccountingService {
       limit,
       pages: Math.max(1, Math.ceil(total / limit)),
     };
+  }
+
+  /**
+   * **La cascade du filtre « Structure »** : les enfants directs d'une structure (les régions
+   * quand aucun parent n'est donné), triés par nom, avec leur palier.
+   *
+   * 🚨 **Aucun périmètre, et c'est voulu** : le module Comptabilité est global (une permission,
+   * aucune borne). Le rôle COMPTABLE n'est pas administrateur ; la cascade partagée
+   * `/structure/childrens` est bornée au périmètre du connecté et lui rendrait des menus vides,
+   * sans message, dès le deuxième palier. Il ne sort d'ici que des noms : ni effectif, ni membre.
+   */
+  async listFilterStructures(parent_uuid?: string) {
+    let parent = parent_uuid?.trim() || undefined;
+
+    if (!parent) {
+      const racine = await this.structureRepo.findOne({ where: { parent_uuid: IsNull() } });
+      if (!racine) return [];
+      parent = racine.uuid;
+    } else if (!(await this.structureRepo.exists({ where: { uuid: parent } }))) {
+      throw new BadRequestException({
+        message: 'Structure inconnue : le filtre ne désigne aucune structure existante.',
+        data: { code: 'STRUCTURE_INCONNUE' },
+      });
+    }
+
+    const lignes = await this.structureRepo
+      .createQueryBuilder('s')
+      // ⚠️ Jointure sur `level_uuid`, pas sur la relation `level` : celle-ci passe par
+      // `level_id`, vide sur toutes les structures (3 802 sur 3 802 le 27/09).
+      .leftJoin(LevelEntity, 'l', 'l.uuid = s.level_uuid')
+      .select('s.uuid', 'uuid')
+      .addSelect('s.name', 'name')
+      .addSelect('l.name', 'palier')
+      .where('s.parent_uuid = :parent', { parent })
+      .orderBy('s.name', 'ASC')
+      .getRawMany();
+
+    return lignes.map((l) => ({ uuid: l.uuid, name: l.name, palier: l.palier ?? null }));
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -287,29 +348,45 @@ export class AccountingService {
   }
 
   /**
+   * Solde du compte de collecte, pour l'instantané. C'est une preuve EN PLUS : sa panne ne doit
+   * pas priver l'écran de la liste (l'essentiel). On la signale, on n'échoue pas - `null`,
+   * jamais un zéro inventé.
+   */
+  private async releverSolde(): Promise<number | null> {
+    try {
+      return this.compteXof((await this.hubService.getGatewayBalance()).collection);
+    } catch (e) {
+      this.logger.warn(`[CONCORDANCE] Relevé de solde impossible : ${e?.message ?? e}`);
+      return null;
+    }
+  }
+
+  /**
    * Construit le pont **guichet → application** : `linkId` de la liste marchande est exactement
    * `payments.transaction_id`.
    *
    * C'est la seule voie qui donne aussi `hub2PaymentId`, la clé de l'export HUB2 - que
    * `checkPaymentStatus` ne rend pas. Sans ce pont, un export ne s'apparie à rien.
+   *
+   * ⚠️ **UNE lecture de `payments`, réduite aux colonnes du verdict**, puis l'appariement en
+   * mémoire. `transaction_id` n'a pas d'index : chaque paquet `IN (500)` d'avant balayait toute
+   * la table (17 balayages pour les 9 323 tentatives du 2026-09-26). Sans index, toute requête
+   * balaie la table : autant n'en faire qu'une.
    */
   private async pontVersApplication(
     transactions: HubGatewayPayment[],
   ): Promise<Map<string, PaymentEntity>> {
-    const liens = [...new Set(transactions.map((t) => t.linkId).filter(Boolean))];
+    const liens = new Set(transactions.map((t) => t.linkId).filter(Boolean));
     const parLien = new Map<string, PaymentEntity>();
-    if (liens.length === 0) return parLien;
+    if (liens.size === 0) return parLien;
 
-    // Par paquets : une clause IN de plusieurs milliers d'éléments est refusée par MySQL bien
-    // avant d'être lente.
-    const TAILLE = 500;
-    for (let i = 0; i < liens.length; i += TAILLE) {
-      const paquet = liens.slice(i, i + TAILLE);
-      const trouves = await this.paymentRepo
-        .createQueryBuilder('p')
-        .where('p.transaction_id IN (:...ids)', { ids: paquet })
-        .getMany();
-      for (const p of trouves) parLien.set(p.transaction_id, p);
+    const paiements = await this.paymentRepo
+      .createQueryBuilder('p')
+      .select(['p.id', 'p.uuid', 'p.transaction_id', 'p.payment_status', 'p.total_amount'])
+      .where('p.transaction_id IS NOT NULL')
+      .getMany();
+    for (const p of paiements) {
+      if (liens.has(p.transaction_id)) parLien.set(p.transaction_id, p);
     }
     return parLien;
   }
@@ -365,10 +442,14 @@ export class AccountingService {
     filtres: ConcordanceFiltres = {},
     auteurUuid?: string,
   ): Promise<AccHubSnapshotEntity> {
-    const { payments: transactions, complet } = await this.hubService.listGatewayPayments({
-      from: filtres.from,
-      to: filtres.to,
-    });
+    // Les trois lectures sont indépendantes : elles partent ENSEMBLE. En série, le relevé de
+    // solde (aller-retour guichet → HUB2) et l'agrégat s'ajoutaient à la lecture de la liste ;
+    // en parallèle, ils sont aussi pris au plus près du même instant qu'elle.
+    const [{ payments: transactions, complet }, soldeConstate, app] = await Promise.all([
+      this.hubService.listGatewayPayments({ from: filtres.from, to: filtres.to }),
+      this.releverSolde(),
+      this.computeAppSide(filtres),
+    ]);
 
     // 🚨 Sonde de pureté : le guichet borne sa liste à SON environnement (correctif du
     // 2026-08-11 - avant lui, 47 250 XOF d'essais sandbox passaient pour des encaissements
@@ -385,16 +466,6 @@ export class AccountingService {
     }
 
     const pont = await this.pontVersApplication(transactions);
-    const app = await this.computeAppSide(filtres);
-
-    // Le solde constaté est une preuve EN PLUS : sa panne ne doit pas priver l'écran de la
-    // liste (l'essentiel). On la signale, on n'échoue pas.
-    let soldeConstate: number | null = null;
-    try {
-      soldeConstate = this.compteXof((await this.hubService.getGatewayBalance()).collection);
-    } catch (e) {
-      this.logger.warn(`[CONCORDANCE] Relevé de solde impossible : ${e?.message ?? e}`);
-    }
 
     let brut = 0;
     let reussis = 0;
@@ -623,6 +694,7 @@ export class AccountingService {
     compteurs: Record<MatchStatus, number>;
     appNonApparies: number;
     tronque: boolean;
+    /** TOUTES les lignes lues : les compteurs en viennent, seules celles en écart sont écrites. */
     lignes: Partial<AccHubSnapshotLineEntity>[];
   }): Promise<AccHubSnapshotEntity> {
     const hubNet = arrondi(p.hubBrut - p.hubFrais);
@@ -662,11 +734,17 @@ export class AccountingService {
 
     const enregistre = await this.snapshotRepo.save(instantane);
 
+    // 🚨 **Seules les lignes EN ÉCART sont écrites** ; l'en-tête ci-dessus compte TOUTES les
+    // lignes (`matched_count`…). Les lignes appariées - 97 % du volume au 2026-09-25 - ne sont
+    // lues par aucun écran ni aucune route utilisée, et les écrire coûtait 10 à 17 s par clic en
+    // production : le second poste du « Rafraîchir » qui dépassait les 30 s du navigateur.
+    const enEcart = p.lignes.filter((l) => l.match_status !== MatchStatus.MATCHED);
+
     // Insertion par paquets : un `save` de plusieurs milliers d'entités d'un coup dépasse la
     // taille de paquet MySQL par défaut.
     const TAILLE = 500;
-    for (let i = 0; i < p.lignes.length; i += TAILLE) {
-      const paquet = p.lignes
+    for (let i = 0; i < enEcart.length; i += TAILLE) {
+      const paquet = enEcart
         .slice(i, i + TAILLE)
         .map((l) => this.lineRepo.create({ ...l, snapshot_uuid: enregistre.uuid }));
       await this.lineRepo.save(paquet);
@@ -686,8 +764,13 @@ export class AccountingService {
     });
   }
 
-  /** Met en forme le décompte d'un instantané, **solde d'ouverture en ligne visible**. */
-  private vue(s: AccHubSnapshotEntity | null) {
+  /**
+   * Met en forme le décompte d'un instantané, **solde d'ouverture en ligne visible**.
+   *
+   * @param retraits total des retraits enregistrés (TOUS : le solde attendu se compare au solde
+   *   relevé à l'instant, qui les a tous subis).
+   */
+  private vue(s: AccHubSnapshotEntity | null, retraits: number) {
     if (!s) return null;
     const ouverture = Number(s.opening_balance);
     const brut = Number(s.hub_gross);
@@ -714,7 +797,10 @@ export class AccountingService {
         solde_ouverture: ouverture,
         encaissements: brut,
         frais: -frais,
-        solde_attendu: arrondi(ouverture + brut - frais),
+        // Une LIGNE, comme le solde d'ouverture : un retrait fondu dans un total produirait un
+        // écart permanent et sans nom (100 001 F du 16 au 26/09).
+        retraits: retraits > 0 ? -retraits : 0,
+        solde_attendu: arrondi(ouverture + brut - frais - retraits),
       },
       decomposition: {
         matched: s.matched_count,
@@ -727,9 +813,10 @@ export class AccountingService {
 
   /** L'écran de l'égalité. */
   async overview(filtres: ConcordanceFiltres = {}) {
-    const [guichet, exporte] = await Promise.all([
+    const [guichet, exporte, retraits] = await Promise.all([
       this.dernier(SnapshotKind.GATEWAY),
       this.dernier(SnapshotKind.EXPORT),
+      this.totalRetraits(),
     ]);
 
     // 🚨 **L'export ne fait foi que s'il est AUSSI RÉCENT que la lecture du guichet.**
@@ -793,8 +880,8 @@ export class AccountingService {
           : exporte
             ? 'lecture du guichet plus récente que le dernier export'
             : 'aucun export importé à ce jour',
-      gateway: this.vue(guichet),
-      export: this.vue(exporte),
+      gateway: this.vue(guichet, retraits),
+      export: this.vue(exporte, retraits),
       equality: {
         gross_ok: gapBrut === 0,
         net_ok: gapNet === 0,
@@ -844,4 +931,146 @@ export class AccountingService {
     ligne.resolved_at = new Date();
     return this.lineRepo.save(ligne);
   }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Compte de retrait
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Total des retraits ACTIFS (les saisies annulées sont exclues : le query builder filtre
+   * `deleted_at` de lui-même). Zéro quand il n'y en a aucun, jamais `null`.
+   */
+  private async totalRetraits(): Promise<number> {
+    const r = await this.withdrawalRepo
+      .createQueryBuilder('w')
+      .select('COALESCE(SUM(w.amount), 0)', 'total')
+      .getRawOne<{ total: string }>();
+    return arrondi(Number(r?.total ?? 0));
+  }
+
+  private vueRetrait(r: AccWithdrawalEntity) {
+    return {
+      uuid: r.uuid,
+      amount: Number(r.amount),
+      withdrawn_on: r.withdrawn_on,
+      label: r.label,
+      reference: r.reference,
+      created_at: r.created_at,
+    };
+  }
+
+  /** Les retraits actifs, les plus récents d'abord, et leur total. */
+  async listWithdrawals() {
+    const retraits = await this.withdrawalRepo.find({
+      order: { withdrawn_on: 'DESC', created_at: 'DESC' },
+    });
+    const items = retraits.map((r) => this.vueRetrait(r));
+    return {
+      items,
+      total: arrondi(items.reduce((somme, r) => somme + r.amount, 0)),
+      count: items.length,
+    };
+  }
+
+  /**
+   * Enregistre un retrait du compte de collecte. Il entre aussitôt dans le décompte :
+   * `initial + brut - commission - retraits = net attendu`.
+   *
+   * ⚠️ N'écrit QUE dans `acc_withdrawals` : un retrait saisi ici ne déplace pas d'argent, il
+   * explique un mouvement déjà fait chez HUB2.
+   */
+  async createWithdrawal(saisie: SaisieRetrait, auteurUuid?: string) {
+    const { montant, jour, motif, reference } = verifierRetrait(saisie);
+    const enregistre = await this.withdrawalRepo.save(
+      this.withdrawalRepo.create({
+        amount: montant.toFixed(2),
+        withdrawn_on: jour,
+        label: motif,
+        reference,
+        created_by_uuid: auteurUuid ?? null,
+      }),
+    );
+    return this.vueRetrait(enregistre);
+  }
+
+  /**
+   * Annule une saisie erronée. Suppression LOGIQUE, auteur de l'annulation conservé : le
+   * décompte d'hier doit rester explicable demain. `deleted_at: IsNull()` dans le critère, pour
+   * ne jamais ré-estamper une ligne déjà annulée.
+   */
+  async cancelWithdrawal(uuid: string, auteurUuid?: string) {
+    const retrait = await this.withdrawalRepo.findOne({ where: { uuid } });
+    if (!retrait) {
+      throw new NotFoundException({
+        message: 'Retrait introuvable ou déjà annulé.',
+        data: { code: 'RETRAIT_INTROUVABLE' },
+      });
+    }
+    await this.withdrawalRepo.update(
+      { id: retrait.id, deleted_at: IsNull() },
+      { deleted_at: new Date(), deleted_by_uuid: auteurUuid ?? null },
+    );
+    return { uuid, annule: true };
+  }
+}
+
+/** Ce que l'écran envoie pour enregistrer un retrait (non typé : tout est vérifié ici). */
+export interface SaisieRetrait {
+  amount?: unknown;
+  withdrawn_on?: unknown;
+  label?: unknown;
+  reference?: unknown;
+}
+
+const refus = (code: string, message: string) =>
+  new BadRequestException({ message, data: { code } });
+
+/**
+ * Contrôle d'une saisie de retrait. Le montant est un nombre strictement positif, au centime
+ * près (colonne `DECIMAL(14,2)`) ; le jour est une vraie date `AAAA-MM-JJ`, jamais dans le futur
+ * (fuseau d'Abidjan = UTC) ; le motif est obligatoire.
+ */
+function verifierRetrait(saisie: SaisieRetrait) {
+  const brut = saisie.amount;
+  const montant =
+    typeof brut === 'number'
+      ? brut
+      : typeof brut === 'string' && brut.trim() !== ''
+        ? Number(brut)
+        : Number.NaN;
+  if (
+    !Number.isFinite(montant)
+    || montant <= 0
+    || montant >= 1e12
+    || Math.round(montant * 100) / 100 !== montant
+  ) {
+    throw refus('MONTANT_INVALIDE', 'Le montant du retrait doit être un nombre supérieur à 0.');
+  }
+
+  const jour = typeof saisie.withdrawn_on === 'string' ? saisie.withdrawn_on.trim() : '';
+  const date = new Date(`${jour}T00:00:00.000Z`);
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(jour)
+    || Number.isNaN(date.getTime())
+    || date.toISOString().slice(0, 10) !== jour
+  ) {
+    throw refus('DATE_INVALIDE', 'La date du retrait est invalide (format attendu : AAAA-MM-JJ).');
+  }
+  if (jour > new Date().toISOString().slice(0, 10)) {
+    throw refus('DATE_FUTURE', 'Un retrait ne peut pas être daté dans le futur.');
+  }
+
+  const motif = typeof saisie.label === 'string' ? saisie.label.trim() : '';
+  if (!motif) throw refus('MOTIF_REQUIS', 'Le motif du retrait est obligatoire.');
+  if (motif.length > 255) throw refus('MOTIF_TROP_LONG', 'Le motif ne doit pas dépasser 255 caractères.');
+
+  const reference =
+    typeof saisie.reference === 'string' && saisie.reference.trim()
+      ? saisie.reference.trim()
+      : null;
+  if (reference && reference.length > 100) {
+    throw refus('REFERENCE_TROP_LONGUE', 'La référence ne doit pas dépasser 100 caractères.');
+  }
+
+  return { montant, jour, motif, reference };
 }

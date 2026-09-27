@@ -4,7 +4,20 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import axios from 'axios';
+import axios, { AxiosResponse } from 'axios';
+
+/**
+ * Taille des pages demandées à la liste marchande du guichet, acceptée par le guichet depuis sa
+ * version du 2026-09-26 (`MAX_PER_PAGE_PAIEMENTS`, `soka-pay/api/src/lib/schemas.ts`) : 9 323
+ * tentatives se lisent alors en 2 appels au lieu de 94.
+ * ⚠️ Une page de 5 000 ne répond vite (~0,5 s) que grâce à la requête JOINTE du guichet
+ * (`listMerchantPayments`) : avec l'ancien `findMany` + `include`, elle prenait 10 s, au-delà de
+ * `HUB_TIMEOUT_MS`. Ne pas agrandir l'un sans l'autre.
+ */
+export const TAILLE_PAGE_GUICHET = 5000;
+
+/** Plafond d'un guichet antérieur au 2026-09-26, qui refuse toute page plus grande (400). */
+export const TAILLE_PAGE_GUICHET_HISTORIQUE = 100;
 
 interface HubPaymentLinkResponse {
   id: string;
@@ -146,10 +159,19 @@ export class HubService {
    * comptable n'a pas le droit de toucher à l'argent, et une seconde route vers les statuts
    * finirait par diverger de `syncHubPaymentByTransactionId`.
    *
-   * ⚠️ Le guichet plafonne `perPage` à **100** : au-delà, il rejette la requête. La pagination
-   * est donc obligatoire, pas une optimisation.
+   * ⚠️ **Pages de 5 000** (`TAILLE_PAGE_GUICHET`). À 100 - l'ancien plafond du guichet -, la
+   * lecture complète coûtait 94 allers-retours au 2026-09-26, chacun rejouant côté guichet le tri
+   * et le comptage de tout l'historique : c'était le premier poste du « Rafraîchir » qui dépassait
+   * les 30 s du navigateur en production. Un guichet pas encore déployé refuse la grande page
+   * (400) : on relit alors par 100, pour que l'ordre de déploiement guichet / API soit indifférent.
    *
-   * @param maxPages garde-fou : borne le nombre d'allers-retours (défaut 200 = 20 000 lignes).
+   * 🚨 **Les tentatives sont dédoublonnées par `id`.** La liste est triée par date décroissante et
+   * paginée par décalage : un paiement arrivé entre deux pages décale tout d'un rang, et la
+   * dernière ligne d'une page revient en tête de la suivante. Comptée deux fois, elle gonflerait
+   * le brut ; écrite deux fois, elle violerait l'index unique de l'instantané.
+   *
+   * @param maxPages garde-fou : borne le nombre d'allers-retours (défaut 200 = 1 000 000 lignes,
+   *   20 000 en repli sur un ancien guichet).
    */
   async listGatewayPayments(
     { from, to, maxPages = 200 }: { from?: Date; to?: Date; maxPages?: number } = {},
@@ -158,14 +180,8 @@ export class HubService {
       throw new InternalServerErrorException('HUB_API_KEY non configurée');
     }
 
-    const perPage = 100;
-    const payments: HubGatewayPayment[] = [];
-    let page = 1;
-    let total = 0;
-    let totalPages = 1;
-
-    do {
-      const response = await axios.get<HubPaymentsPage>(`${this.apiRoot}/payments`, {
+    const lirePage = (page: number, perPage: number) =>
+      axios.get<HubPaymentsPage>(`${this.apiRoot}/payments`, {
         headers: { Authorization: `Bearer ${this.apiKey}` },
         params: {
           page,
@@ -176,6 +192,30 @@ export class HubService {
         timeout: this.timeoutMs,
       });
 
+    let perPage = TAILLE_PAGE_GUICHET;
+    const parId = new Map<string, HubGatewayPayment>();
+    let page = 1;
+    let total = 0;
+    let totalAuDepart: number | undefined;
+    let totalPages = 1;
+
+    do {
+      let response: AxiosResponse<HubPaymentsPage>;
+      try {
+        response = await lirePage(page, perPage);
+      } catch (e) {
+        // Seul le refus de la TAILLE de page, sur la première page, déclenche le repli : une
+        // autre panne du guichet doit remonter telle quelle, pas être rejouée en silence.
+        const tailleRefusee =
+          page === 1
+          && perPage > TAILLE_PAGE_GUICHET_HISTORIQUE
+          && axios.isAxiosError(e)
+          && e.response?.status === 400;
+        if (!tailleRefusee) throw e;
+        perPage = TAILLE_PAGE_GUICHET_HISTORIQUE;
+        response = await lirePage(page, perPage);
+      }
+
       const corps = response.data;
       if (!Array.isArray(corps?.data)) {
         throw new InternalServerErrorException(
@@ -183,16 +223,20 @@ export class HubService {
         );
       }
 
-      payments.push(...corps.data);
-      total = corps.meta?.total ?? payments.length;
+      for (const tentative of corps.data) parId.set(tentative.id, tentative);
+      total = corps.meta?.total ?? parId.size;
+      totalAuDepart ??= total;
       totalPages = corps.meta?.totalPages ?? 1;
       page += 1;
     } while (page <= totalPages && page <= maxPages);
 
+    const payments = [...parId.values()];
     // `complet` dit la vérité sur la couverture : une concordance bâtie sur une liste tronquée
-    // annoncerait un écart imaginaire. L'appelant doit pouvoir le signaler plutôt que de
-    // présenter un chiffre faux avec assurance.
-    return { payments, total, complet: payments.length >= total };
+    // annoncerait un écart imaginaire. Complet = toutes les pages lues ET au moins ce que le
+    // guichet annonçait au départ. Un paiement arrivé PENDANT la lecture est postérieur à la
+    // photo : ce n'est pas une troncature, et l'écran ne doit pas l'annoncer comme telle.
+    const complet = page > totalPages && payments.length >= (totalAuDepart ?? 0);
+    return { payments, total, complet };
   }
 
   /**

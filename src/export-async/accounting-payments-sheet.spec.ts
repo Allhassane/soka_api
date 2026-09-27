@@ -135,3 +135,34 @@ describe('construireFeuilleCompta - les colonnes du fichier', () => {
     ).not.toThrow();
   });
 });
+
+describe('construireFeuilleCompta - fiches membres supprimées (27/09)', () => {
+  // Trois paiements réussis sortaient sans payeur ni bénéficiaire : leurs fiches avaient été
+  // supprimées (doublons). L'identité est désormais rétablie en amont, et le fichier dit pourquoi.
+  it('dit dans une colonne « Observation » quelle fiche a été supprimée', () => {
+    const p = { ...paiement, actor_uuid: 'm-actor', beneficiary_uuid: 'm-benef' };
+
+    const { colonnes, lignes } = construireFeuilleCompta([p as never], arbres, new Set(['m-actor']));
+
+    expect(colonnes.map((c) => c.header)).toContain('Observation');
+    expect(lignes[0].observation).toBe('Fiche du payeur supprimée');
+    expect(lignes[0].actor_lastname).toBe('TRA');
+  });
+
+  it('sans aucune fiche, lit le nom gardé sur le paiement plutôt qu’une case vide', () => {
+    const p = {
+      ...paiement,
+      actor: null,
+      actor_uuid: 'm-x',
+      actor_name: 'ANSELME DE LOTUS KOSSA',
+      beneficiary: null,
+      beneficiary_uuid: 'm-x',
+      beneficiary_name: 'ANSELME DE LOTUS KOSSA',
+    };
+
+    const { lignes } = construireFeuilleCompta([p as never], new Map());
+
+    expect(lignes[0].actor_lastname).toBe('ANSELME DE LOTUS KOSSA');
+    expect(lignes[0].beneficiary_lastname).toBe('ANSELME DE LOTUS KOSSA');
+  });
+});

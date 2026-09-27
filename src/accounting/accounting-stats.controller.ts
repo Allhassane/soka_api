@@ -72,12 +72,19 @@ export class AccountingStatsController {
     required: false,
     enum: ['all', 'paid', 'pending', 'failed', 'cancelled'],
   })
+  @ApiQuery({
+    name: 'structure_uuid',
+    required: false,
+    description:
+      'Filtre « Structure » : structure du bénéficiaire, sous-arbre complet. Absent = toutes.',
+  })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
   async payments(
     @Query('type') type?: string,
     @Query('campaign_uuid') campaign?: string,
     @Query('bucket') bucket?: string,
+    @Query('structure_uuid') structure?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
@@ -85,8 +92,23 @@ export class AccountingStatsController {
       type: type ?? '',
       campaign_uuid: campaign?.trim() || undefined,
       bucket,
+      structure_uuid: structure?.trim() || undefined,
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
     });
+  }
+
+  @Get('structures')
+  @RequirePermissions(COMPTABILITE)
+  @ApiOperation({
+    summary: 'Structures proposées au filtre « Structure » : enfants directs d’une structure',
+    description:
+      'Sans `parent_uuid` : les régions. Toute l’organisation, sans borne de périmètre (le ' +
+      'module est global, et le rôle COMPTABLE n’est pas administrateur). Rend des noms, ' +
+      'jamais de membres ni d’effectifs.',
+  })
+  @ApiQuery({ name: 'parent_uuid', required: false })
+  async structures(@Query('parent_uuid') parent?: string) {
+    return this.accounting.listFilterStructures(parent);
   }
 }

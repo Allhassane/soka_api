@@ -11,6 +11,9 @@ import { PaymentService } from 'src/payments/payment.service';
 import { MemberEntity } from 'src/members/entities/member.entity';
 import { StructureService } from 'src/structure/structure.service';
 import { DonatePaymentEntity } from 'src/donate-payment/entities/donate-payment.entity';
+import { AccessScopeService } from 'src/access-scope/access-scope.service';
+import { PaymentEntity } from 'src/payments/entities/payment.entity';
+import { chiffresReussis } from 'src/payments/campaign-payments-figures';
 import { buildPaginationMeta } from 'src/shared/helpers/pagination-meta.helper';
 import { PaginateMeta } from 'src/shared/interfaces/paginate-meta.interface';
 
@@ -30,6 +33,8 @@ export class DonateService {
     @InjectRepository(DonatePaymentEntity)
     private readonly donatePaymentRepo: Repository<DonatePaymentEntity>,
     private readonly structureService: StructureService,
+    /** Périmètre canonique (service `@Global`) : borne les chiffres financiers de la fiche. */
+    private readonly accessScopeService: AccessScopeService,
   ) { }
 
   /**
@@ -171,11 +176,20 @@ export class DonateService {
   }
 
 
+  /**
+   * Détail d'une campagne Zaimu, avec - pour qui a le droit - les chiffres de SON périmètre.
+   *
+   * 🚨 RESPO-COMPTA-REGUL (2026-09-27) : même règle que les abonnements - les chiffres de la
+   * Comptabilité (`chiffresReussis`), bornés au périmètre CANONIQUE par le bénéficiaire.
+   *
+   * @param avecStatistiques le droit `zaimu_consulter_statistiques_campagne` (vérifié par le
+   *   contrôleur) : sans lui, la campagne seule, sans clé `statistics`.
+   */
   async findOne(
   uuid: string,
   admin_uuid: string,
   member_uuid: string,
-  structure_uuid: string,
+  avecStatistiques: boolean,
 ) {
   // Vérifier l'admin
     const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
@@ -189,85 +203,30 @@ export class DonateService {
     throw new NotFoundException('Don introuvable');
   }
 
-
-  // Vérifier structure_uuid
-  if (!structure_uuid) {
-    return donate;
-    //throw new NotFoundException('Structure introuvable.');
-  }
-
-  // Récupérer les sous-groupes du responsable
-  const sousGroups = await this.structureService.findByAllChildrens(structure_uuid);
-
-  let total_campaign_amount = 0;
-  let total_successful_payments = 0;
-  let total_successful_amount = 0;
-  let total_members_donated = 0;
-
-  // Total de la campagne de donation (global)
-  const campaignSum = await this.donatePaymentRepo
-    .createQueryBuilder('dp')
-    .select('SUM(dp.amount)', 'sum')
-    .where('dp.donate_uuid = :donate_uuid', { donate_uuid: donate.uuid })
-    .andWhere('dp.status = :status', { status: GlobalStatus.SUCCESS })
-    .getRawOne();
-
-
-  total_campaign_amount = Number(campaignSum?.sum ?? 0);
-
-  if (!sousGroups.length) {
-    await this.logService.logAction(
-      'donate-findOne',
-      admin.id,
-      `Consultation du don "${donate.name}"`,
-    );
-
-    return {
-      ...donate,
-      statistics: {
-        total_campaign_amount,
-        total_successful_payments: 0,
-        total_successful_amount: 0,
-        total_members_donated: 0,
-        root_structure_uuid: structure_uuid,
-        sous_groups_count: 0,
-      },
-    };
-  }
-
-  // Statistiques pour les sous-groupes du responsable
-  const responsibleStats = await this.donatePaymentRepo
-    .createQueryBuilder('dp')
-    .innerJoin('payments', 'p', 'p.uuid = dp.payment_uuid')
-    .innerJoin('members', 'actor', 'actor.uuid = p.actor_uuid')
-    .select('COUNT(DISTINCT dp.uuid)', 'count')
-    .addSelect('SUM(dp.amount)', 'sum')
-    .addSelect('COUNT(DISTINCT actor.uuid)', 'members_count')
-    .where('dp.donate_uuid = :donate_uuid', { donate_uuid: donate.uuid })
-    .andWhere('dp.status = :status', { status: GlobalStatus.SUCCESS })
-    .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups })
-    .getRawOne();
-
-  total_successful_payments = Number(responsibleStats?.count ?? 0);
-  total_successful_amount = Number(responsibleStats?.sum ?? 0);
-  total_members_donated = Number(responsibleStats?.members_count ?? 0);
-
-  // Journalisation
   await this.logService.logAction(
     'donate-findOne',
     admin.id,
     `Consultation du don "${donate.name}"`,
   );
 
+  if (!avecStatistiques) return donate;
+
+  const perimetre = await this.accessScopeService.perimetreFinancier(admin_uuid);
+  const paiements = this.donatePaymentRepo.manager.getRepository(PaymentEntity);
+  const [dansPerimetre, campagne] = await Promise.all([
+    chiffresReussis(paiements, donate.uuid, perimetre.structures),
+    chiffresReussis(paiements, donate.uuid, null),
+  ]);
+
   return {
     ...donate,
     statistics: {
-      total_campaign_amount,
-      total_successful_payments,
-      total_successful_amount,
-      total_members_donated,
-      root_structure_uuid: structure_uuid,
-      sous_groups_count: sousGroups.length,
+      total_campaign_amount: campagne.montant,
+      total_successful_payments: dansPerimetre.nombre,
+      total_successful_amount: dansPerimetre.montant,
+      total_members_donated: dansPerimetre.beneficiaires,
+      root_structure_uuid: perimetre.racine_uuid, // null = global (admin, national)
+      sous_groups_count: perimetre.structures ? perimetre.structures.size : null,
     },
   };
 }

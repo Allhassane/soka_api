@@ -18,7 +18,7 @@ import {
  *    permission Comptabilité.
  */
 
-function makeService(job?: any) {
+function makeService(job?: any, sousArbre: string[] = ['region-1']) {
   const jobsCrees: any[] = [];
   const exportJobService = {
     createJob: jest.fn((type: string, params: any, user_uuid: string) => {
@@ -31,11 +31,13 @@ function makeService(job?: any) {
   const exportProcessorService = {
     processAccountingPaymentsExport: jest.fn().mockResolvedValue(undefined),
   };
+  const accessScope = { sousArbre: jest.fn().mockResolvedValue(new Set(sousArbre)) };
   const service = new AccountingExportService(
     exportJobService as never,
     exportProcessorService as never,
+    accessScope as never,
   );
-  return { service, exportJobService, exportProcessorService, jobsCrees };
+  return { service, exportJobService, exportProcessorService, jobsCrees, accessScope };
 }
 
 describe('AccountingExportService.lancer', () => {
@@ -71,6 +73,46 @@ describe('AccountingExportService.lancer', () => {
     await expect(
       service.lancer({ type: 'boutique', campaign_uuid: 'camp-1' }, 'user-1'),
     ).rejects.toMatchObject({ response: { data: { code: 'TYPE_INVALIDE' } } });
+    expect(exportJobService.createJob).not.toHaveBeenCalled();
+  });
+
+  it('porte la structure choisie - le fichier rend les lignes FILTRÉES du tableau', async () => {
+    const { service, jobsCrees, accessScope } = makeService();
+
+    await service.lancer(
+      {
+        type: 'subscription',
+        campaign_uuid: 'camp-1',
+        bucket: 'paid',
+        structure_uuid: 'region-1',
+      },
+      'user-1',
+    );
+
+    expect(accessScope.sousArbre).toHaveBeenCalledWith('region-1');
+    expect(jobsCrees[0].params).toMatchObject({ bucket: 'paid', structure_uuid: 'region-1' });
+  });
+
+  it('sans structure choisie, le job n’en porte aucune (toutes les structures)', async () => {
+    const { service, jobsCrees, accessScope } = makeService();
+
+    await service.lancer({ type: 'subscription', campaign_uuid: 'camp-1' }, 'user-1');
+
+    expect(accessScope.sousArbre).not.toHaveBeenCalled();
+    expect(jobsCrees[0].params.structure_uuid).toBeUndefined();
+  });
+
+  it('refuse une structure inconnue SANS créer de job', async () => {
+    // Le refus s'affiche à l'écran ; en arrière-plan, il finirait en job FAILED que personne
+    // ne regarde.
+    const { service, exportJobService } = makeService(undefined, []);
+
+    await expect(
+      service.lancer(
+        { type: 'subscription', campaign_uuid: 'camp-1', structure_uuid: 'nexiste-pas' },
+        'user-1',
+      ),
+    ).rejects.toMatchObject({ response: { data: { code: 'STRUCTURE_INCONNUE' } } });
     expect(exportJobService.createJob).not.toHaveBeenCalled();
   });
 

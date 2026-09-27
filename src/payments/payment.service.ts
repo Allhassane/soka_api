@@ -19,6 +19,12 @@ import { StructureService } from 'src/structure/structure.service';
 import { DonatePaymentEntity } from 'src/donate-payment/entities/donate-payment.entity';
 import { SubscriptionPaymentEntity } from 'src/subscription-payment/entities/subscription-payment.entity';
 import { TransactionWithDetails } from './types/transaction-with-details.type';
+import {
+  appliquerPerimetreBeneficiaire,
+  appliquerRechercheNoms,
+  chiffresReussis,
+} from './campaign-payments-figures';
+import { retablirFichesSupprimees } from './fiches-supprimees';
 import axios from 'axios';
 import * as ExcelJS from 'exceljs';
 import { Response } from 'express';
@@ -1334,10 +1340,17 @@ export class PaymentService {
     }
 */
 
+/**
+ * Paiements d'une campagne vus par un responsable (fiches de campagne abonnement ET zaimu).
+ *
+ * 🚨 RESPO-COMPTA-REGUL (2026-09-27) : périmètre CANONIQUE (`perimetreFinancier`), rattachement
+ * par le BÉNÉFICIAIRE, et totaux calculés comme la Comptabilité (`chiffresReussis`). Avant :
+ * racine `responsibilities[0]`, sous-groupes seuls, payeur, totaux lus sur la ligne métier - et,
+ * sans sous-groupe sous la racine, AUCUN filtre : toute la campagne, téléphones compris.
+ */
 async findTransactionsForSubGroups(
   source_uuid: string,
   admin_uuid: string,
-  structure_uuid: string,
   page = 1,
   limit = 50,
   search?: string | undefined,
@@ -1348,14 +1361,8 @@ async findTransactionsForSubGroups(
   if (!admin) {
     throw new NotFoundException("Identifiant de l'auteur introuvable");
   }
-  const member = await this.memberRepo.findOne({ where: { uuid: admin.member_uuid } });
+  const perimetre = await this.accessScopeService.perimetreFinancier(admin_uuid);
 
-  if (!member) {
-    throw new NotFoundException("Identifiant du membre introuvable");
-  }
-  const sousGroups = await this.structureService.findByAllChildrens(structure_uuid);
-
-  // Query principale avec recherche
   const qb = this.paymentRepo
     .createQueryBuilder('p')
     .leftJoinAndSelect('p.actor', 'actor')
@@ -1363,25 +1370,8 @@ async findTransactionsForSubGroups(
     .leftJoinAndSelect('p.beneficiary', 'beneficiary')
     .leftJoinAndSelect('beneficiary.structure', 'beneficiaryStructure')
     .where('p.source_uuid = :source_uuid', { source_uuid });
-
-  if (sousGroups.length) {
-    qb.andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups });
-  }
-
-  //  Ajouter la recherche sur actor et beneficiary
-  if (search && search.trim() !== '') {
-    qb.andWhere(
-      `(
-        LOWER(actor.firstname) LIKE LOWER(:search) OR
-        LOWER(actor.lastname) LIKE LOWER(:search) OR
-        LOWER(beneficiary.firstname) LIKE LOWER(:search) OR
-        LOWER(beneficiary.lastname) LIKE LOWER(:search) OR
-        CONCAT(LOWER(actor.firstname), ' ', LOWER(actor.lastname)) LIKE LOWER(:search) OR
-        CONCAT(LOWER(beneficiary.firstname), ' ', LOWER(beneficiary.lastname)) LIKE LOWER(:search)
-      )`,
-      { search: `%${search.trim()}%` }
-    );
-  }
+  appliquerPerimetreBeneficiaire(qb, perimetre.structures);
+  appliquerRechercheNoms(qb, search);
 
   if (payment_status) {
     qb.andWhere('p.payment_status = :payment_status', { payment_status });
@@ -1392,116 +1382,19 @@ async findTransactionsForSubGroups(
     .take(limit);
 
   const [payments, total] = await qb.getManyAndCount();
+  // La jointure écarte d'office une fiche supprimée : on la recharge pour ne pas afficher une
+  // ligne anonyme (doublon supprimé après le paiement).
+  const fichesSupprimees = await retablirFichesSupprimees(payments, this.memberRepo);
 
-  let total_campaign_amount = 0;
-  let total_successful_payments = 0;
-  let total_successful_amount = 0;
-
-  const samplePayment = await this.paymentRepo.findOne({
-    where: { source_uuid },
-  });
-
-  if (samplePayment) {
-    if (samplePayment.source === PaymentSource.DONATION) {
-      // Total de la campagne (tous statuts)
-      const donationSum = await this.donatePaymentRepo
-        .createQueryBuilder('d')
-        .select('SUM(d.amount)', 'sum')
-        .where('d.donate_uuid = :id', { id: source_uuid })
-        .andWhere('d.status = :status', { status: GlobalStatus.SUCCESS })
-        .getRawOne();
-
-      total_campaign_amount = Number(donationSum?.sum ?? 0);
-
-      //  Total des paiements réussis AVEC FILTRE de recherche
-      const successfulDonationsQb = this.donatePaymentRepo
-        .createQueryBuilder('d')
-        .innerJoin('payments', 'p', 'p.uuid = d.payment_uuid')
-        .innerJoin('members', 'actor', 'actor.uuid = p.actor_uuid')
-        .leftJoin('members', 'beneficiary', 'beneficiary.uuid = p.beneficiary_uuid')
-        .select('COUNT(DISTINCT d.uuid)', 'count')
-        .addSelect('SUM(d.amount)', 'sum')
-        .where('d.donate_uuid = :id', { id: source_uuid })
-        .andWhere('d.status = :status', { status: GlobalStatus.SUCCESS });
-
-      if (sousGroups.length) {
-        successfulDonationsQb.andWhere(
-          'actor.structure_uuid IN (:...groups)',
-          { groups: sousGroups },
-        );
-      }
-
-      //  Appliquer le même filtre de recherche
-      if (search && search.trim() !== '') {
-        successfulDonationsQb.andWhere(
-          `(
-            LOWER(actor.firstname) LIKE LOWER(:search) OR
-            LOWER(actor.lastname) LIKE LOWER(:search) OR
-            LOWER(beneficiary.firstname) LIKE LOWER(:search) OR
-            LOWER(beneficiary.lastname) LIKE LOWER(:search) OR
-            CONCAT(LOWER(actor.firstname), ' ', LOWER(actor.lastname)) LIKE LOWER(:search) OR
-            CONCAT(LOWER(beneficiary.firstname), ' ', LOWER(beneficiary.lastname)) LIKE LOWER(:search)
-          )`,
-          { search: `%${search.trim()}%` }
-        );
-      }
-
-      const successfulDonations = await successfulDonationsQb.getRawOne();
-
-      total_successful_payments = Number(successfulDonations?.count ?? 0);
-      total_successful_amount = Number(successfulDonations?.sum ?? 0);
-    }
-
-    if (samplePayment.source === PaymentSource.SUBSCRIPTION) {
-      // Total de la campagne (tous statuts)
-      const subscriptionSum = await this.subscriptionPaymentRepo
-        .createQueryBuilder('s')
-        .select('SUM(s.amount)', 'sum')
-        .where('s.subscription_uuid = :id', { id: source_uuid })
-        .andWhere('s.status = :status', { status: GlobalStatus.SUCCESS })
-        .getRawOne();
-
-      total_campaign_amount = Number(subscriptionSum?.sum ?? 0);
-
-      //  Total des paiements réussis AVEC FILTRE de recherche
-      const successfulSubscriptionsQb = this.subscriptionPaymentRepo
-        .createQueryBuilder('s')
-        .innerJoin('payments', 'p', 'p.uuid = s.payment_uuid')
-        .innerJoin('members', 'actor', 'actor.uuid = p.actor_uuid')
-        .leftJoin('members', 'beneficiary', 'beneficiary.uuid = p.beneficiary_uuid')
-        .select('COUNT(DISTINCT s.uuid)', 'count')
-        .addSelect('SUM(s.amount)', 'sum')
-        .where('s.subscription_uuid = :id', { id: source_uuid })
-        .andWhere('s.status = :status', { status: GlobalStatus.SUCCESS });
-
-      if (sousGroups.length) {
-        successfulSubscriptionsQb.andWhere(
-          'actor.structure_uuid IN (:...groups)',
-          { groups: sousGroups },
-        );
-      }
-
-      //  Appliquer le même filtre de recherche
-      if (search && search.trim() !== '') {
-        successfulSubscriptionsQb.andWhere(
-          `(
-            LOWER(actor.firstname) LIKE LOWER(:search) OR
-            LOWER(actor.lastname) LIKE LOWER(:search) OR
-            LOWER(beneficiary.firstname) LIKE LOWER(:search) OR
-            LOWER(beneficiary.lastname) LIKE LOWER(:search) OR
-            CONCAT(LOWER(actor.firstname), ' ', LOWER(actor.lastname)) LIKE LOWER(:search) OR
-            CONCAT(LOWER(beneficiary.firstname), ' ', LOWER(beneficiary.lastname)) LIKE LOWER(:search)
-          )`,
-          { search: `%${search.trim()}%` }
-        );
-      }
-
-      const successfulSubscriptions = await successfulSubscriptionsQb.getRawOne();
-
-      total_successful_payments = Number(successfulSubscriptions?.count ?? 0);
-      total_successful_amount = Number(successfulSubscriptions?.sum ?? 0);
-    }
-  }
+  // Les totaux : même périmètre, même recherche, vérité des paiements - le chiffre réussi est
+  // donc exactement le nombre de lignes « payé » que montre cette liste.
+  const [reussis, campagne] = await Promise.all([
+    chiffresReussis(this.paymentRepo, source_uuid, perimetre.structures, search),
+    chiffresReussis(this.paymentRepo, source_uuid, null),
+  ]);
+  const total_campaign_amount = campagne.montant;
+  const total_successful_payments = reussis.nombre;
+  const total_successful_amount = reussis.montant;
 
   const result: TransactionWithDetails[] = [];
 
@@ -1543,6 +1436,7 @@ async findTransactionsForSubGroups(
           structure: p.actor.structure
             ? { uuid: p.actor.structure.uuid, name: p.actor.structure.name }
             : null,
+          fiche_supprimee: fichesSupprimees.has(p.actor.uuid),
         }
         : null,
 
@@ -1558,6 +1452,7 @@ async findTransactionsForSubGroups(
               name: p.beneficiary.structure.name,
             }
             : null,
+          fiche_supprimee: fichesSupprimees.has(p.beneficiary.uuid),
         }
         : null,
 
@@ -1588,8 +1483,8 @@ async findTransactionsForSubGroups(
     total_successful_amount, // Change avec le filtre
     page,
     limit,
-    root_structure_uuid: member.structure_uuid,
-    sous_groups: sousGroups,
+    // Racine du périmètre canonique ; null = global (administrateur, national).
+    root_structure_uuid: perimetre.racine_uuid,
     source_uuid,
     filters: {
       search: search?.trim() || null,
@@ -1910,11 +1805,12 @@ async findTransactionsForSubGroupsExport(
   async queueTransactionsExport(
     source_uuid: string,
     admin_uuid: string,
-    member_uuid: string,
-    member_structure_uuid: string,
     status?: GlobalStatus,
-
   ) {
+    // Le nom du fichier suit la racine du périmètre CANONIQUE ; le filtrage, lui, est refait par
+    // le traitement à partir de `admin_uuid` (RESPO-COMPTA-REGUL) - jamais `responsibilities[0]`.
+    const member_structure_uuid =
+      (await this.accessScopeService.perimetreFinancier(admin_uuid)).racine_uuid;
     // Créer le job
     const job = await this.exportJobService.createJob(
       'transactions',
@@ -1945,12 +1841,13 @@ async findTransactionsForSubGroupsExport(
 
     //console.log('Source name for export file:', source_name,source_uuid);
 
-    let file_name = await this.generateTransactionExportFileName(source_name,member_structure_uuid,filterParams);
+    // Périmètre global (admin, national) : pas de structure dans le nom du fichier.
+    let file_name = await this.generateTransactionExportFileName(source_name, member_structure_uuid ?? '', filterParams);
     //console.log('Nom de fichier généré pour l\'export :', file_name);
     // Lancer le traitement en arrière-plan (sans await)
     setImmediate(() => {
       //console.log('Démarrage du traitement d\'export en arrière-plan pour le job', file_name);
-      this.exportProcessorService.processTransactionsExport(job.uuid, member_uuid,member_structure_uuid,file_name)
+      this.exportProcessorService.processTransactionsExport(job.uuid, file_name)
         .catch(error => console.error('Export error:', error));
     });
 

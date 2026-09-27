@@ -1,7 +1,9 @@
+import { IsNull } from 'typeorm';
 import { AccountingService } from './accounting.service';
 import { MatchStatus } from './entities/acc-hub-snapshot-line.entity';
 import { SnapshotKind } from './entities/acc-hub-snapshot.entity';
 import { parseHub2Export, recomposerDate } from './hub2-export.parser';
+import { appliquerFiltresPaiementsCompta } from '../export-async/accounting-payments-query';
 import * as XLSX from 'xlsx';
 
 /**
@@ -27,9 +29,22 @@ function makeService(options: {
   dernierSnapshot?: any;
   campagnesAbonnements?: any[];
   campagnesDons?: any[];
+  /** Somme des retraits actifs (0 par défaut). */
+  totalRetraits?: number | null;
+  retraits?: any[];
+  retraitExistant?: any;
+  /** Sous-arbre rendu par `AccessScopeService.sousArbre` (filtre « Structure »). */
+  sousArbre?: string[];
+  /** Structure sans parent (la racine) ; `null` = aucune. */
+  racine?: any;
+  /** Le parent demandé à la cascade existe-t-il ? */
+  parentExiste?: boolean;
+  /** Lignes brutes rendues pour les enfants d'une structure. */
+  enfants?: any[];
 } = {}) {
   const lignesEcrites: any[] = [];
   const snapshotsEcrits: any[] = [];
+  const retraitsEcrits: any[] = [];
 
   const snapshotRepo = {
     create: jest.fn((o) => ({ ...o, uuid: 'snap-uuid', created_at: new Date('2026-08-10T22:00:00Z') })),
@@ -84,6 +99,43 @@ function makeService(options: {
     }),
   };
 
+  const retraitQb = {
+    select: jest.fn().mockReturnThis(),
+    // `COALESCE(SUM(…), 0)` : MySQL rend le total en texte, et '0' quand il n'y a aucun retrait.
+    getRawOne: jest.fn().mockResolvedValue({ total: String(options.totalRetraits ?? 0) }),
+  };
+  const withdrawalRepo = {
+    createQueryBuilder: jest.fn().mockReturnValue(retraitQb),
+    find: jest.fn().mockResolvedValue(options.retraits ?? []),
+    findOne: jest.fn().mockResolvedValue(options.retraitExistant ?? null),
+    create: jest.fn((o) => ({ ...o })),
+    save: jest.fn((o) => {
+      retraitsEcrits.push(o);
+      return Promise.resolve({ ...o, uuid: 'retrait-uuid', created_at: new Date('2026-09-26T22:00:00Z') });
+    }),
+    update: jest.fn().mockResolvedValue({ affected: 1 }),
+  };
+
+  // Lecture seule, elle aussi : la cascade du filtre « Structure » ne lit que des noms.
+  const structureQb = {
+    leftJoin: jest.fn().mockReturnThis(),
+    select: jest.fn().mockReturnThis(),
+    addSelect: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    getRawMany: jest.fn().mockResolvedValue(options.enfants ?? []),
+  };
+  const structureRepo = {
+    findOne: jest
+      .fn()
+      .mockResolvedValue(options.racine === undefined ? { uuid: 'national' } : options.racine),
+    exists: jest.fn().mockResolvedValue(options.parentExiste ?? true),
+    createQueryBuilder: jest.fn().mockReturnValue(structureQb),
+  };
+  const accessScope = {
+    sousArbre: jest.fn().mockResolvedValue(new Set(options.sousArbre ?? [])),
+  };
+
   const service = new AccountingService(
     snapshotRepo as never,
     lineRepo as never,
@@ -91,11 +143,15 @@ function makeService(options: {
     subscriptionRepo as never,
     donateRepo as never,
     hubService as never,
+    withdrawalRepo as never,
+    structureRepo as never,
+    accessScope as never,
   );
 
   return {
     service, snapshotRepo, lineRepo, paymentRepo, subscriptionRepo, donateRepo,
-    hubService, lignesEcrites, snapshotsEcrits, paymentQb,
+    hubService, lignesEcrites, snapshotsEcrits, paymentQb, withdrawalRepo, retraitsEcrits,
+    structureRepo, structureQb, accessScope,
   };
 }
 
@@ -164,13 +220,12 @@ describe('Concordance - appariement', () => {
 
     expect(snapshotsEcrits[0].matched_count).toBe(1);
     expect(snapshotsEcrits[0].gap_gross).toBe('0');
-    // 🚨 C'est l'identifiant HUB2 qui est conservé, jamais celui du guichet : seul le premier
-    // figure dans l'export HUB2 (1 383 des 1 400 lignes s'apparient par lui, 0 par l'autre).
-    expect(lignesEcrites[0].hub_payment_id).toBe('pay_hub2_25c');
+    // Une ligne qui concorde n'est pas conservée : seul son compte figure sur l'en-tête.
+    expect(lignesEcrites).toHaveLength(0);
   });
 
   it('classe en `unmatched_hub` une transaction que l\'application ignore', async () => {
-    const { service, snapshotsEcrits } = makeService({
+    const { service, snapshotsEcrits, lignesEcrites } = makeService({
       appCount: 0, appGross: 0, appPayments: [],
       gatewayPayments: [{
         id: 'pay_x', linkId: 'plink_inconnu', status: 'successful', amount: 15000,
@@ -182,6 +237,9 @@ describe('Concordance - appariement', () => {
     await service.refreshFromGateway();
     expect(snapshotsEcrits[0].unmatched_hub_count).toBe(1);
     expect(snapshotsEcrits[0].gap_gross).toBe('15000');
+    // 🚨 C'est l'identifiant HUB2 qui est conservé, jamais celui du guichet : seul le premier
+    // figure dans l'export HUB2 (1 383 des 1 400 lignes s'apparient par lui, 0 par l'autre).
+    expect(lignesEcrites[0].hub_payment_id).toBe('pay_h');
   });
 
   it('🚨 le désaccord de STATUT prime sur celui de montant', async () => {
@@ -222,10 +280,9 @@ describe('Concordance - appariement', () => {
 
     await service.refreshFromGateway();
 
-    expect(lignesEcrites.map((l) => l.match_status)).toEqual([
-      MatchStatus.MATCHED, MatchStatus.MATCHED,
-    ]);
+    expect(snapshotsEcrits[0].matched_count).toBe(2);
     expect(snapshotsEcrits[0].mismatch_count).toBe(0);
+    expect(lignesEcrites).toHaveLength(0);
   });
 
   it('🚨 mais un paiement crédité SANS aucune réussite au guichet reste une divergence', async () => {
@@ -254,6 +311,76 @@ describe('Concordance - appariement', () => {
   });
 });
 
+describe('Concordance - ce que coûte un « Rafraîchir »', () => {
+  // Le 26/09, le bouton échouait en production : plus de 30 s (le délai du navigateur) pour relire
+  // ET réécrire tout l'historique du guichet - 9 323 tentatives - à chaque clic. Ces tests
+  // verrouillent les gestes qui ramènent le clic à quelques secondes.
+  const tentative = (id: string, linkId: string, status = 'successful') => ({
+    id, linkId, status, amount: 15000, currency: 'XOF', hub2PaymentId: `hub_${id}`,
+    createdAt: '2026-09-26T10:00:00.000Z', updatedAt: '2026-09-26T10:00:00.000Z',
+  });
+
+  it('🚨 n\'écrit QUE les lignes en écart ; l\'en-tête compte toujours toutes les lignes', async () => {
+    // Au 25/09 : 8 564 lignes appariées sur 8 825, écrites à chaque clic et lues par personne -
+    // 10 à 17 s d'écriture mesurées en production.
+    const { service, snapshotsEcrits, lignesEcrites } = makeService({
+      appCount: 2,
+      appGross: 30000,
+      appPayments: [
+        { uuid: 'p1', transaction_id: 'plink_1', total_amount: 15000, payment_status: 'paid' },
+        { uuid: 'p2', transaction_id: 'plink_2', total_amount: 15000, payment_status: 'paid' },
+      ],
+      gatewayPayments: [
+        tentative('g1', 'plink_1'),
+        tentative('g2', 'plink_2'),
+        tentative('g3', 'plink_inconnu', 'failed'),
+      ],
+    });
+
+    await service.refreshFromGateway();
+
+    expect(lignesEcrites.map((l) => l.match_status)).toEqual([MatchStatus.UNMATCHED_HUB]);
+    expect(snapshotsEcrits[0]).toMatchObject({
+      hub_total_count: 3,
+      matched_count: 2,
+      unmatched_hub_count: 1,
+      mismatch_count: 0,
+    });
+  });
+
+  it('apparie en UNE seule lecture de `payments`, quel que soit le nombre de liens', async () => {
+    // `payments.transaction_id` n'a pas d'index : chaque paquet `IN (500)` balayait toute la
+    // table - 17 balayages pour les 9 323 tentatives du 26/09.
+    const liens = Array.from({ length: 1200 }, (_, i) => tentative(`g${i}`, `plink_${i}`));
+    const { service, paymentQb } = makeService({ gatewayPayments: liens });
+
+    await service.refreshFromGateway();
+
+    expect(paymentQb.getMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('lit la liste du guichet, le solde et le côté application EN MÊME TEMPS', async () => {
+    // En série, le relevé de solde (aller-retour guichet → HUB2) et l'agrégat s'ajoutaient à la
+    // lecture de la liste. Partis ensemble, ils sont aussi pris au plus près du même instant.
+    const { service, hubService, paymentQb } = makeService();
+    let livrerListe!: (v: unknown) => void;
+    hubService.listGatewayPayments.mockReturnValue(
+      new Promise((resolve) => {
+        livrerListe = resolve;
+      }),
+    );
+
+    const rafraichissement = service.refreshFromGateway();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(hubService.getGatewayBalance).toHaveBeenCalled();
+    expect(paymentQb.getRawOne).toHaveBeenCalled();
+
+    livrerListe({ payments: [], total: 0, complet: true });
+    await rafraichissement;
+  });
+});
+
 describe('Concordance - le décompte affiché', () => {
   it('🚨 fait apparaître le solde d\'ouverture comme une LIGNE du décompte', async () => {
     // Le rapprochement du 09/08 ne s'est fermé qu'avec les 196 XOF d'ouverture. Enfouis dans une
@@ -276,6 +403,8 @@ describe('Concordance - le décompte affiché', () => {
       solde_ouverture: 196,
       encaissements: 11600301,
       frais: -232007,
+      // Aucun retrait enregistré : la ligne existe et vaut 0, elle ne disparaît pas.
+      retraits: 0,
       solde_attendu: 11368490,
     });
     // L'écart constaté sur les données réelles : les 268 paiements d'essai supprimés de la base.
@@ -460,8 +589,8 @@ describe('Tableau de bord - KPI par campagne', () => {
       type: 'subscription', bucket: 'pending', page: 2, limit: 50,
     });
 
-    expect(paymentQb.andWhere).toHaveBeenCalledWith('p.payment_status = :statut', {
-      statut: 'pending',
+    expect(paymentQb.andWhere).toHaveBeenCalledWith('p.payment_status = :seau', {
+      seau: 'pending',
     });
     expect(paymentQb.skip).toHaveBeenCalledWith(50);
     expect(paymentQb.take).toHaveBeenCalledWith(50);
@@ -483,6 +612,262 @@ describe('Tableau de bord - KPI par campagne', () => {
     expect(liste[0]).toMatchObject({ uuid: 'd1', name: 'Zaimu 2026', category: 'libre' });
     expect(donateRepo.find).toHaveBeenCalled();
     expect(subscriptionRepo.find).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * **Filtre « Structure » du bloc de lignes** (2026-09-27) : le tableau ET le fichier exporté
+ * portent les lignes du seau limitées à la structure choisie - structure du BÉNÉFICIAIRE,
+ * sous-arbre complet, la règle de RESPO-COMPTA-REGUL.
+ */
+describe('Tableau de bord - filtre « Structure » des lignes', () => {
+  it('🚨 l’écran et l’export posent EXACTEMENT les mêmes conditions', async () => {
+    // Le fichier doit rendre les lignes du tableau, ni plus ni moins : les deux passent par
+    // `appliquerFiltresPaiementsCompta`, il n'y a plus de copie à tenir synchronisée.
+    const { service, paymentQb } = makeService({ sousArbre: ['region-1', 'district-9'] });
+
+    await service.campaignPayments({
+      type: 'subscription',
+      campaign_uuid: 'camp-1',
+      bucket: 'failed',
+      structure_uuid: 'region-1',
+    });
+
+    const fichier: any = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+    };
+    appliquerFiltresPaiementsCompta(fichier, {
+      type: 'subscription',
+      campaign_uuid: 'camp-1',
+      bucket: 'failed',
+      structures: new Set(['region-1', 'district-9']),
+    });
+
+    expect(paymentQb.where.mock.calls).toEqual(fichier.where.mock.calls);
+    expect(paymentQb.andWhere.mock.calls).toEqual(fichier.andWhere.mock.calls);
+  });
+
+  it('borne au sous-arbre COMPLET de la structure choisie, par le bénéficiaire', async () => {
+    const { service, paymentQb, accessScope } = makeService({
+      sousArbre: ['region-1', 'groupe-7'],
+    });
+
+    await service.campaignPayments({
+      type: 'donation',
+      bucket: 'paid',
+      structure_uuid: 'region-1',
+    });
+
+    expect(accessScope.sousArbre).toHaveBeenCalledWith('region-1');
+    expect(paymentQb.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('p.beneficiary_uuid IN'),
+      { perimetreStructures: ['region-1', 'groupe-7'] },
+    );
+  });
+
+  it('sans structure choisie : toutes les lignes, aucun sous-arbre calculé', async () => {
+    const { service, paymentQb, accessScope } = makeService();
+
+    await service.campaignPayments({ type: 'subscription', bucket: 'paid' });
+
+    expect(accessScope.sousArbre).not.toHaveBeenCalled();
+    const conditions = paymentQb.andWhere.mock.calls.map((c: any[]) => c[0]);
+    expect(conditions.some((c: string) => /beneficiary_uuid/.test(c))).toBe(false);
+  });
+
+  it('structure inconnue : refus lisible, et aucune ligne lue', async () => {
+    const { service, paymentQb } = makeService({ sousArbre: [] });
+
+    await expect(
+      service.campaignPayments({
+        type: 'subscription',
+        bucket: 'paid',
+        structure_uuid: 'nexiste-pas',
+      }),
+    ).rejects.toMatchObject({ response: { data: { code: 'STRUCTURE_INCONNUE' } } });
+    expect(paymentQb.getManyAndCount).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * **La cascade du filtre « Structure »** : les noms des structures, toute l'organisation.
+ * Le rôle COMPTABLE n'est pas administrateur : la cascade partagée (`/structure/childrens`) est
+ * bornée au périmètre du connecté et se viderait, sans message, dès le deuxième palier.
+ */
+describe('Tableau de bord - structures proposées au filtre', () => {
+  it('sans parent : les enfants de la racine (les régions), avec leur palier', async () => {
+    const { service, structureQb } = makeService({
+      racine: { uuid: 'national' },
+      enfants: [{ uuid: 'r1', name: 'ABIDJAN 1', palier: 'REGION' }],
+    });
+
+    const liste = await service.listFilterStructures();
+
+    expect(structureQb.where).toHaveBeenCalledWith('s.parent_uuid = :parent', {
+      parent: 'national',
+    });
+    expect(liste).toEqual([{ uuid: 'r1', name: 'ABIDJAN 1', palier: 'REGION' }]);
+  });
+
+  it('avec parent : ses enfants directs', async () => {
+    const { service, structureQb } = makeService({
+      enfants: [{ uuid: 'cr1', name: 'CR ABIDJAN NORD', palier: 'CENTRE_REGIONAL' }],
+    });
+
+    const liste = await service.listFilterStructures('r1');
+
+    expect(structureQb.where).toHaveBeenCalledWith('s.parent_uuid = :parent', { parent: 'r1' });
+    expect(liste).toEqual([{ uuid: 'cr1', name: 'CR ABIDJAN NORD', palier: 'CENTRE_REGIONAL' }]);
+  });
+
+  it('parent inconnu : refus lisible, pas une liste vide', async () => {
+    const { service, structureQb } = makeService({ parentExiste: false });
+
+    await expect(service.listFilterStructures('nexiste-pas')).rejects.toMatchObject({
+      response: { data: { code: 'STRUCTURE_INCONNUE' } },
+    });
+    expect(structureQb.getRawMany).not.toHaveBeenCalled();
+  });
+
+  it('aucune racine en base : liste vide, sans requête d’enfants', async () => {
+    const { service, structureQb } = makeService({ racine: null });
+
+    await expect(service.listFilterStructures()).resolves.toEqual([]);
+    expect(structureQb.getRawMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('Compte de retrait', () => {
+  // Le 16/09, 100 000 F ont quitté le compte de collecte HUB2 : du 16 au 25/09, le solde relevé
+  // est resté 100 001 F sous le calcul (initial + brut - commission) et la situation globale était
+  // rouge en production. Un retrait n'est ni un encaissement ni une commission : il a sa ligne.
+  const instantane2509 = {
+    uuid: 's-2509', kind: SnapshotKind.GATEWAY, label: 'Guichet SOKA Pay',
+    created_at: new Date('2026-09-25T16:35:54Z'), truncated: false,
+    hub_success_count: 4804, hub_total_count: 8825, opening_balance: '196',
+    hub_gross: '69062301', hub_fees: '1381246.02', hub_net: '67681054.98',
+    gateway_balance: '67581250', period_start: null, period_end: null,
+    matched_count: 8564, unmatched_hub_count: 260, unmatched_app_count: 0, mismatch_count: 1,
+  };
+  const saisie = (over: Record<string, unknown> = {}) => ({
+    amount: 100000, withdrawn_on: '2026-09-16', label: 'Retrait vers le compte bancaire', ...over,
+  });
+  const refusAvecCode = (code: string) =>
+    expect.objectContaining({ response: expect.objectContaining({ data: expect.objectContaining({ code }) }) });
+
+  it('🚨 le décompte retranche les retraits : initial + brut - commission - retraits = net attendu', async () => {
+    const { service } = makeService({ dernierSnapshot: instantane2509, totalRetraits: 100000 });
+
+    const vue = await service.overview();
+
+    expect(vue.gateway?.decompte).toEqual({
+      solde_ouverture: 196,
+      encaissements: 69062301,
+      frais: -1381246.02,
+      retraits: -100000,
+      solde_attendu: 67581250.98,
+    });
+    // Le solde relevé ce jour-là retombe sur le calcul, à l'arrondi des frais près.
+    expect(Math.abs(67581250 - (vue.gateway?.decompte.solde_attendu ?? 0))).toBeLessThan(1);
+  });
+
+  it('enregistre un retrait : montant, jour, motif, référence et auteur de la saisie', async () => {
+    const { service, retraitsEcrits } = makeService();
+
+    const retrait = await service.createWithdrawal(
+      saisie({ label: '  Retrait vers le compte bancaire  ', reference: ' TRF-0916 ' }),
+      'auteur-uuid',
+    );
+
+    expect(retraitsEcrits[0]).toMatchObject({
+      amount: '100000.00',
+      withdrawn_on: '2026-09-16',
+      label: 'Retrait vers le compte bancaire',
+      reference: 'TRF-0916',
+      created_by_uuid: 'auteur-uuid',
+    });
+    expect(retrait).toMatchObject({
+      uuid: 'retrait-uuid', amount: 100000, withdrawn_on: '2026-09-16', reference: 'TRF-0916',
+    });
+  });
+
+  it('enregistre une référence absente ou vide comme NULL', async () => {
+    const { service, retraitsEcrits } = makeService();
+    await service.createWithdrawal(saisie({ reference: '   ' }), 'a');
+    expect(retraitsEcrits[0].reference).toBeNull();
+  });
+
+  it.each([[0], [-5000], ['abc'], [undefined], [12.345], [1e13]])(
+    'refuse le montant %p',
+    async (montant) => {
+      const { service, withdrawalRepo } = makeService();
+      await expect(service.createWithdrawal(saisie({ amount: montant }), 'a')).rejects.toEqual(
+        refusAvecCode('MONTANT_INVALIDE'),
+      );
+      expect(withdrawalRepo.save).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([['16/09/2026'], ['2026-02-30'], [undefined]])('refuse la date %p', async (jour) => {
+    const { service, withdrawalRepo } = makeService();
+    await expect(service.createWithdrawal(saisie({ withdrawn_on: jour }), 'a')).rejects.toEqual(
+      refusAvecCode('DATE_INVALIDE'),
+    );
+    expect(withdrawalRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('refuse un retrait daté dans le futur', async () => {
+    const demain = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    const { service } = makeService();
+    await expect(service.createWithdrawal(saisie({ withdrawn_on: demain }), 'a')).rejects.toEqual(
+      refusAvecCode('DATE_FUTURE'),
+    );
+  });
+
+  it('exige un motif', async () => {
+    const { service } = makeService();
+    await expect(service.createWithdrawal(saisie({ label: '   ' }), 'a')).rejects.toEqual(
+      refusAvecCode('MOTIF_REQUIS'),
+    );
+  });
+
+  it('liste les retraits actifs, les plus récents d\'abord, avec leur total', async () => {
+    const { service, withdrawalRepo } = makeService({
+      retraits: [
+        { uuid: 'r2', amount: '25000.00', withdrawn_on: '2026-09-20', label: 'B', reference: null, created_at: new Date() },
+        { uuid: 'r1', amount: '100000.00', withdrawn_on: '2026-09-16', label: 'A', reference: 'X', created_at: new Date() },
+      ],
+    });
+
+    const liste = await service.listWithdrawals();
+
+    expect(withdrawalRepo.find).toHaveBeenCalledWith(
+      expect.objectContaining({ order: { withdrawn_on: 'DESC', created_at: 'DESC' } }),
+    );
+    expect(liste.total).toBe(125000);
+    expect(liste.count).toBe(2);
+    expect(liste.items[0]).toMatchObject({ uuid: 'r2', amount: 25000, withdrawn_on: '2026-09-20' });
+  });
+
+  it('annule un retrait sans l\'effacer : suppression logique, auteur de l\'annulation conservé', async () => {
+    const { service, withdrawalRepo } = makeService({ retraitExistant: { id: 7, uuid: 'r1' } });
+
+    await service.cancelWithdrawal('r1', 'auteur-uuid');
+
+    expect(withdrawalRepo.update).toHaveBeenCalledWith(
+      { id: 7, deleted_at: IsNull() },
+      { deleted_at: expect.any(Date), deleted_by_uuid: 'auteur-uuid' },
+    );
+  });
+
+  it('refuse d\'annuler un retrait inconnu ou déjà annulé', async () => {
+    const { service, withdrawalRepo } = makeService({ retraitExistant: null });
+    await expect(service.cancelWithdrawal('inconnu', 'a')).rejects.toEqual(
+      refusAvecCode('RETRAIT_INTROUVABLE'),
+    );
+    expect(withdrawalRepo.update).not.toHaveBeenCalled();
   });
 });
 

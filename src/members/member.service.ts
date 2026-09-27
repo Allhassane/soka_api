@@ -43,6 +43,7 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ok } from 'assert';
 import { MemberResponsibilityService } from 'src/member-responsibility/member-responsibility.service';
 import { StructureTreeService } from 'src/structure/structure-tree.service';
+import { assertAucunPaiementReussi } from './member-payments.guard';
 import {
   ancestorAtLevel,
   MemberImpact,
@@ -884,6 +885,9 @@ async findAll(
     if (!member) throw new NotFoundException('Aucun membre trouvé à supprimer.');
 
     await this.assertStructureInScope(member.structure_uuid, admin_uuid);
+    // RESPO-COMPTA-REGUL (27/09) : une fiche qui porte un paiement réussi ne se supprime pas -
+    // sinon le paiement reste accroché à une fiche disparue (cf. `member-payments.guard.ts`).
+    await assertAucunPaiementReussi(this.memberRepo.manager, member.uuid);
 
     let comptesDesactives = 0;
     const liaisons = { responsabilites: 0, accessoires: 0, voyages: 0, comites: 0 };

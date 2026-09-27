@@ -49,6 +49,14 @@ export interface AccessScope {
   default_structure_uuid: string | null;
 }
 
+/** Ce qu'un utilisateur peut voir des chiffres financiers (cf. `perimetreFinancier`). */
+export interface PerimetreFinancier {
+  /** `null` = global (aucun filtre) ; sinon les structures visibles, tous niveaux. */
+  structures: Set<string> | null;
+  /** Racine du périmètre, `null` quand il est global ou vide. */
+  racine_uuid: string | null;
+}
+
 interface LigneSource {
   source: 'responsibility' | 'committee';
   role_uuid: string | null;
@@ -206,6 +214,46 @@ export class AccessScopeService {
     });
 
     return this.sousArbre(scope.scope_structure_uuid);
+  }
+
+  /**
+   * **Périmètre des CHIFFRES FINANCIERS** (paiements réussis, montants, listes et exports de
+   * paiements) - RESPO-COMPTA-REGUL, 2026-09-27.
+   *
+   * - `structures: null` = **global**, aucun filtre : administrateur, ou périmètre dont la racine
+   *   est celle de l'organisation. Le national voit donc EXACTEMENT ce que voit la Comptabilité,
+   *   y compris un paiement dont le bénéficiaire n'est rattaché à aucune structure.
+   * - sinon le sous-arbre **complet** (tous niveaux) de la racine du périmètre canonique : plus
+   *   haut palier des responsabilités ET des comités (`compute`), jamais `responsibilities[0]`.
+   * - ensemble vide = ne voit rien, jamais « tout ».
+   *
+   * ⚠️ Avant ce calcul, les vues des responsables ne gardaient que les sous-groupes : la somme des
+   * régions tombait 35 paiements / 540 000 F sous le chiffre comptable (abonnement 2027).
+   */
+  async perimetreFinancier(userUuid: string): Promise<PerimetreFinancier> {
+    const rows = await this.dataSource.query(
+      'SELECT `uuid`, `member_uuid`, `is_admin` FROM `users` WHERE `uuid` = ? LIMIT 1',
+      [userUuid],
+    );
+    const user = rows?.[0];
+    if (!user) return { structures: new Set(), racine_uuid: null };
+    if (user.is_admin === 1 || user.is_admin === true) return { structures: null, racine_uuid: null };
+
+    const scope = await this.compute({
+      uuid: user.uuid,
+      member_uuid: user.member_uuid,
+      is_admin: false,
+    });
+    const racine = scope.scope_structure_uuid;
+    if (!racine) return { structures: new Set(), racine_uuid: null };
+
+    const [structure] = await this.dataSource.query(
+      'SELECT parent_uuid FROM structures WHERE uuid = ? LIMIT 1',
+      [racine],
+    );
+    if (structure && !structure.parent_uuid) return { structures: null, racine_uuid: racine };
+
+    return { structures: await this.sousArbre(racine), racine_uuid: racine };
   }
 
   /** Rôles + paliers portés par les responsabilités et les comités du membre. Une requête. */

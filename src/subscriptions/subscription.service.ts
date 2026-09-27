@@ -9,6 +9,9 @@ import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { GlobalStatus } from 'src/shared/enums/global-status.enum';
 import { SubscriptionPaymentEntity } from 'src/subscription-payment/entities/subscription-payment.entity';
 import { StructureService } from 'src/structure/structure.service';
+import { AccessScopeService } from 'src/access-scope/access-scope.service';
+import { PaymentEntity } from 'src/payments/entities/payment.entity';
+import { chiffresReussis } from 'src/payments/campaign-payments-figures';
 import { buildPaginationMeta } from 'src/shared/helpers/pagination-meta.helper';
 import { PaginateMeta } from 'src/shared/interfaces/paginate-meta.interface';
 
@@ -25,6 +28,8 @@ export class SubscriptionService {
     @InjectRepository(SubscriptionPaymentEntity)
     private readonly subscriptionPaymentRepo: Repository<SubscriptionPaymentEntity>,
     private readonly structureService: StructureService,
+    /** Périmètre canonique (service `@Global`) : borne les chiffres financiers de la fiche. */
+    private readonly accessScopeService: AccessScopeService,
   ) {}
 
   /**
@@ -164,11 +169,24 @@ export class SubscriptionService {
   }
 
 
+  /**
+   * Détail d'une campagne d'abonnement, avec - pour qui a le droit de les voir - les chiffres
+   * « Montant récolté » / « Paiements réussis » de SON périmètre.
+   *
+   * 🚨 RESPO-COMPTA-REGUL (2026-09-27) : ces chiffres sont ceux de la Comptabilité
+   * (`chiffresReussis` : `payments.payment_status = 'paid'`, `total_amount`), bornés au périmètre
+   * CANONIQUE (`perimetreFinancier`) par la structure du bénéficiaire. Avant : racine
+   * `responsibilities[0]`, sous-groupes seuls, payeur, ligne métier - la somme des régions tombait
+   * 35 paiements / 540 000 F sous le chiffre comptable.
+   *
+   * @param avecStatistiques le droit `abonnements_consulter_statistiques_campagne` (vérifié par le
+   *   contrôleur) : sans lui, la campagne seule, sans clé `statistics`.
+   */
   async findOne(
   uuid: string,
   admin_uuid: string,
   member_uuid: string,
-  structure_uuid: string,
+  avecStatistiques: boolean,
 ) {
   // Vérifier l'admin
   const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
@@ -182,92 +200,31 @@ export class SubscriptionService {
     throw new NotFoundException('Aucun abonnement trouvé');
   }
 
-  // Vérifier structure_uuid
-  if (!structure_uuid) {
-    // Journalisation
-    await this.logService.logAction(
-      'subscriptions-findOne',
-      admin.id,
-      `Consultation de l'abonnement "${subscription.name || subscription.uuid}"`,
-    );
-
-    return subscription;
-  }
-
-  // Récupérer les sous-groupes du responsable
-  const sousGroups = await this.structureService.findByAllChildrens(structure_uuid);
-
-  // Calculer les statistiques pour cet abonnement
-  let total_campaign_amount = 0;
-  let total_successful_payments = 0;
-  let total_successful_amount = 0;
-  let total_members_subscribed = 0;
-
-  // Total de la campagne d'abonnement (global)
-  const campaignSum = await this.subscriptionPaymentRepo
-    .createQueryBuilder('sp')
-    .select('SUM(sp.amount)', 'sum')
-    .where('sp.subscription_uuid = :subscription_uuid', { subscription_uuid: subscription.uuid })
-    .andWhere('sp.status = :status', { status: GlobalStatus.SUCCESS })
-    .getRawOne();
-
-
-  total_campaign_amount = Number(campaignSum?.sum ?? 0);
-
-
-  if (!sousGroups.length) {
-    await this.logService.logAction(
-      'subscriptions-findOne',
-      admin.id,
-      `Consultation de l'abonnement "${subscription.name || subscription.uuid}"`,
-    );
-
-    return {
-      ...subscription,
-      statistics: {
-        total_campaign_amount,
-        total_successful_payments: 0,
-        total_successful_amount: 0,
-        total_members_subscribed: 0,
-        root_structure_uuid: structure_uuid,
-        sous_groups_count: 0,
-      },
-    };
-  }
-
-  // Statistiques pour les sous-groupes du responsable
-  const responsibleStats = await this.subscriptionPaymentRepo
-    .createQueryBuilder('sp')
-    .innerJoin('payments', 'p', 'p.uuid = sp.payment_uuid')
-    .innerJoin('members', 'actor', 'actor.uuid = p.actor_uuid')
-    .select('COUNT(DISTINCT sp.uuid)', 'count')
-    .addSelect('SUM(sp.amount)', 'sum')
-    .addSelect('COUNT(DISTINCT actor.uuid)', 'members_count')
-    .where('sp.subscription_uuid = :subscription_uuid', { subscription_uuid: subscription.uuid })
-    .andWhere('sp.status = :status', { status: GlobalStatus.SUCCESS })
-    .andWhere('actor.structure_uuid IN (:...groups)', { groups: sousGroups })
-    .getRawOne();
-
-  total_successful_payments = Number(responsibleStats?.count ?? 0);
-  total_successful_amount = Number(responsibleStats?.sum ?? 0);
-  total_members_subscribed = Number(responsibleStats?.members_count ?? 0);
-
-  // Journalisation
   await this.logService.logAction(
     'subscriptions-findOne',
     admin.id,
     `Consultation de l'abonnement "${subscription.name || subscription.uuid}"`,
   );
 
+  if (!avecStatistiques) return subscription;
+
+  const perimetre = await this.accessScopeService.perimetreFinancier(admin_uuid);
+  const paiements = this.subscriptionPaymentRepo.manager.getRepository(PaymentEntity);
+  const [dansPerimetre, campagne] = await Promise.all([
+    chiffresReussis(paiements, subscription.uuid, perimetre.structures),
+    chiffresReussis(paiements, subscription.uuid, null),
+  ]);
+
   return {
     ...subscription,
     statistics: {
-      total_campaign_amount, // Montant global de la campagne
-      total_successful_payments, // Nombre de paiements réussis (sous-groupes)
-      total_successful_amount, // Montant total réussi (sous-groupes)
-      total_members_subscribed, // Nombre de membres uniques ayant souscrit
-      root_structure_uuid: structure_uuid,
-      sous_groups_count: sousGroups.length,
+      total_campaign_amount: campagne.montant, // Montant global de la campagne
+      total_successful_payments: dansPerimetre.nombre, // Paiements réussis du périmètre
+      total_successful_amount: dansPerimetre.montant, // Montant réussi du périmètre
+      total_members_subscribed: dansPerimetre.beneficiaires, // Bénéficiaires distincts
+      root_structure_uuid: perimetre.racine_uuid, // null = global (admin, national)
+      // Nombre de structures du périmètre (tous niveaux) ; null = global.
+      sous_groups_count: perimetre.structures ? perimetre.structures.size : null,
     },
   };
 }

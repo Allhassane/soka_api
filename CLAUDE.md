@@ -85,6 +85,8 @@ modifier.
 ### Structure & hiérarchie - `src/structure`, `src/level`, `src/location`
 - **StructureEntity** - une entité organisationnelle dans l'arbre hiérarchique.
 - **LevelEntity** (`level`) - le niveau/rang d'une structure dans la hiérarchie (définit la profondeur).
+  ⚠️ **`structures.level_id` est NULL partout** (3 802 / 3 802 le 2026-09-27) : la relation TypeORM
+  `structure.level` (jointe sur `level_id`) rend **toujours `null`**. Joindre sur **`level_uuid`**.
 - Paliers réels (noms en dur dans `buildBreadcrumb`) :
   `NATIONAL → REGION → CENTRE_REGIONAL → CENTRE → CHAPITRE → DISTRICT → GROUPE → SOUS_GROUPE`.
 - Découpage géographique : **CountryEntity**, **CityEntity**, **DepartmentEntity**,
@@ -473,8 +475,13 @@ services) : abonnements et dons.
   Détail et cas de référence dans `docs/TRANSFERT-MEMBRES.md` §5.
 
 - **🗑️ Supprimer un membre = `MemberService.delete()`, et rien d'autre.** Toute suppression est
-  **logique** (`deleted_at`, hérité de `DateTimeEntity` par ~toutes les entités). Trois pièges,
-  tous déjà payés :
+  **logique** (`deleted_at`, hérité de `DateTimeEntity` par ~toutes les entités).
+  🚨 **Une fiche qui porte un paiement RÉUSSI (payeur ou bénéficiaire) ne se supprime plus**
+  (`members/member-payments.guard.ts`, 409 `MEMBRE_AVEC_PAIEMENTS`, depuis le 2026-09-27) : trois
+  doublons supprimés après avoir payé laissaient leurs paiements sur une fiche disparue - lignes
+  anonymes dans l'export comptable, et membres qui paraissaient n'avoir jamais payé. Les fiches déjà
+  supprimées se réparent par `npm run seed:reattach-deleted-member-payments` (simulation, puis
+  `-- --apply`). Trois pièges, tous déjà payés :
   - **`softRemove(entity)` ne cascade PAS.** Les `@OneToMany` de `MemberEntity` n'ont pas d'option
     `cascade` et ne sont pas chargées : `member_responsibilities`, `member_accessories`,
     `member_travels` et `committee_members` doivent être soft-deletés **explicitement**, sinon le
@@ -930,6 +937,17 @@ services) : abonnements et dons.
   ✅ `migration:generate --dryrun` reste **utile comme outil de diagnostic** (il n'écrit rien) pour
   visualiser la dérive entité ↔ base. Jamais pour produire une migration à appliquer.
   `synchronize` doit rester **off** ; ne jamais laisser TypeORM modifier `soka_app` en auto.
+  ⚠️ **`migrationsRun` ne joue qu'en PRODUCTION** (`config.isProd`) : en local, une migration ne
+  s'applique pas au démarrage. Et **le CLI local plante** (`migration:run` / `migration:show` →
+  `describe is not defined`, constaté le 2026-09-26) : `data-source.ts` charge `src/migrations/*.ts`,
+  où se trouve un fichier de test (`add-members-matricule-unique-index.spec.ts`). La prod n'est pas
+  touchée (elle lit `dist/migrations`, specs exclus du build). Contournement local : `runMigrations`
+  sur une `DataSource` limitée au fichier compilé de la migration voulue.
+  🚨 **Même cause, et là la prod EST touchée : tout seed qui fait `AppDataSource.initialize()`
+  plante** (les seeds tournent sur `src/` via ts-node, fichier de test compris). Modèle qui passe :
+  `new DataSource({ ...AppDataSource.options, migrations: [] })` (cf.
+  `seed-reattach-deleted-member-payments.ts`). Le vrai correctif - sortir le test du dossier des
+  migrations - appartient au module Membres.
 
 - **🕳️ TypeORM retire silencieusement les `undefined` d'un `where`** (vérifié le 2026-08-07 en
   0.3.25) : il ne lève pas, il **élargit la requête**. Un `findOne({ where: { name: payload.nom,
@@ -989,13 +1007,22 @@ services) : abonnements et dons.
   - 🚨 **`payments` porte DEUX colonnes de statut, et l'export compta filtre l'AUTRE.** L'export du
     module Exports filtre **`p.status`** (statut métier) ; la Comptabilité affiche et compte
     **`p.payment_status`** (celui du guichet). Le filtre de l'export compta
-    (`export-async/accounting-payments-query.ts`) reproduit `AccountingService.campaignPayments`
-    condition pour condition - recopier celui du voisin rendrait un fichier plausible et **faux**.
-  - 🚨 **Aucun périmètre de structure**, volontairement : `campaignPayments` n'en applique aucun,
-    donc les tuiles comptent toute l'organisation. Scoper l'export livrerait un fichier **plus court
-    que le chiffre affiché**, sans que rien ne le signale - on ne remarque pas les lignes qui
-    manquent. Corollaire à connaître : ce fichier porte les **téléphones** des payeurs et
-    bénéficiaires de toute l'organisation.
+    (`export-async/accounting-payments-query.ts`, `appliquerFiltresPaiementsCompta`) est **la
+    fonction même** qu'appelle `AccountingService.campaignPayments` depuis le 2026-09-27 (plus de
+    copie) - recopier celui du voisin rendrait un fichier plausible et **faux**.
+  - 🚨 **Aucun périmètre de l'UTILISATEUR**, volontairement : les tuiles comptent toute
+    l'organisation. Scoper l'export au connecté livrerait un fichier **plus court que le chiffre
+    affiché**, sans que rien ne le signale. Corollaire : ce fichier porte les **téléphones** des
+    payeurs et bénéficiaires de toute l'organisation.
+  - **Filtre « Structure » CHOISI à l'écran** (2026-09-27) : `structure_uuid` sur `stats/payments`
+    ET `exports/payments`, porté par le job, résolu par `structuresDuFiltreCompta` (sous-arbre
+    complet ; inconnue → 400 `STRUCTURE_INCONNUE`, **avant** la création du job) et appliqué par
+    `appliquerPerimetreBeneficiaire` - la règle de RESPO-COMPTA-REGUL, donc une région filtrée =
+    le chiffre de son responsable. Il restreint le tableau et le fichier, **jamais les tuiles**.
+  - 🚨 **La cascade de ce filtre a sa PROPRE route, `GET /accounting/structures?parent_uuid=`**
+    (noms seuls, toute l'organisation, sous `COMPTABILITE`). Le rôle **COMPTABLE n'est pas
+    administrateur** : `/structure/childrens` (bornée par `assertNavigable`) lui répond **403** dès
+    le deuxième palier. Ne pas « simplifier » en réutilisant la cascade partagée.
   - ⚠️ **Le fichier ne porte PAS la structure du payeur** (exigence produit). C'est la seule
     différence de contenu avec `processTransactionsExport` : recopier ses colonnes la
     réintroduirait sans bruit. Un test la verrouille (`accounting-payments-sheet.spec.ts`).
@@ -1007,6 +1034,66 @@ services) : abonnements et dons.
   - `verifierSource` / `verifierBucket` vivent dans `accounting/accounting.helpers.ts` et sont
     **partagés** par l'écran et l'export : deux définitions du mot « échoué » feraient diverger le
     fichier et le chiffre affiché, et personne ne s'en apercevrait avant de compter à la main.
+
+- **⏱️ « Rafraîchir » de la Comptabilité : son coût suit TOUT l'historique du guichet** (2026-09-26).
+  `AccountingService.refreshFromGateway` relit la liste marchande complète et apparie chaque
+  tentative, dans la requête HTTP - soumise aux **30 s** du navigateur et du proxy Next. Au 26/09
+  (9 323 tentatives) il prenait ~40 s et échouait en production ; il en prend ~1,3 s. Trois règles
+  le tiennent, à ne pas défaire :
+  - **Pages de 5 000** (`TAILLE_PAGE_GUICHET`, `payments/hub.service.ts`), repli automatique sur 100
+    face à un guichet plus ancien (400). ⚠️ Elles ne sont rapides que grâce à la **requête jointe**
+    du guichet (`soka-pay/api`, `listMerchantPayments`) : le `findMany` + `include` de Prisma charge
+    les relations par des `IN` à paramètres liés qui **s'effondrent au-delà de ~2 000 valeurs**
+    (5 000 → 4 à 5 s par `IN`, 10 s la page). Tentatives **dédoublonnées par `id`** : la pagination
+    par décalage rend deux fois une ligne quand un paiement arrive pendant la lecture.
+  - **L'instantané n'écrit que les lignes EN ÉCART** (`enregistrerInstantane`) ; les compteurs de
+    l'en-tête portent toutes les lignes. Les ~9 000 lignes appariées par clic (10 à 17 s en prod)
+    n'étaient lues par personne. Les instantanés antérieurs au 26/09 contiennent aussi les leurs.
+  - **Liste, solde et agrégat applicatif partent ensemble** (`Promise.all`), et l'appariement lit
+    `payments` **une fois** : `transaction_id` n'a pas d'index, chaque paquet `IN` était un balayage.
+  ⚠️ Horizon : chaque page du guichet trie et compte encore tout l'historique (pas d'index sur
+  `payments.createdAt` côté guichet). Vers ~50 000 tentatives, prévoir index + pagination par
+  curseur plutôt que par décalage.
+
+- **💸 Compte de retrait (`acc_withdrawals`, 2026-09-26) : les sorties du compte de collecte HUB2
+  se SAISISSENT** - ni le guichet ni HUB2 ne les transmettent. Routes `GET/POST/DELETE
+  /accounting/withdrawals` (`accounting-withdrawals.controller.ts`), sous la permission unique du
+  module. Le décompte vaut **`initial + brut - commission - retraits = net attendu`**, retraits en
+  LIGNE comme le solde d'ouverture : sans eux, le premier retrait (100 000 F le 2026-09-16) avait
+  laissé un écart permanent et sans nom.
+  - **Tous les retraits actifs** entrent dans le décompte, quelle que soit la date de l'instantané :
+    le solde attendu se compare au solde relevé À L'INSTANT, qui les a tous subis.
+  - **Annuler = suppression LOGIQUE + `deleted_by_uuid`**, jamais un `DELETE` : le décompte d'hier
+    doit rester explicable. `deleted_at: IsNull()` dans le critère, pour ne pas ré-estamper.
+  - ⚠️ Le total passe par le **query builder**, qui exclut les annulés de lui-même. Un `SUM` en SQL
+    brut sur la table les compterait.
+  - Contrôles côté service (codes `MONTANT_INVALIDE`, `DATE_INVALIDE`, `DATE_FUTURE`,
+    `MOTIF_REQUIS`…) : jour `AAAA-MM-JJ` jamais dans le futur (Abidjan = UTC), montant > 0 au centime.
+
+- **💰 Chiffres financiers vus par un RESPONSABLE : UNE règle, celle de la Comptabilité**
+  (RESPO-COMPTA-REGUL, 2026-09-27). Fiches de campagne abonnement / zaimu (« Montant récolté »,
+  « Paiements réussis »), liste `GET /payments/subgroups/…` et export des transactions passent
+  TOUS par :
+  - **`AccessScopeService.perimetreFinancier(userUuid)`** - périmètre canonique (plus haut palier
+    responsabilités ∪ comités), sous-arbre **tous niveaux** ; `null` = global pour l'administrateur
+    ET pour un périmètre national (qui voit donc exactement le chiffre comptable) ; vide = rien ;
+  - **`payments/campaign-payments-figures.ts`** : `chiffresReussis` (`payment_status = 'paid'`,
+    `total_amount`, `source_uuid`) et `appliquerPerimetreBeneficiaire` (structure du
+    **BÉNÉFICIAIRE**, sous-requête SQL sans filtre `deleted_at`, `1 = 0` si vide) ;
+  - l'export : `export-async/transactions-export-query.ts` (statut du GUICHET, jamais `p.status`).
+  Vérifié le 27/09 sur 28 comptes réels : fiche = liste « payé » = lignes du fichier = SQL de
+  référence, et **Σ des 4 régions = chiffre comptable au franc**. Avant, la somme des régions
+  tombait 35 paiements / 540 000 F sous la Comptabilité.
+  🚨 **Ne JAMAIS revenir à** `req.user.responsibilities?.[0]?.structure?.uuid` (première
+  responsabilité, ordre indéterminé, comités ignorés, souvent `null`) **ni à
+  `StructureService.findByAllChildrens`**, qui ne rend que le niveau 7 (sous-groupes) : un membre
+  rattaché à un groupe, un district ou un chapitre disparaissait des chiffres, national compris.
+  ⚠️ Ces deux motifs restent ailleurs (activités, membres, structures) : mêmes risques de comptage.
+- **👻 Fiche membre supprimée : une jointure ORM l'écarte d'office.** `leftJoinAndSelect('p.actor')`
+  ajoute `AND actor.deleted_at IS NULL` à la jointure (SQL vérifié), et **`withDeleted()` ne la
+  rétablit pas**. La ligne reste, anonyme. Toute liste ou tout export de paiements passe par
+  `payments/fiches-supprimees.ts` (`retablirFichesSupprimees` recharge les fiches, `observationFiches`
+  le dit) ; à défaut de fiche, les noms gardés sur le paiement (`actor_name`, `beneficiary_name`).
 
 - **🚨 `/docs` est dans le `.gitignore` (ligne 70) alors que les fichiers de `docs/` sont SUIVIS.**
   `git add docs/JOURNAL.md` retourne **1** (« The following paths are ignored… use -f ») tout en

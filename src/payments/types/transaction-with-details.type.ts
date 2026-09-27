@@ -20,6 +20,8 @@ export type TransactionWithDetails = {
     lastname: string;
     phone: string;
     structure: { uuid: string; name: string } | null;
+    /** Fiche supprimée depuis le paiement (doublon) : identité rétablie, et signalée. */
+    fiche_supprimee?: boolean;
   } | null;
 
   beneficiary: {
@@ -28,6 +30,7 @@ export type TransactionWithDetails = {
     lastname: string;
     phone: string;
     structure: { uuid: string; name: string } | null;
+    fiche_supprimee?: boolean;
   } | null;
 
   donation?: {

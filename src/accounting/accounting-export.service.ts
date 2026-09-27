@@ -13,12 +13,16 @@ import {
 } from 'src/export-async/entities/export-job.entity';
 import { ExportJobService } from 'src/export-async/export-job.service';
 import { ExportProcessorService } from 'src/export-async/export-processor.service';
+import { structuresDuFiltreCompta } from 'src/export-async/accounting-payments-query';
+import { AccessScopeService } from 'src/access-scope/access-scope.service';
 import { BucketStats, SourceStats, verifierBucket, verifierSource } from './accounting.helpers';
 
 export interface FiltresExportCompta {
   type: string;
   campaign_uuid?: string;
   bucket?: string;
+  /** Filtre « Structure » du tableau : le fichier rend les mêmes lignes filtrées. */
+  structure_uuid?: string;
 }
 
 /**
@@ -45,23 +49,29 @@ export class AccountingExportService {
   constructor(
     private readonly exportJobService: ExportJobService,
     private readonly exportProcessorService: ExportProcessorService,
+    /** Sous-arbre de la structure choisie (service `@Global`) : validée avant le job. */
+    private readonly accessScope: AccessScopeService,
   ) {}
 
   /**
    * Met en file l'export d'un seau. Rend l'identifiant du job : le fichier n'existe pas encore.
    *
-   * ⚠️ Le seau et la campagne sont **validés avant** la création du job. Un job créé sur des
-   * paramètres invalides échouerait plus tard, en arrière-plan, avec pour seule trace une ligne
-   * `FAILED` que personne ne regarde - alors que le refus immédiat s'affiche à l'écran.
+   * ⚠️ Le seau, la campagne et la structure sont **validés avant** la création du job. Un job
+   * créé sur des paramètres invalides échouerait plus tard, en arrière-plan, avec pour seule
+   * trace une ligne `FAILED` que personne ne regarde - alors que le refus immédiat s'affiche à
+   * l'écran.
    */
   async lancer(f: FiltresExportCompta, user_uuid: string) {
     const type: SourceStats = verifierSource(f.type);
     const bucket: BucketStats = verifierBucket(f.bucket);
     const campaign_uuid = f.campaign_uuid?.trim() || undefined;
+    const structure_uuid = f.structure_uuid?.trim() || undefined;
+    // Le sous-arbre n'est pas conservé : le traitement le recalcule, par la même fonction.
+    await structuresDuFiltreCompta(this.accessScope, structure_uuid);
 
     const job = await this.exportJobService.createJob(
       TYPE_EXPORT_COMPTA,
-      { type, campaign_uuid, bucket },
+      { type, campaign_uuid, bucket, structure_uuid },
       user_uuid,
     );
 

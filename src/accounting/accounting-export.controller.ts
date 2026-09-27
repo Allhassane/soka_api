@@ -44,14 +44,20 @@ export class AccountingExportController {
     required: false,
     enum: ['all', 'paid', 'pending', 'failed', 'cancelled'],
   })
+  @ApiQuery({
+    name: 'structure_uuid',
+    required: false,
+    description: 'Le filtre « Structure » du tableau : le fichier rend les mêmes lignes.',
+  })
   async lancer(
     @Request() req,
     @Query('type') type?: string,
     @Query('campaign_uuid') campaign?: string,
     @Query('bucket') bucket?: string,
+    @Query('structure_uuid') structure?: string,
   ) {
     return this.exports.lancer(
-      { type: type ?? '', campaign_uuid: campaign, bucket },
+      { type: type ?? '', campaign_uuid: campaign, bucket, structure_uuid: structure },
       req.user.uuid,
     );
   }

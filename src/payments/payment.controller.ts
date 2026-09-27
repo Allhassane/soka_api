@@ -95,13 +95,8 @@ async queueTransactionsExport(
   @Query('status') status?: GlobalStatus,
   @Request() req?,
 ) {
-  return this.paymentService.queueTransactionsExport(
-    source_uuid,
-    req.user.uuid,
-    req.user.member_uuid,
-    req.user.responsibilities?.[0]?.structure?.uuid,
-    status,
-  );
+  // Périmètre calculé côté service (`perimetreFinancier`) : jamais `responsibilities[0]`.
+  return this.paymentService.queueTransactionsExport(source_uuid, req.user.uuid, status);
 }
 
 // ⚠️ OU logique (audit §H6) : cette route est l'unique point de téléchargement des exports du
@@ -364,10 +359,10 @@ async getMyExports(
     @Query('search') search?: string | undefined,
     @Query('payment_status') payment_status?: PaymentStatus,
   ) {
+    // Périmètre calculé par le service (`perimetreFinancier`) : jamais `responsibilities[0]`.
     return this.paymentService.findTransactionsForSubGroups(
       source_uuid,
       req.user.uuid, // admin uuid
-      req.user.responsibilities?.[0]?.structure?.uuid,
       +page,
       +limit,
       search,

@@ -97,11 +97,13 @@ export class DonateController {
         })
       ).has('zaimu_consulter_statistiques_campagne');
 
+    // Périmètre des chiffres calculé par le service (`perimetreFinancier`), jamais tiré de
+    // `responsibilities[0]`.
     return this.donateService.findOne(
       uuid,
       req.user.uuid,
       req.user.member_uuid,
-      peutVoirStats ? req.user.responsibilities?.[0]?.structure?.uuid : undefined,
+      peutVoirStats,
     );
   }
 

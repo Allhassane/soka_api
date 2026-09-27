@@ -28,6 +28,11 @@ export enum MatchStatus {
 /**
  * Le détail ligne à ligne d'un instantané d'export : c'est ce qui donne un NOM à chaque franc
  * d'écart. Un écart sans décomposition n'est qu'un nombre dont personne ne sait quoi faire.
+ *
+ * ⚠️ **Depuis le 2026-09-26, seules les lignes EN ÉCART sont écrites** (tout sauf `matched`) ;
+ * les compteurs de l'en-tête portent toujours toutes les lignes. Les instantanés antérieurs
+ * contiennent aussi leurs lignes appariées : ne pas comparer le nombre de lignes de deux
+ * instantanés de part et d'autre de cette date.
  */
 @Entity({ name: 'acc_hub_snapshot_lines' })
 export class AccHubSnapshotLineEntity {

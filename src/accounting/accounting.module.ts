@@ -4,6 +4,7 @@ import { DonateEntity } from 'src/donate/entities/donate.entity';
 import { PaymentEntity } from 'src/payments/entities/payment.entity';
 import { PaymentModule } from 'src/payments/payment.module';
 import { SubscriptionEntity } from 'src/subscriptions/entities/subscription.entity';
+import { StructureEntity } from 'src/structure/entities/structure.entity';
 import { ExportJobModule } from 'src/export-async/export-job.module';
 import { AccountingController } from './accounting.controller';
 import { AccountingExportController } from './accounting-export.controller';
@@ -12,6 +13,8 @@ import { AccountingStatsController } from './accounting-stats.controller';
 import { AccountingService } from './accounting.service';
 import { AccHubSnapshotEntity } from './entities/acc-hub-snapshot.entity';
 import { AccHubSnapshotLineEntity } from './entities/acc-hub-snapshot-line.entity';
+import { AccWithdrawalEntity } from './entities/acc-withdrawal.entity';
+import { AccountingWithdrawalsController } from './accounting-withdrawals.controller';
 
 /**
  * Module Comptabilité - concordance « Solde HUB2 = Solde App » + tableau de bord.
@@ -20,7 +23,8 @@ import { AccHubSnapshotLineEntity } from './entities/acc-hub-snapshot-line.entit
  * seule.** Le module n'appelle jamais `PaymentService`, et aucune de ses méthodes n'écrit dans
  * ces tables : il n'a le droit d'écrire que dans ses propres tables `acc_*`. Le jour où
  * quelqu'un voudra « corriger » un paiement depuis cet écran, c'est cette règle qu'il faudra
- * discuter, pas contourner.
+ * discuter, pas contourner. `StructureEntity` l'est au même titre : le filtre « Structure » du
+ * bloc de lignes n'en lit que les noms.
  *
  * `HubService` vient de `PaymentModule` (qui l'exporte) plutôt que d'être réinstancié : un second
  * client du guichet finirait par diverger sur le timeout, la clé et l'URL.
@@ -35,15 +39,22 @@ import { AccHubSnapshotLineEntity } from './entities/acc-hub-snapshot-line.entit
     TypeOrmModule.forFeature([
       AccHubSnapshotEntity,
       AccHubSnapshotLineEntity,
+      AccWithdrawalEntity,
       PaymentEntity,
       SubscriptionEntity,
       DonateEntity,
+      StructureEntity,
     ]),
     PaymentModule,
     // Le suivi des jobs d'export appartient au module qui possède `export_jobs`.
     ExportJobModule,
   ],
-  controllers: [AccountingController, AccountingStatsController, AccountingExportController],
+  controllers: [
+    AccountingController,
+    AccountingStatsController,
+    AccountingExportController,
+    AccountingWithdrawalsController,
+  ],
   providers: [AccountingService, AccountingExportService],
   exports: [AccountingService],
 })

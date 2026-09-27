@@ -1,4 +1,5 @@
 import { PaymentEntity } from 'src/payments/entities/payment.entity';
+import { observationFiches } from 'src/payments/fiches-supprimees';
 
 /** Une colonne de la feuille Excel, au format attendu par ExcelJS. */
 export interface ColonneFeuille {
@@ -64,6 +65,8 @@ export function aplatirArbre(
 export function construireFeuilleCompta(
   paiements: PaymentEntity[],
   arbresParBeneficiaire: Map<string, any>,
+  /** Fiches membres supprimées (cf. `retablirFichesSupprimees`) : signalées en « Observation ». */
+  fichesSupprimees: Set<string> = new Set(),
 ): FeuilleCompta {
   // Le plus PROFOND des arbres donne le jeu de colonnes : un arbre court n'aurait pas de
   // colonne pour les paliers des autres, et l'information serait perdue à l'écriture.
@@ -99,6 +102,9 @@ export function construireFeuilleCompta(
       key: `beneficiary_structure_level_${i}`,
       width: 26,
     })),
+    // Une ligne dont la fiche membre a été supprimée depuis le paiement le dit ici (27/09 : trois
+    // paiements réussis sortaient sans payeur ni bénéficiaire, sans rien pour l'expliquer).
+    { header: 'Observation', key: 'observation', width: 36 },
   ];
 
   const lignes = paiements.map((p: any) => {
@@ -125,10 +131,12 @@ export function construireFeuilleCompta(
           ? p.failure_message ?? p.failure_code ?? 'motif non transmis'
           : '',
       actor_firstname: p.actor?.firstname ?? '',
-      actor_lastname: p.actor?.lastname ?? '',
+      // Sans fiche du tout (introuvable même supprimée), le nom gardé sur le paiement plutôt
+      // qu'une case vide : le payeur doit toujours pouvoir être identifié.
+      actor_lastname: p.actor ? p.actor.lastname ?? '' : p.actor_name ?? '',
       actor_phone: p.actor?.phone ?? '',
       beneficiary_firstname: p.beneficiary?.firstname ?? '',
-      beneficiary_lastname: p.beneficiary?.lastname ?? '',
+      beneficiary_lastname: p.beneficiary ? p.beneficiary.lastname ?? '' : p.beneficiary_name ?? '',
       beneficiary_phone: p.beneficiary?.phone ?? '',
       beneficiary_structure: p.beneficiary?.structure?.name ?? '',
     };
@@ -136,6 +144,7 @@ export function construireFeuilleCompta(
     paliersReference.forEach((_, i) => {
       ligne[`beneficiary_structure_level_${i}`] = structures[i] ?? '';
     });
+    ligne.observation = observationFiches(p, fichesSupprimees);
 
     return ligne;
   });

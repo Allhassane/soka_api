@@ -99,11 +99,13 @@ export class SubscriptionController {
         })
       ).has('abonnements_consulter_statistiques_campagne');
 
+    // Le périmètre des chiffres est calculé par le service (`perimetreFinancier`), jamais tiré de
+    // `responsibilities[0]` : première responsabilité, ordre indéterminé, comités ignorés.
     return this.subscriptionService.findOne(
       uuid,
       req.user.uuid,
       req.user.member_uuid,
-      peutVoirStats ? req.user.responsibilities?.[0]?.structure?.uuid : undefined,
+      peutVoirStats,
     );
   }
 

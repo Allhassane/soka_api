@@ -15,8 +15,14 @@ import * as ExcelJS from 'exceljs';
 import * as fs from 'fs';
 import * as path from 'path';
 import { StructureTreeService } from 'src/structure/structure-tree.service';
-import { appliquerFiltresPaiementsCompta } from './accounting-payments-query';
+import {
+  appliquerFiltresPaiementsCompta,
+  structuresDuFiltreCompta,
+} from './accounting-payments-query';
 import { construireFeuilleCompta } from './accounting-payments-sheet';
+import { appliquerFiltresExportTransactions } from './transactions-export-query';
+import { AccessScopeService } from 'src/access-scope/access-scope.service';
+import { observationFiches, retablirFichesSupprimees } from 'src/payments/fiches-supprimees';
 
 @Injectable()
 export class ExportProcessorService {
@@ -36,16 +42,20 @@ export class ExportProcessorService {
     // Dépendance circulaire StructureTreeService <-> ExportProcessorService → forwardRef.
     @Inject(forwardRef(() => StructureTreeService))
     private structureTreeService: StructureTreeService,
-
+    /** Périmètre canonique (service `@Global`) : borne l'export des transactions. */
+    private readonly accessScopeService: AccessScopeService,
   ) {}
 
 
-   async processTransactionsExport(
-    jobId: string,
-    member_uuid: string,
-    member_structure_uuid: string,
-    file_name: string
-  ): Promise<void> {
+  /**
+   * Export des transactions d'une campagne (bouton « Exporter » des fiches de campagne).
+   *
+   * 🚨 RESPO-COMPTA-REGUL (2026-09-27) : le fichier contient EXACTEMENT les lignes que compte la
+   * fiche de campagne du même utilisateur - périmètre canonique (`perimetreFinancier`, admin et
+   * national = global), rattachement par le BÉNÉFICIAIRE, statut du GUICHET. Avant : racine
+   * `responsibilities[0]` (ou la structure propre), sous-groupes seuls, PAYEUR, statut métier.
+   */
+   async processTransactionsExport(jobId: string, file_name: string): Promise<void> {
     try {
       await this.exportJobService.updateJobStatus(jobId, ExportJobStatus.PROCESSING);
 
@@ -54,54 +64,24 @@ export class ExportProcessorService {
 
       await this.exportJobService.updateJobProgress(jobId, 10);
 
-      const admin = await this.userRepo.findOne({ where: { uuid: admin_uuid } });
-      const member = await this.memberRepo.findOne({ where: { uuid: member_uuid } });
-
-      // Périmètre de l'exportateur :
-      //  - ADMIN → AUCUN périmètre : il voit TOUS les paiements de la source. (C'EST LE BUG du
-      //    fichier vide : le compte admin porte une responsabilité sur une PETITE structure
-      //    (ex. un district), donc `responsibilities[0].structure.uuid` n'est PAS vide → l'export
-      //    se scopait à ce district → 0 ligne alors que les paiements viennent de toute l'orga.
-      //    Le repli précédent ne couvrait que le cas « structure absente », pas « petite
-      //    structure ».)
-      //  - RESPONSABLE / MEMBRE → sa structure de responsabilité, à défaut sa structure propre
-      //    (le JWT met souvent `structure: null` quand le niveau de la resp. ≠ niveau de la
-      //    structure du membre - même cause que l'export des membres).
-      const isAdmin = !!admin?.is_admin;
-      const scopeStructureUuid = isAdmin
-        ? null
-        : (member_structure_uuid || member?.structure_uuid || null);
-      const sousGroups = scopeStructureUuid
-        ? await this.structureService.findByAllChildrens(scopeStructureUuid)
-        : [];
+      const perimetre = await this.accessScopeService.perimetreFinancier(admin_uuid);
 
       await this.exportJobService.updateJobProgress(jobId, 20);
 
-      // Query principale
       const qb = this.paymentRepo
         .createQueryBuilder('p')
         .leftJoinAndSelect('p.actor', 'actor')
         .leftJoinAndSelect('actor.structure', 'actorStructure')
         .leftJoinAndSelect('p.beneficiary', 'beneficiary')
-        .leftJoinAndSelect('beneficiary.structure', 'beneficiaryStructure')
-        .where('p.source_uuid = :source_uuid', { source_uuid });
-
-      // Restreindre au périmètre uniquement s'il existe (sinon : tout le source).
-      if (scopeStructureUuid) {
-        qb.andWhere('actor.structure_uuid IN (:...groups)', {
-          groups: sousGroups.length > 0 ? sousGroups : ['__none__'],
-        });
-      }
-
-      // Filtre de statut. L'option « Tous » du front envoie `status=all` (et non une valeur
-      // vide) : sans ce garde, on faisait `p.status = 'all'` → 0 ligne. 'all' (ou absent) =>
-      // aucun filtre => tous les statuts ; une valeur réelle (success/fail/pending…) filtre.
-      if (status && status !== 'all') {
-        qb.andWhere('p.status = :status', { status });
-      }
-
-      qb.orderBy('p.created_at', 'DESC');
+        .leftJoinAndSelect('beneficiary.structure', 'beneficiaryStructure');
+      appliquerFiltresExportTransactions(qb, {
+        source_uuid,
+        structures: perimetre.structures,
+        status,
+      });
       const payments = await qb.getMany();
+      // La jointure écarte d'office une fiche supprimée : on la recharge, et la ligne le dira.
+      const fichesSupprimees = await retablirFichesSupprimees(payments, this.memberRepo);
       //console.log('paiements trouvés:', payments);
       await this.exportJobService.updateJobProgress(jobId, 40);
 
@@ -246,11 +226,12 @@ export class ExportProcessorService {
           quantity: p.quantity,
           total_amount: p.total_amount,
           actor_firstname: p.actor?.firstname || '',
-          actor_lastname: p.actor?.lastname || '',
+          // Sans aucune fiche, le nom gardé sur le paiement plutôt qu'une case vide.
+          actor_lastname: p.actor ? p.actor.lastname || '' : p.actor_name || '',
           actor_phone: p.actor?.phone || '',
           actor_structure: p.actor?.structure?.name || '',
           beneficiary_firstname: p.beneficiary?.firstname || '',
-          beneficiary_lastname: p.beneficiary?.lastname || '',
+          beneficiary_lastname: p.beneficiary ? p.beneficiary.lastname || '' : p.beneficiary_name || '',
           beneficiary_phone: p.beneficiary?.phone || '',
           beneficiary_structure: p.beneficiary?.structure?.name || '',
         };
@@ -259,6 +240,7 @@ export class ExportProcessorService {
         structureLevelNames.forEach((levelName: string, index: number) => {
           rowData[`beneficiary_structure_level_${index}`] = treeFlattened[index] || '';
         });
+        rowData.observation = observationFiches(p, fichesSupprimees);
 
         result.push(rowData);
       }
@@ -302,7 +284,12 @@ export class ExportProcessorService {
         });
       });
 
-      worksheet.columns = [...baseColumns, ...structureTreeColumns];
+      worksheet.columns = [
+        ...baseColumns,
+        ...structureTreeColumns,
+        // Une fiche membre supprimée depuis le paiement (doublon) est signalée ici.
+        { header: 'Observation', key: 'observation', width: 32 },
+      ];
 
       // Styliser l'en-tête
       worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -591,7 +578,7 @@ export class ExportProcessorService {
       await this.exportJobService.updateJobStatus(jobId, ExportJobStatus.PROCESSING);
 
       const job = await this.exportJobService.getJob(jobId);
-      const { type, campaign_uuid, bucket } = job.params ?? {};
+      const { type, campaign_uuid, bucket, structure_uuid } = job.params ?? {};
 
       await this.exportJobService.updateJobProgress(jobId, 10);
 
@@ -603,15 +590,22 @@ export class ExportProcessorService {
       // 🚨 Le filtre de la tuile, et rien d'autre : cf. `accounting-payments-query.ts`.
       // Noter l'absence de jointure sur `actor.structure` - le fichier ne porte pas la
       // structure du payeur (exigence du 2026-08-26), inutile de la charger.
-      appliquerFiltresPaiementsCompta(qb, { type, campaign_uuid, bucket });
+      // Le filtre « Structure » de l'écran se résout ici par la MÊME fonction que le tableau :
+      // le fichier d'une région rend les lignes que le tableau affiche pour elle.
+      const structures = await structuresDuFiltreCompta(this.accessScopeService, structure_uuid);
+      appliquerFiltresPaiementsCompta(qb, { type, campaign_uuid, bucket, structures });
 
       const paiements = await qb.getMany();
+      // 27/09 : 3 paiements réussis sortaient sans payeur ni bénéficiaire - leurs fiches avaient
+      // été supprimées (doublons) et la jointure les écarte d'office. On les recharge, et la
+      // colonne « Observation » le dit.
+      const fichesSupprimees = await retablirFichesSupprimees(paiements, this.memberRepo);
       await this.exportJobService.updateJobProgress(jobId, 40);
 
       const arbres = await this.resoudreArbresBeneficiaires(paiements);
       await this.exportJobService.updateJobProgress(jobId, 70);
 
-      const { colonnes, lignes } = construireFeuilleCompta(paiements, arbres);
+      const { colonnes, lignes } = construireFeuilleCompta(paiements, arbres, fichesSupprimees);
 
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Paiements');
@@ -621,7 +615,12 @@ export class ExportProcessorService {
 
       await this.exportJobService.updateJobProgress(jobId, 85);
 
-      const suffixe = [type, campaign_uuid ? 'campagne' : 'toutes', bucket]
+      const suffixe = [
+        type,
+        campaign_uuid ? 'campagne' : 'toutes',
+        bucket,
+        structure_uuid ? 'structure' : null,
+      ]
         .filter(Boolean)
         .join('_');
       await this.ecrireClasseur(jobId, workbook, `comptabilite_${suffixe}`);
