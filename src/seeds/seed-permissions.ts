@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import * as path from 'path';
-import { DataSource } from 'typeorm';
+import { DataSource, DataSourceOptions } from 'typeorm';
 import AppDataSource from '../data-source';
 import { listCatalogPermissions } from '../permission/permission-catalog';
 import { syncPermissionCatalog } from '../permission/permission-catalog-sync';
@@ -79,7 +79,14 @@ async function run(): Promise<void> {
   const backup = !process.argv.includes('--no-backup');
   const allowDeletions = process.argv.includes('--allow-deletions');
 
-  const ds: DataSource = await AppDataSource.initialize();
+  // Mêmes réglages que `AppDataSource`, SANS migrations : son motif `src/migrations/*.ts` ramasse
+  // un fichier de test (`add-members-matricule-unique-index.spec.ts`) et l'initialisation
+  // plantait sur `describe is not defined`, en prod comme en local (constaté le 2026-09-27).
+  // Ce seed ne joue aucune migration.
+  const ds: DataSource = await new DataSource({
+    ...AppDataSource.options,
+    migrations: [],
+  } as DataSourceOptions).initialize();
   console.log(`[seed] Base cible : ${ds.options.database as string}`);
 
   const runner = ds.createQueryRunner();

@@ -539,7 +539,10 @@ services) : abonnements et dons.
     (`absorbs`/`grantTo`), les permissions hors catalogue sont supprimées avec leurs liens,
     les orphelines purgées. `--dry-run` joue tout puis annule. La même logique
     (`permission-catalog-sync.ts`) est appliquée par la migration `SyncPermissionCatalogV2`
-    **au démarrage en prod**.
+    **au démarrage en prod**. ⚠️ Cette migration est déjà jouée : une permission AJOUTÉE au
+    catalogue n'arrive en prod que par ce seed. Il REFUSE d'écrire si une suppression est prévue
+    (`--allow-deletions` exigé) et sauvegarde les tables dans `backups/` avant d'écrire. Toujours
+    lancer `-- --dry-run` d'abord et lire les compteurs : un ajout pur = `+N · ~0 · -0`.
   - **Lectures de référentiels = `@ReferentialRead()`**, ouvertes à tout AUTHENTIFIÉ (civilités,
     pays, localités, formations, métiers, niveaux, départements, divisions, responsabilités,
     accessoires, villes d'organisation, situations, types d'activité, cascade `structure/childrens`).
@@ -946,7 +949,8 @@ services) : abonnements et dons.
   🚨 **Même cause, et là la prod EST touchée : tout seed qui fait `AppDataSource.initialize()`
   plante** (les seeds tournent sur `src/` via ts-node, fichier de test compris). Modèle qui passe :
   `new DataSource({ ...AppDataSource.options, migrations: [] })` (cf.
-  `seed-reattach-deleted-member-payments.ts`). Le vrai correctif - sortir le test du dossier des
+  `seed-reattach-deleted-member-payments.ts`, et `seed-permissions.ts` depuis le 2026-09-27 - il
+  plantait avant d'ouvrir la base). Le vrai correctif - sortir le test du dossier des
   migrations - appartient au module Membres.
 
 - **🕳️ TypeORM retire silencieusement les `undefined` d'un `where`** (vérifié le 2026-08-07 en
@@ -1055,20 +1059,51 @@ services) : abonnements et dons.
   `payments.createdAt` côté guichet). Vers ~50 000 tentatives, prévoir index + pagination par
   curseur plutôt que par décalage.
 
-- **💸 Compte de retrait (`acc_withdrawals`, 2026-09-26) : les sorties du compte de collecte HUB2
-  se SAISISSENT** - ni le guichet ni HUB2 ne les transmettent. Routes `GET/POST/DELETE
-  /accounting/withdrawals` (`accounting-withdrawals.controller.ts`), sous la permission unique du
-  module. Le décompte vaut **`initial + brut - commission - retraits = net attendu`**, retraits en
-  LIGNE comme le solde d'ouverture : sans eux, le premier retrait (100 000 F le 2026-09-16) avait
-  laissé un écart permanent et sans nom.
-  - **Tous les retraits actifs** entrent dans le décompte, quelle que soit la date de l'instantané :
-    le solde attendu se compare au solde relevé À L'INSTANT, qui les a tous subis.
-  - **Annuler = suppression LOGIQUE + `deleted_by_uuid`**, jamais un `DELETE` : le décompte d'hier
-    doit rester explicable. `deleted_at: IsNull()` dans le critère, pour ne pas ré-estamper.
-  - ⚠️ Le total passe par le **query builder**, qui exclut les annulés de lui-même. Un `SUM` en SQL
-    brut sur la table les compterait.
-  - Contrôles côté service (codes `MONTANT_INVALIDE`, `DATE_INVALIDE`, `DATE_FUTURE`,
-    `MOTIF_REQUIS`…) : jour `AAAA-MM-JJ` jamais dans le futur (Abidjan = UTC), montant > 0 au centime.
+- **💸 Compte de retrait : les retraits du compte de collecte sont LUS CHEZ HUB2, jamais saisis**
+  (2026-09-27, remplace la saisie manuelle du 26/09). Chez HUB2, un retrait de la collecte est un
+  **approvisionnement** collecte → transfert (`GET /provisionings`), relayé par le guichet
+  (`GET /api/v1/withdrawals`, `soka-pay/api/src/server/withdrawals.ts`) puis par
+  `HubService.listGatewayWithdrawals`. Seule route : `GET /accounting/withdrawals`, sous la
+  permission unique du module - **aucun retrait ne se crée ni ne s'annule dans l'application**, un
+  test verrouille qu'aucune route d'écriture ne réapparaît. Le décompte vaut
+  **`initial + brut - commission - retraits = net attendu`**, retraits en LIGNE comme le solde
+  d'ouverture : sans eux, le premier retrait (100 000 F le 2026-09-16) avait laissé un écart
+  permanent et sans nom.
+  - **Seuls les retraits `successful` en XOF se retranchent** ; les échoués et en cours sont listés
+    sans compter. Tous comptent, quelle que soit la date de l'instantané : le solde attendu se
+    compare au solde relevé À L'INSTANT, qui les a tous subis.
+  - 🚨 **HUB2 ou guichet illisible ⇒ `retraits: null` ET `solde_attendu: null`**, jamais 0 :
+    retrancher un zéro inventé afficherait un écart de 100 000 F qui n'existe pas. La liste répond
+    alors **503 `RETRAITS_INDISPONIBLES`**. Idem si le guichet déclare sa liste incomplète
+    (`complete: false`) : aucun total partiel n'est retenu.
+  - Les retraits sont relus **à chaque affichage** (≈ 0,2 s, `/provisionings` n'a montré aucune
+    limite de débit - contrairement à `/transfers` et `/payments`, bridés à ~1 appel / 30 s).
+  - ⚠️ Le **guichet doit être déployé avant l'API** : face à un guichet sans la route (404), le
+    décompte reste en « - ».
+  - La table `acc_withdrawals` (migration `1783800000000`, présente en prod : la route manuelle y
+    répondait le 27/09) n'est plus ni lue ni écrite : son entité est supprimée, la migration reste
+    pour l'historique.
+  - Les **virements** vers la banque (`GET /transfers`, frais de 5 % prélevés sur le compte de
+    transfert) ne touchent pas la collecte : ils n'entrent pas dans ce décompte.
+
+- **🧾 Module Contrôle (`src/controle/`, 2026-09-27) : cohérence paiements collectés / abonnés /
+  journaux d'une campagne d'abonnement.** `GET /controle/abonnements?campaign_uuid=` (défaut : la
+  campagne `started` la plus récente ; inconnue → 404 `CAMPAGNE_INCONNUE`) et
+  `GET /controle/abonnements/campagnes`, lecture seule, sous la permission UNIQUE
+  `controle_voir_menu_controle` (cochée pour ADMINISTRATEUR seul à la création). La règle :
+  - **les paiements = ceux de la tuile « Paiement réussi » de la Comptabilité**, par la fonction
+    même (`appliquerFiltresPaiementsCompta`, source `subscription`, statut `paid`) - ne pas écrire
+    un second filtre ;
+  - **journaux = somme des quantités** ; 1 journal = le tarif de LA campagne
+    (`subscriptions.amount`), jamais une constante ; **abonnés = bénéficiaires DISTINCTS** (un membre
+    qui paie deux fois = 1 abonné, 2 journaux) ;
+  - **région = sous-arbre d'un enfant de la racine, par la structure du BÉNÉFICIAIRE** (règle de
+    RESPO-COMPTA-REGUL, même définition que le filtre « Structure » de la Comptabilité) ; les
+    régions étant disjointes, « sans région » = total - Σ régions, nommé et jamais perdu ;
+  - commission = `tauxCommissionHub2()` (`accounting.helpers.ts`), partagé avec la Comptabilité ;
+  - `construireControle` (`controle.helpers.ts`) est PURE : 3 contrôles (montant ÷ tarif = journaux,
+    tout rattaché à une région, chaque paiement = quantité × tarif) ; les paiements en cause (50
+    par motif) ne sont cherchés **que si** un contrôle échoue.
 
 - **💰 Chiffres financiers vus par un RESPONSABLE : UNE règle, celle de la Comptabilité**
   (RESPO-COMPTA-REGUL, 2026-09-27). Fiches de campagne abonnement / zaimu (« Montant récolté »,

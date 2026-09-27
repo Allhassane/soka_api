@@ -13,7 +13,6 @@ import { AccountingStatsController } from './accounting-stats.controller';
 import { AccountingService } from './accounting.service';
 import { AccHubSnapshotEntity } from './entities/acc-hub-snapshot.entity';
 import { AccHubSnapshotLineEntity } from './entities/acc-hub-snapshot-line.entity';
-import { AccWithdrawalEntity } from './entities/acc-withdrawal.entity';
 import { AccountingWithdrawalsController } from './accounting-withdrawals.controller';
 
 /**
@@ -39,7 +38,6 @@ import { AccountingWithdrawalsController } from './accounting-withdrawals.contro
     TypeOrmModule.forFeature([
       AccHubSnapshotEntity,
       AccHubSnapshotLineEntity,
-      AccWithdrawalEntity,
       PaymentEntity,
       SubscriptionEntity,
       DonateEntity,

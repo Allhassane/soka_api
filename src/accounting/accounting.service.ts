@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
@@ -19,15 +20,16 @@ import {
 import {
   HubBalanceAccount,
   HubGatewayPayment,
+  HubGatewayWithdrawal,
   HubService,
 } from 'src/payments/hub.service';
 import { AccHubSnapshotEntity, SnapshotKind } from './entities/acc-hub-snapshot.entity';
 import { AccHubSnapshotLineEntity, MatchStatus } from './entities/acc-hub-snapshot-line.entity';
-import { AccWithdrawalEntity } from './entities/acc-withdrawal.entity';
 import { parseHub2Export } from './hub2-export.parser';
 import {
   BucketStats,
   SourceStats,
+  tauxCommissionHub2,
   verifierBucket,
   verifierSource,
 } from './accounting.helpers';
@@ -69,7 +71,7 @@ export class AccountingService {
    * seule que le solde du guichet soit structurellement sous les encaissements de l'application :
    * ce n'est pas un écart à corriger, c'est le coût du service.
    */
-  private readonly tauxFrais = Number(process.env.ACC_HUB_FEE_RATE ?? 0.02);
+  private readonly tauxFrais = tauxCommissionHub2();
 
   /**
    * Solde du compte de collecte **avant mise en service** (constaté le 24/07).
@@ -89,8 +91,6 @@ export class AccountingService {
     @InjectRepository(DonateEntity)
     private readonly donateRepo: Repository<DonateEntity>,
     private readonly hubService: HubService,
-    @InjectRepository(AccWithdrawalEntity)
-    private readonly withdrawalRepo: Repository<AccWithdrawalEntity>,
     /** Cascade du filtre « Structure » : des NOMS de structures, en lecture. */
     @InjectRepository(StructureEntity)
     private readonly structureRepo: Repository<StructureEntity>,
@@ -767,10 +767,11 @@ export class AccountingService {
   /**
    * Met en forme le décompte d'un instantané, **solde d'ouverture en ligne visible**.
    *
-   * @param retraits total des retraits enregistrés (TOUS : le solde attendu se compare au solde
-   *   relevé à l'instant, qui les a tous subis).
+   * @param retraits total des retraits HUB2 réussis (TOUS : le solde attendu se compare au solde
+   *   relevé à l'instant, qui les a tous subis) ; `null` si HUB2 n'a pas pu les rendre - le solde
+   *   attendu est alors inconnu, jamais calculé sur un zéro inventé.
    */
-  private vue(s: AccHubSnapshotEntity | null, retraits: number) {
+  private vue(s: AccHubSnapshotEntity | null, retraits: number | null) {
     if (!s) return null;
     const ouverture = Number(s.opening_balance);
     const brut = Number(s.hub_gross);
@@ -799,8 +800,8 @@ export class AccountingService {
         frais: -frais,
         // Une LIGNE, comme le solde d'ouverture : un retrait fondu dans un total produirait un
         // écart permanent et sans nom (100 001 F du 16 au 26/09).
-        retraits: retraits > 0 ? -retraits : 0,
-        solde_attendu: arrondi(ouverture + brut - frais - retraits),
+        retraits: retraits === null ? null : retraits > 0 ? -retraits : 0,
+        solde_attendu: retraits === null ? null : arrondi(ouverture + brut - frais - retraits),
       },
       decomposition: {
         matched: s.matched_count,
@@ -933,144 +934,73 @@ export class AccountingService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Compte de retrait
+  // Compte de retrait - lu chez HUB2
   // ─────────────────────────────────────────────────────────────────────────────
 
   /**
-   * Total des retraits ACTIFS (les saisies annulées sont exclues : le query builder filtre
-   * `deleted_at` de lui-même). Zéro quand il n'y en a aucun, jamais `null`.
-   */
-  private async totalRetraits(): Promise<number> {
-    const r = await this.withdrawalRepo
-      .createQueryBuilder('w')
-      .select('COALESCE(SUM(w.amount), 0)', 'total')
-      .getRawOne<{ total: string }>();
-    return arrondi(Number(r?.total ?? 0));
-  }
-
-  private vueRetrait(r: AccWithdrawalEntity) {
-    return {
-      uuid: r.uuid,
-      amount: Number(r.amount),
-      withdrawn_on: r.withdrawn_on,
-      label: r.label,
-      reference: r.reference,
-      created_at: r.created_at,
-    };
-  }
-
-  /** Les retraits actifs, les plus récents d'abord, et leur total. */
-  async listWithdrawals() {
-    const retraits = await this.withdrawalRepo.find({
-      order: { withdrawn_on: 'DESC', created_at: 'DESC' },
-    });
-    const items = retraits.map((r) => this.vueRetrait(r));
-    return {
-      items,
-      total: arrondi(items.reduce((somme, r) => somme + r.amount, 0)),
-      count: items.length,
-    };
-  }
-
-  /**
-   * Enregistre un retrait du compte de collecte. Il entre aussitôt dans le décompte :
-   * `initial + brut - commission - retraits = net attendu`.
+   * Les retraits du compte de collecte, **lus chez HUB2** (approvisionnements collecte →
+   * transfert, relayés par le guichet) : aucun retrait ne se crée dans l'application.
    *
-   * ⚠️ N'écrit QUE dans `acc_withdrawals` : un retrait saisi ici ne déplace pas d'argent, il
-   * explique un mouvement déjà fait chez HUB2.
+   * Le total ne compte que les retraits **réussis** en F CFA : un approvisionnement échoué ou en
+   * cours n'a pas débité la collecte, il est listé sans être retranché.
    */
-  async createWithdrawal(saisie: SaisieRetrait, auteurUuid?: string) {
-    const { montant, jour, motif, reference } = verifierRetrait(saisie);
-    const enregistre = await this.withdrawalRepo.save(
-      this.withdrawalRepo.create({
-        amount: montant.toFixed(2),
-        withdrawn_on: jour,
-        label: motif,
-        reference,
-        created_by_uuid: auteurUuid ?? null,
-      }),
-    );
-    return this.vueRetrait(enregistre);
+  private async retraitsHub() {
+    const retraits = await this.hubService.listGatewayWithdrawals();
+    const items = retraits
+      .map((r) => this.vueRetrait(r))
+      .sort((a, b) => (b.withdrawn_at ?? '').localeCompare(a.withdrawn_at ?? ''));
+    const total = items
+      .filter(
+        (r) => r.status === 'successful' && r.amount !== null && r.currency?.toUpperCase() === 'XOF',
+      )
+      .reduce((somme, r) => somme + (r.amount ?? 0), 0);
+    return { items, total: arrondi(total), count: items.length };
+  }
+
+  private vueRetrait(r: HubGatewayWithdrawal) {
+    return {
+      id: r.id,
+      withdrawn_at: r.date,
+      amount: r.amount,
+      currency: r.currency,
+      status: r.status,
+      description: r.description,
+      failure_reason: r.failureCause?.message ?? r.failureCause?.code ?? null,
+    };
   }
 
   /**
-   * Annule une saisie erronée. Suppression LOGIQUE, auteur de l'annulation conservé : le
-   * décompte d'hier doit rester explicable demain. `deleted_at: IsNull()` dans le critère, pour
-   * ne jamais ré-estamper une ligne déjà annulée.
+   * Total des retraits réussis, pour le décompte. `null` si HUB2 ne les a pas rendus : le solde
+   * attendu devient alors inconnu - retrancher zéro afficherait un écart qui n'existe pas.
    */
-  async cancelWithdrawal(uuid: string, auteurUuid?: string) {
-    const retrait = await this.withdrawalRepo.findOne({ where: { uuid } });
-    if (!retrait) {
-      throw new NotFoundException({
-        message: 'Retrait introuvable ou déjà annulé.',
-        data: { code: 'RETRAIT_INTROUVABLE' },
+  private async totalRetraits(): Promise<number | null> {
+    try {
+      return (await this.retraitsHub()).total;
+    } catch (e) {
+      this.signalerRetraitsIllisibles(e);
+      return null;
+    }
+  }
+
+  /**
+   * ⚠️ Le motif, jamais l'erreur entière : une erreur axios embarque l'en-tête `Authorization`
+   * (la clé marchande live). Et un refus de connexion n'a PAS de message sous Node 20 (erreur
+   * agrégée IPv4/IPv6) : sans le code, la ligne sortait vide (constaté le 27/09).
+   */
+  private signalerRetraitsIllisibles(e: any) {
+    this.logger.warn(`[RETRAITS] Lecture impossible : ${e?.message || e?.code || 'motif inconnu'}`);
+  }
+
+  /** Les retraits HUB2, les plus récents d'abord, et le total de ceux qui ont débité la collecte. */
+  async listWithdrawals() {
+    try {
+      return await this.retraitsHub();
+    } catch (e) {
+      this.signalerRetraitsIllisibles(e);
+      throw new ServiceUnavailableException({
+        message: 'Les retraits n\'ont pas pu être lus chez HUB2. Réessayez dans un instant.',
+        data: { code: 'RETRAITS_INDISPONIBLES' },
       });
     }
-    await this.withdrawalRepo.update(
-      { id: retrait.id, deleted_at: IsNull() },
-      { deleted_at: new Date(), deleted_by_uuid: auteurUuid ?? null },
-    );
-    return { uuid, annule: true };
   }
-}
-
-/** Ce que l'écran envoie pour enregistrer un retrait (non typé : tout est vérifié ici). */
-export interface SaisieRetrait {
-  amount?: unknown;
-  withdrawn_on?: unknown;
-  label?: unknown;
-  reference?: unknown;
-}
-
-const refus = (code: string, message: string) =>
-  new BadRequestException({ message, data: { code } });
-
-/**
- * Contrôle d'une saisie de retrait. Le montant est un nombre strictement positif, au centime
- * près (colonne `DECIMAL(14,2)`) ; le jour est une vraie date `AAAA-MM-JJ`, jamais dans le futur
- * (fuseau d'Abidjan = UTC) ; le motif est obligatoire.
- */
-function verifierRetrait(saisie: SaisieRetrait) {
-  const brut = saisie.amount;
-  const montant =
-    typeof brut === 'number'
-      ? brut
-      : typeof brut === 'string' && brut.trim() !== ''
-        ? Number(brut)
-        : Number.NaN;
-  if (
-    !Number.isFinite(montant)
-    || montant <= 0
-    || montant >= 1e12
-    || Math.round(montant * 100) / 100 !== montant
-  ) {
-    throw refus('MONTANT_INVALIDE', 'Le montant du retrait doit être un nombre supérieur à 0.');
-  }
-
-  const jour = typeof saisie.withdrawn_on === 'string' ? saisie.withdrawn_on.trim() : '';
-  const date = new Date(`${jour}T00:00:00.000Z`);
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(jour)
-    || Number.isNaN(date.getTime())
-    || date.toISOString().slice(0, 10) !== jour
-  ) {
-    throw refus('DATE_INVALIDE', 'La date du retrait est invalide (format attendu : AAAA-MM-JJ).');
-  }
-  if (jour > new Date().toISOString().slice(0, 10)) {
-    throw refus('DATE_FUTURE', 'Un retrait ne peut pas être daté dans le futur.');
-  }
-
-  const motif = typeof saisie.label === 'string' ? saisie.label.trim() : '';
-  if (!motif) throw refus('MOTIF_REQUIS', 'Le motif du retrait est obligatoire.');
-  if (motif.length > 255) throw refus('MOTIF_TROP_LONG', 'Le motif ne doit pas dépasser 255 caractères.');
-
-  const reference =
-    typeof saisie.reference === 'string' && saisie.reference.trim()
-      ? saisie.reference.trim()
-      : null;
-  if (reference && reference.length > 100) {
-    throw refus('REFERENCE_TROP_LONGUE', 'La référence ne doit pas dépasser 100 caractères.');
-  }
-
-  return { montant, jour, motif, reference };
 }

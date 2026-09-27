@@ -943,6 +943,23 @@ export const PERMISSION_CATALOG: CatalogModule[] = [
       },
     ],
   },
+  {
+    name: 'Contrôle',
+    description:
+      'Cohérence paiements collectés / abonnés / journaux d’une campagne d’abonnement, région '
+      + 'par région, jusqu’au net après commission HUB2. Lecture seule.',
+    permissions: [
+      // UNE permission pour tout le module (2026-09-27) : il ne fait que lire - même motif que
+      // la Comptabilité, aucun geste à isoler derrière un second droit.
+      {
+        name: 'Accéder au menu Contrôle',
+        slug: 'controle_voir_menu_controle',
+        // ⚠️ Clé en MINUSCULES (le seed lit `defaults[role.slug.toLowerCase()]`). Les autres
+        // rôles naissent décochés : à ouvrir dans Paramètres → Rôles.
+        defaults: { administrateur: true },
+      },
+    ],
+  },
 ];
 
 /** Toutes les permissions du catalogue à plat, avec leur module d'appartenance. */

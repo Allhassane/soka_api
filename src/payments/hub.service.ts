@@ -118,6 +118,32 @@ export interface HubGatewayBalance {
   transfer: HubBalanceAccount[];
 }
 
+/**
+ * Un **retrait du compte de collecte** tel que le guichet le relaie (`GET /withdrawals`) : un
+ * APPROVISIONNEMENT HUB2, où la somme passe de la collecte au compte de transfert, d'où partent
+ * ensuite les virements vers la banque.
+ */
+export interface HubGatewayWithdrawal {
+  /** `prov_…` : l'identifiant HUB2. */
+  id: string;
+  /** Date ISO du débit de la collecte ; `null` si HUB2 n'en donne aucune. */
+  date: string | null;
+  /** `null` si HUB2 ne le dit pas (jamais un zéro inventé). */
+  amount: number | null;
+  currency: string | null;
+  /** Seul `successful` a débité la collecte. */
+  status: string;
+  description: string | null;
+  failureCause?: { code?: string; message?: string } | null;
+}
+
+interface HubWithdrawalsResponse {
+  environment: string;
+  data: HubGatewayWithdrawal[];
+  /** Faux si le guichet a atteint son plafond de pages : la liste serait partielle. */
+  complete: boolean;
+}
+
 @Injectable()
 export class HubService {
   private readonly apiKey = process.env.HUB_API_KEY;
@@ -261,6 +287,39 @@ export class HubService {
       );
     }
     return data;
+  }
+
+  /**
+   * **Retraits du compte de collecte**, lus chez HUB2 par le guichet (approvisionnements
+   * collecte → transfert). C'est la seule source des retraits : aucun ne se saisit dans
+   * l'application.
+   *
+   * 🚨 Ils entrent dans le décompte du solde : une liste vide ou partielle prise pour la vérité
+   * ferait passer un vrai retrait pour un écart. D'où deux refus - réponse sans liste, et liste
+   * que le guichet déclare incomplète - au lieu d'un tableau vide.
+   * ⚠️ Lecture seule, comme `getGatewayBalance` : mêmes clé, racine d'API et timeout.
+   */
+  async listGatewayWithdrawals(): Promise<HubGatewayWithdrawal[]> {
+    if (!this.apiKey) {
+      throw new InternalServerErrorException('HUB_API_KEY non configurée');
+    }
+
+    const { data } = await axios.get<HubWithdrawalsResponse>(`${this.apiRoot}/withdrawals`, {
+      headers: { Authorization: `Bearer ${this.apiKey}` },
+      timeout: this.timeoutMs,
+    });
+
+    if (!data || !Array.isArray(data.data)) {
+      throw new InternalServerErrorException(
+        'Réponse du guichet invalide : `data` absent de la liste des retraits',
+      );
+    }
+    if (data.complete !== true) {
+      throw new InternalServerErrorException(
+        'Liste des retraits incomplète côté guichet : aucun total partiel n\'est retenu',
+      );
+    }
+    return data.data;
   }
 
   async initPayment(

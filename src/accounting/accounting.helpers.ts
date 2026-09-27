@@ -8,6 +8,13 @@ import { BadRequestException } from '@nestjs/common';
 export const COMPTABILITE = 'comptabilite_voir_menu_comptabilite';
 
 /**
+ * Commission HUB2, **prélevée à la source** : 2,0000 % exactement, identique sur les 4
+ * opérateurs (rapprochement du 09/08). UNE lecture pour la Comptabilité et le Contrôle : deux
+ * taux finiraient par afficher deux nets différents pour le même encaissement.
+ */
+export const tauxCommissionHub2 = (): number => Number(process.env.ACC_HUB_FEE_RATE ?? 0.02);
+
+/**
  * Les deux sources de paiement que le module sait filtrer : les valeurs de `payments.source`.
  * `shop_item` existe dans l'enum mais ne porte aucune campagne - il n'a pas sa place ici.
  */

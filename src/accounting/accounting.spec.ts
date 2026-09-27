@@ -1,5 +1,7 @@
-import { IsNull } from 'typeorm';
+import { RequestMethod } from '@nestjs/common';
+import { METHOD_METADATA } from '@nestjs/common/constants';
 import { AccountingService } from './accounting.service';
+import { AccountingWithdrawalsController } from './accounting-withdrawals.controller';
 import { MatchStatus } from './entities/acc-hub-snapshot-line.entity';
 import { SnapshotKind } from './entities/acc-hub-snapshot.entity';
 import { parseHub2Export, recomposerDate } from './hub2-export.parser';
@@ -29,10 +31,10 @@ function makeService(options: {
   dernierSnapshot?: any;
   campagnesAbonnements?: any[];
   campagnesDons?: any[];
-  /** Somme des retraits actifs (0 par défaut). */
-  totalRetraits?: number | null;
-  retraits?: any[];
-  retraitExistant?: any;
+  /** Retraits du compte de collecte tels que le guichet les relaie depuis HUB2 (aucun par défaut). */
+  retraitsHub?: any[];
+  /** Le guichet (ou HUB2) ne rend pas les retraits. */
+  retraitsIndisponibles?: boolean;
   /** Sous-arbre rendu par `AccessScopeService.sousArbre` (filtre « Structure »). */
   sousArbre?: string[];
   /** Structure sans parent (la racine) ; `null` = aucune. */
@@ -44,7 +46,6 @@ function makeService(options: {
 } = {}) {
   const lignesEcrites: any[] = [];
   const snapshotsEcrits: any[] = [];
-  const retraitsEcrits: any[] = [];
 
   const snapshotRepo = {
     create: jest.fn((o) => ({ ...o, uuid: 'snap-uuid', created_at: new Date('2026-08-10T22:00:00Z') })),
@@ -97,23 +98,9 @@ function makeService(options: {
       collection: [{ currency: 'xof', amount: 100, availableBalance: 100 }],
       transfer: [],
     }),
-  };
-
-  const retraitQb = {
-    select: jest.fn().mockReturnThis(),
-    // `COALESCE(SUM(…), 0)` : MySQL rend le total en texte, et '0' quand il n'y a aucun retrait.
-    getRawOne: jest.fn().mockResolvedValue({ total: String(options.totalRetraits ?? 0) }),
-  };
-  const withdrawalRepo = {
-    createQueryBuilder: jest.fn().mockReturnValue(retraitQb),
-    find: jest.fn().mockResolvedValue(options.retraits ?? []),
-    findOne: jest.fn().mockResolvedValue(options.retraitExistant ?? null),
-    create: jest.fn((o) => ({ ...o })),
-    save: jest.fn((o) => {
-      retraitsEcrits.push(o);
-      return Promise.resolve({ ...o, uuid: 'retrait-uuid', created_at: new Date('2026-09-26T22:00:00Z') });
-    }),
-    update: jest.fn().mockResolvedValue({ affected: 1 }),
+    listGatewayWithdrawals: options.retraitsIndisponibles
+      ? jest.fn().mockRejectedValue(new Error('guichet muet'))
+      : jest.fn().mockResolvedValue(options.retraitsHub ?? []),
   };
 
   // Lecture seule, elle aussi : la cascade du filtre « Structure » ne lit que des noms.
@@ -143,14 +130,13 @@ function makeService(options: {
     subscriptionRepo as never,
     donateRepo as never,
     hubService as never,
-    withdrawalRepo as never,
     structureRepo as never,
     accessScope as never,
   );
 
   return {
     service, snapshotRepo, lineRepo, paymentRepo, subscriptionRepo, donateRepo,
-    hubService, lignesEcrites, snapshotsEcrits, paymentQb, withdrawalRepo, retraitsEcrits,
+    hubService, lignesEcrites, snapshotsEcrits, paymentQb,
     structureRepo, structureQb, accessScope,
   };
 }
@@ -739,10 +725,12 @@ describe('Tableau de bord - structures proposées au filtre', () => {
   });
 });
 
-describe('Compte de retrait', () => {
+describe('Compte de retrait - lu chez HUB2', () => {
   // Le 16/09, 100 000 F ont quitté le compte de collecte HUB2 : du 16 au 25/09, le solde relevé
   // est resté 100 001 F sous le calcul (initial + brut - commission) et la situation globale était
   // rouge en production. Un retrait n'est ni un encaissement ni une commission : il a sa ligne.
+  // Depuis le 27/09, il vient de HUB2 (approvisionnement collecte → transfert, relayé par le
+  // guichet) : aucun retrait ne se crée dans l'application.
   const instantane2509 = {
     uuid: 's-2509', kind: SnapshotKind.GATEWAY, label: 'Guichet SOKA Pay',
     created_at: new Date('2026-09-25T16:35:54Z'), truncated: false,
@@ -751,14 +739,22 @@ describe('Compte de retrait', () => {
     gateway_balance: '67581250', period_start: null, period_end: null,
     matched_count: 8564, unmatched_hub_count: 260, unmatched_app_count: 0, mismatch_count: 1,
   };
-  const saisie = (over: Record<string, unknown> = {}) => ({
-    amount: 100000, withdrawn_on: '2026-09-16', label: 'Retrait vers le compte bancaire', ...over,
+  /** Le retrait réel du 16/09, tel que le guichet le relaie. */
+  const retraitHub = (over: Record<string, unknown> = {}) => ({
+    id: 'prov_IG5jhhHc2IZryqAyM0QDN',
+    date: '2026-09-16T13:33:09.126Z',
+    amount: 100000,
+    currency: 'XOF',
+    status: 'successful',
+    description: 'Test Virement vers Banque',
+    failureCause: null,
+    ...over,
   });
   const refusAvecCode = (code: string) =>
     expect.objectContaining({ response: expect.objectContaining({ data: expect.objectContaining({ code }) }) });
 
-  it('🚨 le décompte retranche les retraits : initial + brut - commission - retraits = net attendu', async () => {
-    const { service } = makeService({ dernierSnapshot: instantane2509, totalRetraits: 100000 });
+  it('🚨 le décompte retranche les retraits HUB2 : initial + brut - commission - retraits = net attendu', async () => {
+    const { service } = makeService({ dernierSnapshot: instantane2509, retraitsHub: [retraitHub()] });
 
     const vue = await service.overview();
 
@@ -773,101 +769,86 @@ describe('Compte de retrait', () => {
     expect(Math.abs(67581250 - (vue.gateway?.decompte.solde_attendu ?? 0))).toBeLessThan(1);
   });
 
-  it('enregistre un retrait : montant, jour, motif, référence et auteur de la saisie', async () => {
-    const { service, retraitsEcrits } = makeService();
-
-    const retrait = await service.createWithdrawal(
-      saisie({ label: '  Retrait vers le compte bancaire  ', reference: ' TRF-0916 ' }),
-      'auteur-uuid',
-    );
-
-    expect(retraitsEcrits[0]).toMatchObject({
-      amount: '100000.00',
-      withdrawn_on: '2026-09-16',
-      label: 'Retrait vers le compte bancaire',
-      reference: 'TRF-0916',
-      created_by_uuid: 'auteur-uuid',
+  it('seul un retrait RÉUSSI a débité la collecte : un échec ou un retrait en cours ne se retranche pas', async () => {
+    const { service } = makeService({
+      dernierSnapshot: instantane2509,
+      retraitsHub: [
+        retraitHub(),
+        retraitHub({ id: 'prov_echec', status: 'failed', amount: 30000 }),
+        retraitHub({ id: 'prov_attente', status: 'pending', amount: 20000 }),
+      ],
     });
-    expect(retrait).toMatchObject({
-      uuid: 'retrait-uuid', amount: 100000, withdrawn_on: '2026-09-16', reference: 'TRF-0916',
-    });
+
+    const vue = await service.overview();
+
+    expect(vue.gateway?.decompte.retraits).toBe(-100000);
   });
 
-  it('enregistre une référence absente ou vide comme NULL', async () => {
-    const { service, retraitsEcrits } = makeService();
-    await service.createWithdrawal(saisie({ reference: '   ' }), 'a');
-    expect(retraitsEcrits[0].reference).toBeNull();
+  it('🚨 HUB2 illisible : ni retraits ni solde attendu - jamais un zéro inventé', async () => {
+    // Retrancher 0 faute de lecture afficherait un écart de 100 000 F qui n'existe pas.
+    const { service } = makeService({ dernierSnapshot: instantane2509, retraitsIndisponibles: true });
+
+    const vue = await service.overview();
+
+    expect(vue.gateway?.decompte.retraits).toBeNull();
+    expect(vue.gateway?.decompte.solde_attendu).toBeNull();
+    // Le reste de l'écran ne tombe pas avec eux.
+    expect(vue.gateway?.gross).toBe(69062301);
   });
 
-  it.each([[0], [-5000], ['abc'], [undefined], [12.345], [1e13]])(
-    'refuse le montant %p',
-    async (montant) => {
-      const { service, withdrawalRepo } = makeService();
-      await expect(service.createWithdrawal(saisie({ amount: montant }), 'a')).rejects.toEqual(
-        refusAvecCode('MONTANT_INVALIDE'),
-      );
-      expect(withdrawalRepo.save).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each([['16/09/2026'], ['2026-02-30'], [undefined]])('refuse la date %p', async (jour) => {
-    const { service, withdrawalRepo } = makeService();
-    await expect(service.createWithdrawal(saisie({ withdrawn_on: jour }), 'a')).rejects.toEqual(
-      refusAvecCode('DATE_INVALIDE'),
-    );
-    expect(withdrawalRepo.save).not.toHaveBeenCalled();
-  });
-
-  it('refuse un retrait daté dans le futur', async () => {
-    const demain = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
-    const { service } = makeService();
-    await expect(service.createWithdrawal(saisie({ withdrawn_on: demain }), 'a')).rejects.toEqual(
-      refusAvecCode('DATE_FUTURE'),
-    );
-  });
-
-  it('exige un motif', async () => {
-    const { service } = makeService();
-    await expect(service.createWithdrawal(saisie({ label: '   ' }), 'a')).rejects.toEqual(
-      refusAvecCode('MOTIF_REQUIS'),
-    );
-  });
-
-  it('liste les retraits actifs, les plus récents d\'abord, avec leur total', async () => {
-    const { service, withdrawalRepo } = makeService({
-      retraits: [
-        { uuid: 'r2', amount: '25000.00', withdrawn_on: '2026-09-20', label: 'B', reference: null, created_at: new Date() },
-        { uuid: 'r1', amount: '100000.00', withdrawn_on: '2026-09-16', label: 'A', reference: 'X', created_at: new Date() },
+  it('liste les retraits HUB2, les plus récents d’abord, avec le total de ceux qui ont débité la collecte', async () => {
+    const { service, hubService } = makeService({
+      retraitsHub: [
+        retraitHub({ id: 'prov_2', date: '2026-09-20T08:00:00.000Z', amount: 25000 }),
+        retraitHub(),
+        retraitHub({ id: 'prov_0', date: '2026-09-10T08:00:00.000Z', status: 'failed', amount: 5000 }),
       ],
     });
 
     const liste = await service.listWithdrawals();
 
-    expect(withdrawalRepo.find).toHaveBeenCalledWith(
-      expect.objectContaining({ order: { withdrawn_on: 'DESC', created_at: 'DESC' } }),
-    );
+    expect(hubService.listGatewayWithdrawals).toHaveBeenCalledTimes(1);
     expect(liste.total).toBe(125000);
-    expect(liste.count).toBe(2);
-    expect(liste.items[0]).toMatchObject({ uuid: 'r2', amount: 25000, withdrawn_on: '2026-09-20' });
+    expect(liste.count).toBe(3);
+    expect(liste.items[0]).toEqual({
+      id: 'prov_2',
+      withdrawn_at: '2026-09-20T08:00:00.000Z',
+      amount: 25000,
+      currency: 'XOF',
+      status: 'successful',
+      description: 'Test Virement vers Banque',
+      failure_reason: null,
+    });
+    expect(liste.items[2]).toMatchObject({ id: 'prov_0', status: 'failed' });
   });
 
-  it('annule un retrait sans l\'effacer : suppression logique, auteur de l\'annulation conservé', async () => {
-    const { service, withdrawalRepo } = makeService({ retraitExistant: { id: 7, uuid: 'r1' } });
+  it('dit pourquoi un retrait a échoué', async () => {
+    const { service } = makeService({
+      retraitsHub: [
+        retraitHub({ status: 'failed', failureCause: { code: 'insufficient_funds', message: 'Fonds insuffisants.' } }),
+      ],
+    });
 
-    await service.cancelWithdrawal('r1', 'auteur-uuid');
+    const liste = await service.listWithdrawals();
 
-    expect(withdrawalRepo.update).toHaveBeenCalledWith(
-      { id: 7, deleted_at: IsNull() },
-      { deleted_at: expect.any(Date), deleted_by_uuid: 'auteur-uuid' },
-    );
+    expect(liste.items[0].failure_reason).toBe('Fonds insuffisants.');
+    expect(liste.total).toBe(0);
   });
 
-  it('refuse d\'annuler un retrait inconnu ou déjà annulé', async () => {
-    const { service, withdrawalRepo } = makeService({ retraitExistant: null });
-    await expect(service.cancelWithdrawal('inconnu', 'a')).rejects.toEqual(
-      refusAvecCode('RETRAIT_INTROUVABLE'),
-    );
-    expect(withdrawalRepo.update).not.toHaveBeenCalled();
+  it('HUB2 illisible : refus lisible avec son code, pas une liste vide', async () => {
+    const { service } = makeService({ retraitsIndisponibles: true });
+
+    await expect(service.listWithdrawals()).rejects.toEqual(refusAvecCode('RETRAITS_INDISPONIBLES'));
+  });
+
+  it('🚨 aucun retrait ne se crée dans l’application : le contrôleur ne sert que des lectures', () => {
+    const proto = AccountingWithdrawalsController.prototype as unknown as Record<string, unknown>;
+    const verbes = Object.getOwnPropertyNames(proto)
+      .filter((nom) => nom !== 'constructor')
+      .map((nom) => Reflect.getMetadata(METHOD_METADATA, proto[nom] as object))
+      .filter((verbe) => verbe !== undefined);
+
+    expect(verbes).toEqual([RequestMethod.GET]);
   });
 });
 
